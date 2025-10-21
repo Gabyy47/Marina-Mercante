@@ -1,4 +1,4 @@
-// Declaración de módulos requeridos
+// ===== Dependencias =====
 var Express = require("express");
 var bodyParser = require("body-parser");
 var cors = require("cors");
@@ -6,256 +6,366 @@ var mysql = require("mysql2");
 var jwt = require("jsonwebtoken");
 var cookieParser = require("cookie-parser");
 var speakeasy = require("speakeasy");
-var QRCode = require("qrcode");
+var QRCode = require("qrcode"); // si luego quieres enrolar 2FA con QR
 
-// Conexión a la base de datos
+// Logger opcional
+let logger;
+try {
+  logger = require("./logger");
+} catch {
+  logger = console;
+}
+
+// ===== Conexión a la base de datos =====
 var conexion = mysql.createConnection({
-    host: "localhost",
-    port: "3306",
-    user: "root",
-    password: "123456",
-    database: "marina_mercante",
-    charset: "utf8mb4", // ✅ importante para ñ y acentos
-    authPlugins: {
-        mysql_native_password: () => () => Buffer.from('1984')
-    }
+  host: "localhost",
+  port: "3306",
+  user: "root",
+  password: "123456",
+  database: "marina_mercante",
+  charset: "utf8mb4", // ✅ importante para ñ y acentos
+  authPlugins: {
+    mysql_native_password: () => () => Buffer.from("1984"),
+  },
 });
 
-// Inicio de Express.js
+// ===== Inicio de Express.js =====
 var app = Express();
 
-// Configuración de middlewares
-app.use(cors({
+// ===== Configuración de CORS =====
+app.use(
+  cors({
     origin: function (origin, callback) {
-        const allowedOrigins = [
-            'http://localhost:49146',
-            'http://localhost:3000',
-            'http://localhost:5173'
-        ];
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
+      const allowedOrigins = [
+        "http://localhost:49146",
+        "http://localhost:3000",
+        "http://localhost:5173",
+      ];
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
-}));
+  })
+);
 
+// ===== Middlewares =====
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Listener y conexión a MySQL
-const logger = require("./logger");
-
-app.listen(49146, () => {
-    conexion.connect((err) => {
-        if (err) {
-            logger.error("Error al conectar a la BD: " + err.message);
-            throw err;
-        }
-        logger.info("Conexión a la BD con éxito!");
-    });
-});
-
-// Comprobación de conexión
-app.get('/api/json', (req, res) => {
-    res.json({ text: "HOLA ESTE ES UN JSON" });
-});
-
-app.get('/', (req, res) => {
-    res.send("¡Hola Mundo!");
-});
-
-// Función para manejar errores
-function handleDatabaseError(err, res, message) {
-    console.error("❌ " + message, err);
-    res.status(500).json({ error: err.message });
-}
-
-// Clave secreta para JWT
+// ===== Listener y conexión a MySQL =====
+const PORT = 49146;
 const SECRET_KEY = "1984";
 
-// Middleware para verificar JWT
-const verificarToken = (req, res, next) => {
-    const token = req.cookies.token;
-    if (!token) return res.status(401).json({ mensaje: "Acceso denegado" });
-
-    try {
-        const verificado = jwt.verify(token, SECRET_KEY);
-        req.usuario = verificado;
-        next();
-    } catch (error) {
-        res.status(400).json({ mensaje: "Token inválido" });
+app.listen(PORT, () => {
+  conexion.connect((err) => {
+    if (err) {
+      logger.error("Error al conectar a la BD: " + err.message);
+      throw err;
     }
+    logger.info(`Conexión a la BD con éxito! API en http://localhost:${PORT}`);
+  });
+});
+
+// ===== Utilidades =====
+function handleDatabaseError(err, res, message) {
+  console.error("❌ " + message, err);
+  res.status(500).json({ error: err.message || "Error de servidor" });
+}
+
+// JWT middleware
+const verificarToken = (req, res, next) => {
+  const token =
+    req.cookies.token || req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  if (!token) return res.status(401).json({ mensaje: "Acceso denegado" });
+
+  try {
+    const verificado = jwt.verify(token, SECRET_KEY);
+    req.usuario = verificado;
+    next();
+  } catch (error) {
+    res.status(401).json({ mensaje: "Token inválido" });
+  }
 };
 
-// Ruta protegida
+// ===== Rutas base =====
+app.get("/api/json", (req, res) => {
+  res.json({ text: "HOLA ESTE ES UN JSON" });
+});
+
+app.get("/", (req, res) => {
+  res.send("¡Hola Mundo!");
+});
+
+// Ruta protegida de ejemplo
 app.get("/api/seguro", verificarToken, (req, res) => {
-    res.json({ mensaje: "Acceso concedido a la ruta segura", usuario: req.usuario });
+  res.json({
+    mensaje: "Acceso concedido a la ruta segura",
+    usuario: req.usuario,
+  });
 });
 
-// 🔹 LOGIN (usa nombre_usuario y contraseña)
+// ===== CARGOS (para el select del frontend) =====
+app.get("/api/cargos", (req, res) => {
+  const query =
+    "SELECT id_cargo, descripcion FROM tbl_cargo ORDER BY descripcion ASC";
+  conexion.query(query, (err, rows) => {
+    if (err) return handleDatabaseError(err, res, "Error al listar cargos:");
+    res.json(rows);
+  });
+});
+
+// ===== LOGIN =====
 app.post("/api/login", (req, res) => {
-    console.log("Ruta /api/login llamada");
-    const { nombre_usuario, contraseña, id_cargo } = req.body;
+  console.log("Ruta /api/login llamada");
+  const { nombre_usuario, contraseña, id_cargo } = req.body;
 
-    // Validación de campos obligatorios
-    if (!nombre_usuario || !contraseña || !id_cargo) {
-        return res.status(400).json({ mensaje: "Faltan campos obligatorios." });
+  // Validación de campos obligatorios
+  if (!nombre_usuario || !contraseña || !id_cargo) {
+    return res.status(400).json({ mensaje: "Faltan campos obligatorios." });
+  }
+
+  // Consulta que valida usuario, contraseña y cargo
+  const query = `
+    SELECT id_usuario, nombre_usuario, id_cargo 
+    FROM tbl_usuario 
+    WHERE nombre_usuario = ? AND contraseña = ? AND id_cargo = ?
+    LIMIT 1
+  `;
+
+  conexion.query(query, [nombre_usuario, contraseña, id_cargo], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, "Error en inicio de sesión:");
+
+    if (rows.length === 0) {
+      return res
+        .status(401)
+        .json({ mensaje: "Credenciales inválidas o cargo incorrecto." });
     }
 
-    // Consulta que valida usuario, contraseña y cargo
-    const query = `
-        SELECT * FROM tbl_usuario 
-        WHERE nombre_usuario = ? AND contraseña = ? AND id_cargo = ?
-    `;
+    const usuario = rows[0];
+    const token = jwt.sign(
+      {
+        id_usuario: usuario.id_usuario,
+        nombre_usuario: usuario.nombre_usuario,
+        id_cargo: usuario.id_cargo,
+      },
+      SECRET_KEY,
+      { expiresIn: "1h" }
+    );
 
-    conexion.query(query, [nombre_usuario, contraseña, id_cargo], (err, rows) => {
-        if (err) return handleDatabaseError(err, res, "Error en inicio de sesión:");
-
-        if (rows.length === 0) {
-            return res.status(401).json({ mensaje: "Credenciales inválidas o cargo incorrecto." });
-        }
-
-        const usuario = rows[0];
-        const token = jwt.sign(
-            { id_usuario: usuario.id_usuario, nombre_usuario: usuario.nombre_usuario, id_cargo: usuario.id_cargo },
-            SECRET_KEY,
-            { expiresIn: "1h" }
-        );
-
-        res.cookie("token", token, {
-            httpOnly: true,
-            secure: false,  // Cambiar a true en producción con HTTPS
-            sameSite: "lax",
-            maxAge: 3600000
-        });
-
-        res.json({
-            mensaje: "Inicio de sesión exitoso",
-            token,
-            usuario: {
-                id_usuario: usuario.id_usuario,
-                nombre_usuario: usuario.nombre_usuario,
-                id_cargo: usuario.id_cargo
-            }
-        });
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: false, // Cambiar a true en producción con HTTPS
+      sameSite: "lax",
+      maxAge: 3600000,
     });
+
+    res.json({
+      mensaje: "Inicio de sesión exitoso",
+      token,
+      usuario,
+    });
+  });
 });
 
-
-// 🔹 LOGOUT
+// ===== LOGOUT =====
 app.get("/api/logout", (req, res) => {
-    res.clearCookie("token");
-    res.json({ mensaje: "Sesión cerrada" });
+  res.clearCookie("token", { httpOnly: true, sameSite: "lax" });
+  res.json({ mensaje: "Sesión cerrada" });
 });
 
-// 🔹 Recuperar contraseña (verifica código TOTP)
+// ===== Recuperar contraseña (verifica TOTP) =====
 app.post("/api/recuperar-contrasena", async (req, res) => {
-    const { nombre_usuario, codigo } = req.body;
+  const { nombre_usuario, codigo } = req.body;
 
-    try {
-        const query = "SELECT secreto_google_auth FROM tbl_usuario WHERE nombre_usuario = ?";
-        conexion.query(query, [nombre_usuario], async (err, rows) => {
-            if (err) return handleDatabaseError(err, res, "Error al obtener el secreto del usuario:");
-            if (rows.length === 0) return res.status(404).json({ mensaje: "Usuario no encontrado" });
+  if (!nombre_usuario || !codigo) {
+    return res.status(400).json({ mensaje: "Faltan datos." });
+  }
 
-            const secreto = rows[0].secreto_google_auth;
+  try {
+    // ✅ conflicto resuelto: usamos nombre_usuario correctamente
+    const query =
+      "SELECT secreto_google_auth FROM tbl_usuario WHERE nombre_usuario = ? LIMIT 1";
 
-            const verificado = speakeasy.totp.verify({
-                secret: secreto,
-                encoding: "base32",
-                token: codigo,
-            });
+    conexion.query(query, [nombre_usuario], async (err, rows) => {
+      if (err)
+        return handleDatabaseError(
+          err,
+          res,
+          "Error al obtener el secreto del usuario:"
+        );
+      if (rows.length === 0)
+        return res.status(404).json({ mensaje: "Usuario no encontrado" });
 
-            if (verificado) {
-                res.json({ mensaje: "Código válido. Nueva contraseña establecida." });
-            } else {
-                res.status(400).json({ mensaje: "Código inválido" });
-            }
+      const secreto = rows[0].secreto_google_auth;
+
+      const verificado = speakeasy.totp.verify({
+        secret: secreto,
+        encoding: "base32",
+        token: codigo,
+        window: 1, // tolerancia 30s
+      });
+
+      if (verificado) {
+        res.json({
+          mensaje:
+            "Código válido. Puedes proceder a restablecer la contraseña.",
         });
-    } catch (error) {
-        console.error("Error en recuperación de contraseña:", error);
-        res.status(500).json({ mensaje: "Error del servidor" });
-    }
+      } else {
+        res.status(400).json({ mensaje: "Código inválido" });
+      }
+    });
+  } catch (error) {
+    console.error("Error en recuperación de contraseña:", error);
+    res.status(500).json({ mensaje: "Error del servidor" });
+  }
 });
 
-// 🔹 Verificar si un usuario existe
+// ===== Verificar si un usuario existe =====
 app.post("/api/verificar-usuario", (req, res) => {
-    const { nombre_usuario } = req.body;
-    const query = "SELECT * FROM tbl_usuario WHERE nombre_usuario = ?";
-    conexion.query(query, [nombre_usuario], (err, rows) => {
-        if (err) return res.status(500).json({ mensaje: "Error al verificar el usuario" });
-        res.json({ existe: rows.length > 0 });
-    });
+  const { nombre_usuario } = req.body;
+
+  if (!nombre_usuario)
+    return res.status(400).json({ mensaje: "nombre_usuario es requerido" });
+
+  const query = "SELECT 1 FROM tbl_usuario WHERE nombre_usuario = ? LIMIT 1";
+  conexion.query(query, [nombre_usuario], (err, rows) => {
+    if (err)
+      return res
+        .status(500)
+        .json({ mensaje: "Error al verificar el usuario" });
+    res.json({ existe: rows.length > 0 });
+  });
 });
 
-// 🔹 Listar todos los usuarios
-app.get('/api/usuario', (req, res) => {
-    const query = "SELECT * FROM tbl_usuario";
-    conexion.query(query, (err, rows) => {
-        if (err) return handleDatabaseError(err, res, "Error en listado de usuario:");
-        res.json(rows);
-    });
+// ===== Listar todos los usuarios =====
+app.get("/api/usuario", (req, res) => {
+  const query = "SELECT * FROM tbl_usuario ORDER BY id_usuario DESC";
+  conexion.query(query, (err, rows) => {
+    if (err) return handleDatabaseError(err, res, "Error en listado de usuario:");
+    res.json(rows);
+  });
 });
 
-// 🔹 Obtener usuario por ID
-app.get('/api/usuario/:id', (req, res) => {
-    const query = "SELECT * FROM tbl_usuario WHERE id_usuario = ?";
-    conexion.query(query, [parseInt(req.params.id)], (err, rows) => {
-        if (err) return handleDatabaseError(err, res, "Error al obtener usuario por ID:");
-        res.json(rows);
-    });
+// ===== Obtener usuario por ID =====
+app.get("/api/usuario/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  const query = "SELECT * FROM tbl_usuario WHERE id_usuario = ? LIMIT 1";
+  conexion.query(query, [id], (err, rows) => {
+    if (err)
+      return handleDatabaseError(err, res, "Error al obtener usuario por ID:");
+    if (rows.length === 0)
+      return res.status(404).json({ mensaje: "Usuario no encontrado" });
+    res.json(rows[0]);
+  });
 });
 
-// 🔹 Insertar nuevo usuario (manteniendo “contraseña” y orden correcto)
-app.post('/api/usuario', (req, res) => {
-    const { id_cargo, nombre, apellido, correo, nombre_usuario, contraseña } = req.body;
-
-    if (!id_cargo || !nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
-        return res.status(400).json({ error: "Faltan campos obligatorios." });
-    }
-
-    const query = `
-        INSERT INTO tbl_usuario (id_cargo, nombre, apellido, correo, nombre_usuario, contraseña)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `;
-    const values = [id_cargo, nombre, apellido, correo, nombre_usuario, contraseña];
-
-    conexion.query(query, values, (err) => {
-        if (err) return handleDatabaseError(err, res, "Error al insertar usuario:");
-        res.json({ mensaje: "Usuario agregado correctamente" });
+// ===== Leer una cookie específica (debug) =====
+app.get("/api/cookie", (req, res) => {
+  if (!req.cookies) {
+    return res.status(400).json({
+      error: "Las cookies no están habilitadas o enviadas correctamente.",
     });
+  }
+
+  const miCookie = req.cookies.mi_cookie;
+
+  if (miCookie) {
+    logger.info("Cookie leída correctamente");
+    res.json({ mensaje: "Valor de la cookie:", cookie: miCookie });
+  } else {
+    res.status(404).json({ mensaje: "No se encontró la cookie" });
+  }
 });
 
-// 🔹 Actualizar usuario
-app.put('/api/usuario', (req, res) => {
-    const { id_usuario, id_cargo, nombre, apellido, correo, nombre_usuario } = req.body;
+// ===== Insertar nuevo usuario =====
+app.post("/api/usuario", (req, res) => {
+  const {
+    id_cargo,
+    nombre,
+    apellido,
+    correo,
+    nombre_usuario,
+    contraseña,
+  } = req.body;
 
-    const query = `
-        UPDATE tbl_usuario
-        SET id_cargo = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?
-        WHERE id_usuario = ?
-    `;
-    const values = [id_cargo, nombre, apellido, correo, nombre_usuario, id_usuario];
+  if (
+    !id_cargo ||
+    !nombre ||
+    !apellido ||
+    !correo ||
+    !nombre_usuario ||
+    !contraseña
+  ) {
+    return res.status(400).json({ error: "Faltan campos obligatorios." });
+  }
 
-    conexion.query(query, values, (err) => {
-        if (err) return handleDatabaseError(err, res, "Error al actualizar usuario:");
-        res.json({ mensaje: "Usuario actualizado correctamente" });
-    });
+  const query = `
+    INSERT INTO tbl_usuario (id_cargo, nombre, apellido, correo, nombre_usuario, contraseña)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
+  const values = [
+    id_cargo,
+    nombre,
+    apellido,
+    correo,
+    nombre_usuario,
+    contraseña,
+  ];
+
+  conexion.query(query, values, (err) => {
+    if (err) return handleDatabaseError(err, res, "Error al insertar usuario:");
+    res.json({ mensaje: "Usuario agregado correctamente" });
+  });
 });
 
-// 🔹 Eliminar usuario
-app.delete('/api/usuario/:id', (req, res) => {
-    const query = "DELETE FROM tbl_usuario WHERE id_usuario = ?";
-    conexion.query(query, [parseInt(req.params.id)], (err) => {
-        if (err) return handleDatabaseError(err, res, "Error al eliminar usuario:");
-        res.json({ mensaje: "Usuario eliminado correctamente" });
-    });
+// ===== Actualizar usuario =====
+app.put("/api/usuario", (req, res) => {
+  const { id_usuario, id_cargo, nombre, apellido, correo, nombre_usuario } =
+    req.body;
+
+  if (!id_usuario)
+    return res.status(400).json({ error: "id_usuario es requerido" });
+
+  const query = `
+    UPDATE tbl_usuario
+    SET id_cargo = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?
+    WHERE id_usuario = ?
+  `;
+  const values = [
+    id_cargo,
+    nombre,
+    apellido,
+    correo,
+    nombre_usuario,
+    id_usuario,
+  ];
+
+  conexion.query(query, values, (err) => {
+    if (err)
+      return handleDatabaseError(err, res, "Error al actualizar usuario:");
+    res.json({ mensaje: "Usuario actualizado correctamente" });
+  });
 });
+
+// ===== Eliminar usuario =====
+app.delete("/api/usuario/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  const query = "DELETE FROM tbl_usuario WHERE id_usuario = ?";
+  conexion.query(query, [id], (err) => {
+    if (err)
+      return handleDatabaseError(err, res, "Error al eliminar usuario:");
+    res.json({ mensaje: "Usuario eliminado correctamente" });
+  });
+});
+
+// ===== 404 =====
+app.use((req, res) => res.status(404).json({ mensaje: "Ruta no encontrada" }));
 
 //tabla cargos 
 //Get listado de cargos
@@ -420,8 +530,8 @@ app.delete('/api/cliente/:id', (request, response) => {
 });
 
 //Get 
-app.get('/api/tl_estado_ticket',(request, response)=>{
-    var query = "SELECT * FROM imple.tl_estado_ticket"
+app.get('/api/estado_ticket',(request, response)=>{
+    var query = "SELECT * FROM marina_mercante.tl_estado_ticket"
     conexion.query(query,function(err,rows,fields){
         if (err){
             response.send("301 ERROR EN LISTADO DE ESTADOS DE TICKET")
@@ -433,8 +543,8 @@ app.get('/api/tl_estado_ticket',(request, response)=>{
 });
 
 //Get listado de estado de ticket con where
-app.get('/api/tl_estado_ticket/:id',(request, response)=>{
-    var query = "SELECT * FROM imple.tl_estado_ticket WHERE id_estado_ticket = ?"
+app.get('/api/estado_ticket/:id',(request, response)=>{
+    var query = "SELECT * FROM marina_mercante.tl_estado_ticket WHERE id_estado_ticket = ?"
     var values = [
         parseInt(request.params.id)
     ];
@@ -450,8 +560,8 @@ app.get('/api/tl_estado_ticket/:id',(request, response)=>{
 
 
 //Post insert de productos
-app.post('/api/tl_estado_ticket', (request, response) => {
-    var query = "INSERT INTO imple.tl_estado_ticket (estado) VALUES (?)";
+app.post('/api/estado_ticket', (request, response) => {
+    var query = "INSERT INTO marina_mercante.tl_estado_ticket (estado) VALUES (?)";
     var values = [
         request.body["estado"],
         
@@ -469,8 +579,8 @@ app.post('/api/tl_estado_ticket', (request, response) => {
 
 
 //Put Update de Estdo ticket
-app.put('/api/tl_estado_ticket', (request, response) => {
-    var query = "UPDATE imple.tl_estado_ticket SET estado = ? where id_estado_ticket = ?";
+app.put('/api/estado_ticket', (request, response) => {
+    var query = "UPDATE marina_mercante.tl_estado_ticket SET estado = ? where id_estado_ticket = ?";
     var values = [
         request.body["estado"]
        
@@ -488,8 +598,8 @@ app.put('/api/tl_estado_ticket', (request, response) => {
 
 
 //Delete de estado de ticket
-app.delete('/api/tl_estado_ticket/:id', (request, response) => {
-    var query = "DELETE FROM imple.tl_estado_ticket where id_producto = ?";
+app.delete('/api/estado_ticket/:id', (request, response) => {
+    var query = "DELETE FROM marina_mercante.tl_estado_ticket where id_producto = ?";
     var values = [
         parseInt(request.params.id)
     ];
@@ -694,8 +804,8 @@ app.delete('/api/detalle_compra/:id', (req, res) => {
 });
 
 // Get listado de tipo ticket
-app.get('/api/tl_tipo_ticket', (request, response) => {
-    const query = "SELECT * FROM imple.tipo_ticket";
+app.get('/api/tipo_ticket', (request, response) => {
+    const query = "SELECT * FROM marina_mercante.tipo_ticket";
     conexion.query(query, (err, rows) => {
         if (err) {
             return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
@@ -707,8 +817,8 @@ app.get('/api/tl_tipo_ticket', (request, response) => {
 });
 
 // Get tipo ticket con where (por id)
-app.get('/api/tl_tipo_ticket/:id', (request, response) => {
-    const query = "SELECT * FROM imple.tipo_ticket WHERE id_tipo_ticket= ?";
+app.get('/api/tipo_ticket/:id', (request, response) => {
+    const query = "SELECT * FROM marina_mercante.tipo_ticket WHERE id_tipo_ticket= ?";
     const values = [parseInt(request.params.id)];
     conexion.query(query, values, (err, rows) => {
         if (err) {
@@ -721,11 +831,11 @@ app.get('/api/tl_tipo_ticket/:id', (request, response) => {
 });
 
 // Post insert de tipo ticket
-app.post('/api/tl_tipo_ticket', (request, response) => {
+app.post('/api/tipo_ticket', (request, response) => {
     try {
         const { tipo_ticket , estado, prefijo } = request.body;
         const query = `
-            INSERT INTO imple.tipo_ticket (tipo_ticket , estado, prefijo) 
+            INSERT INTO marina_mercante.tipo_ticket (tipo_ticket , estado, prefijo) 
             VALUES (?, ?, ?)
         `;
         const values = [tipo_ticket , estado, prefijo];
@@ -744,7 +854,7 @@ app.post('/api/tl_tipo_ticket', (request, response) => {
 });
 
 // Put update de tipo ticket
-app.put('/api/tl_tipo_ticket', (request, response) => {
+app.put('/api/tipo_ticket', (request, response) => {
     try {
         const {  tipo_ticket , estado, prefijo, id_tipo_ticket  } = request.body;
         const query = `
@@ -767,8 +877,8 @@ app.put('/api/tl_tipo_ticket', (request, response) => {
 });
 
 // Delete de tipo ticket
-app.delete('/api/tl_tipo_ticket/:id', (request, response) => {
-    const query = "DELETE FROM imple.tipo_ticket WHERE id_tipo_ticket = ?";
+app.delete('/api/tipo_ticket/:id', (request, response) => {
+    const query = "DELETE FROM marina_mercante.tipo_ticket WHERE id_tipo_ticket = ?";
     const values = [parseInt(request.params.id)];
     conexion.query(query, values, (err) => {
         if (err) {
@@ -780,8 +890,8 @@ app.delete('/api/tl_tipo_ticket/:id', (request, response) => {
     });
 });
 
-app.get('/api/tl_ticket', (req, res) => {
-    const query = "SELECT * FROM imple.ticket";
+app.get('/api/ticket', (req, res) => {
+    const query = "SELECT * FROM marina_mercante.ticket";
     conexion.query(query, (err, rows) => {
         if (err) return res.status(500).json({ error: "Error al obtener ticket" });
         registrarBitacora("Ticket", "GET");
@@ -789,8 +899,8 @@ app.get('/api/tl_ticket', (req, res) => {
     });
 });
 
-app.get('/api/tl_ticket/:id', (req, res) => {
-    const query = "SELECT * FROM imple.tl_ticket WHERE id_ticket = ?";
+app.get('/api/ticket/:id', (req, res) => {
+    const query = "SELECT * FROM marina_mercante.tl_ticket WHERE id_ticket = ?";
     const values = [parseInt(req.params.id)];
     conexion.query(query, values, (err, rows) => {
         if (err) return res.status(500).json({ error: "Error al obtener el ticket" });
@@ -800,12 +910,12 @@ app.get('/api/tl_ticket/:id', (req, res) => {
     });
 });
 
-app.post('/api/tl_ticket', (req, res) => {
+app.post('/api/ticket', (req, res) => {
     const { id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket } = req.body;
     if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket ) {
         return res.status(400).json({ error: "Todos los campos son obligatorios" });
     }
-    const query = "INSERT INTO imple.tb_ticket (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket) VALUES (?, ?, ?, ?)";
+    const query = "INSERT INTO marina_mercante.tb_ticket (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket) VALUES (?, ?, ?, ?)";
     const values = [id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket];
     conexion.query(query, values, (err, result) => {
         if (err) {
@@ -820,7 +930,7 @@ app.post('/api/tl_ticket', (req, res) => {
     });
 });
 
-app.put('/api/tl_ticket/:id', (req, res) => {
+app.put('/api/ticket/:id', (req, res) => {
     const { id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket } = req.body;
     const id_ticket = parseInt(req.params.id);
     if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket) {
@@ -841,8 +951,8 @@ app.put('/api/tl_ticket/:id', (req, res) => {
     });
 });
 
-app.delete('/api/tl_ticket/:id', (req, res) => {
-    const query = "DELETE FROM imple.tl_ticket WHERE id_ticket = ?";
+app.delete('/api/ticket/:id', (req, res) => {
+    const query = "DELETE FROM marina_mercante.tl_ticket WHERE id_ticket = ?";
     const values = [parseInt(req.params.id)];
     conexion.query(query, values, (err, result) => {
         if (err) {
