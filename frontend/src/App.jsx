@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Login from './login';
+import Login from './Login.jsx';
 import Register from './Register';
 import './App.css';
 
@@ -10,7 +10,7 @@ function App() {
   const showLogin = () => setCurrentView('login');
 
   return (
-    <div className="App">
+    <div className="app-container">
       {currentView === 'login' && <Login onShowRegister={showRegister} />}
       {currentView === 'register' && <Register onShowLogin={showLogin} />}
     </div>

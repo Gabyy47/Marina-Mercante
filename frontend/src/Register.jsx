@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './Register.css';
 
@@ -6,11 +6,26 @@ const Register = () => {
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
-    nombre_usuario: '',
+    usuario: '',  // ahora coincide con el input
     correo: '',
     contraseña: '',
     id_cargo: ''
   });
+
+  const [cargos, setCargos] = useState([]);
+
+  // Cargar los cargos desde la API al iniciar el componente
+  useEffect(() => {
+    const fetchCargos = async () => {
+      try {
+        const response = await axios.get('http://localhost:49146/api/cargos'); 
+        setCargos(response.data);
+      } catch (error) {
+        console.error('Error al cargar cargos:', error);
+      }
+    };
+    fetchCargos();
+  }, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -23,9 +38,19 @@ const Register = () => {
     e.preventDefault();
     try {
       console.log('Registrando usuario:', formData);
-      const response = await axios.post('http://localhost:49146', formData);
+      const response = await axios.post('http://localhost:49146/api/usuario', formData);
       console.log('Registro exitoso:', response.data);
       alert('¡Registro exitoso! Revisa tu correo para el código QR');
+
+      // Limpiar formulario
+      setFormData({
+        nombre: '',
+        apellido: '',
+        usuario: '',
+        correo: '',
+        contraseña: '',
+        id_cargo: ''
+      });
     } catch (error) {
       console.error('Error en registro:', error);
       alert('Error en registro: ' + (error.response?.data?.error || error.message));
@@ -40,7 +65,7 @@ const Register = () => {
         <div className="input-row">
           <div className="input-group">
             <input 
-              type="text" 
+              type="text"
               name="nombre"
               placeholder="Nombre"
               value={formData.nombre}
@@ -52,7 +77,7 @@ const Register = () => {
           
           <div className="input-group">
             <input 
-              type="text" 
+              type="text"
               name="apellido"
               placeholder="Apellido"
               value={formData.apellido}
@@ -65,10 +90,10 @@ const Register = () => {
 
         <div className="input-group">
           <input 
-            type="text" 
-            name="nombre_usuario"
+            type="text"
+            name="usuario"  // ✅ aquí es correcto
             placeholder="Usuario"
-            value={formData.nombre_usuario}
+            value={formData.usuario}
             onChange={handleChange}
             required
             className="input-field"
@@ -77,7 +102,7 @@ const Register = () => {
 
         <div className="input-group">
           <input 
-            type="email" 
+            type="email"
             name="correo"
             placeholder="Correo electrónico"
             value={formData.correo}
@@ -89,7 +114,7 @@ const Register = () => {
 
         <div className="input-group">
           <input 
-            type="password" 
+            type="password"
             name="contraseña"
             placeholder="Contraseña"
             value={formData.contraseña}
@@ -100,22 +125,29 @@ const Register = () => {
         </div>
 
         <div className="form-group">
-            <label htmlFor="id_cargo">ID Cargo</label>
-            <input
-              type="number"
-              id="id_cargo"
-              name="id_cargo"
-              value={formData.id_cargo}
-              onChange={handleChange}
-              placeholder="Ej: 1 para admin, 2 para usuario..."
-              required
-            />
-          </div>
+          <label htmlFor="id_cargo">Cargo</label>
+          <select
+            id="id_cargo"
+            name="id_cargo"
+            value={formData.id_cargo}
+            onChange={handleChange}
+            required
+          >
+            <option value="">-- Selecciona un cargo --</option>
+            {cargos.map((cargo) => (
+              <option key={cargo.id_cargo} value={cargo.id_cargo}>
+                {cargo.descripcion}
+              </option>
+            ))}
+          </select>
+        </div>
         
         <button type="submit" className="register-button">Registrarse</button>
         
         <div className="login-link">
-          <a href="#" onClick={() => window.location.href = '/login'}>¿Ya tienes cuenta? Inicia Sesión</a>
+          <a href="#" onClick={() => window.location.href = '/login'}>
+            ¿Ya tienes cuenta? Inicia Sesión
+          </a>
         </div>
       </form>
     </div>
