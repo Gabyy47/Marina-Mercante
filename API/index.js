@@ -23,7 +23,7 @@ var conexion = mysql.createConnection({
   user: "root",
   password: "123456",
   database: "marina_mercante",
-  charset: "utf8mb4", // ✅ importante para ñ y acentos
+  charset: "utf8mb4", //  importante para ñ y acentos
   authPlugins: {
     mysql_native_password: () => () => Buffer.from("1984"),
   },
@@ -74,7 +74,7 @@ app.listen(PORT, () => {
 
 // ===== Utilidades =====
 function handleDatabaseError(err, res, message) {
-  console.error("❌ " + message, err);
+  console.error("x " + message, err);
   res.status(500).json({ error: err.message || "Error de servidor" });
 }
 
@@ -188,7 +188,7 @@ app.post("/api/recuperar-contrasena", async (req, res) => {
   }
 
   try {
-    // ✅ conflicto resuelto: usamos nombre_usuario correctamente
+    // conflicto resuelto: usamos nombre_usuario correctamente
     const query =
       "SELECT secreto_google_auth FROM tbl_usuario WHERE nombre_usuario = ? LIMIT 1";
 
