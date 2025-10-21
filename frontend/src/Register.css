@@ -1,101 +1,162 @@
-/* Register.css */
-
-/* Contenedor principal centrado */
+/* === Registro compacto dentro del panel derecho === */
 .register-container {
-  width: 500px;
-  background-color: rgba(255, 255, 255, 0.8); /* Fondo blanco semi-transparente */
-  border-radius: 12px;
-  padding: 2.5rem 2rem;
-  margin: 50px auto;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
-  font-family: 'Poppins', Georgia, 'Times New Roman', Times, serif;
+  width: 100%;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-family: 'Poppins', sans-serif;
 }
 
-/* Formulario */
 .register-form {
+  width: 100%;
+  max-width: 320px;          /* ancho reducido; sube/baja 300–360 a gusto */
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
+  gap: 10px;
 }
 
-/* Título */
 .register-title {
   text-align: center;
-  margin-bottom: 1.5rem;
-  color: #1f2937; /* gris oscuro */
-  font-size: 1.8rem;
-  font-weight: 600;
+  color: #1f2937;
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 6px;
 }
 
-/* Contenedor de inputs en fila */
+/* === Nombre/Apellido en dos columnas (si hay espacio) === */
 .input-row {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+@media (min-width: 480px) {      /* 👈 separa en 2 columnas cuando hay espacio */
+  .input-row { grid-template-columns: 1fr 1fr; }
 }
 
-/* Cada input individual */
+/* Base de cada campo con icono */
 .input-group {
-  flex: 1;
+  position: relative;
   display: flex;
-  flex-direction: column;
-  margin-bottom: 1rem;
+  align-items: center;
 }
 
-/* Inputs y select */
+.icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #00BCE4 !important;
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+
+/* Inputs/selects finos */
 .input-field,
-select {
-  padding: 0.75rem 1rem;
+.register-form select {
+  width: 100%;
+  height: 38px;
+  padding: 0 34px 0 34px;   /* espacio izq para icono; der para ojo si aplica */
   border-radius: 8px;
   border: 1px solid #cbd5e1;
-  font-size: 1rem;
+  background: #fff;
+  font-size: 0.9rem;
   outline: none;
-  transition: 0.3s;
+  transition: border-color .25s, box-shadow .25s;
+  box-sizing: border-box;
 }
 
 .input-field:focus,
-select:focus {
-  border-color: #00BCE4; /* azul */
-  box-shadow: 0 0 5px rgba(59, 130, 246, 0.4);
+.register-form select:focus {
+  border-color: #00BCE4;
+  box-shadow: 0 0 0 3px rgba(0,188,228,.18);
 }
 
-/* Label para select */
-.form-group label {
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: #1f2937;
-  display: block;
+/* === Contraseña: candado + ojo dentro === */
+.password-field { position: relative; }
+
+.password-field .icon {
+  left: 10px;
+  color: #6b7280;
 }
 
-/* Botón de registro */
-.register-button {
-  margin-top: 1rem;
-  padding: 0.9rem;
+.password-field .input-field {
+  padding-left: 34px;       /* candado */
+  padding-right: 40px;      /* ojo */
+}
+
+.show-pass {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
   border: none;
-  border-radius: 10px;
-  background-color: #00BCE4; /* azul */
-  color: white;
-  font-size: 1.1rem;
-  font-weight: 500;
+  background: transparent;  /* evita rectángulo azul */
+  color: #6b7280;
   cursor: pointer;
-  transition: 0.3s;
+  padding: 0;
+}
+.show-pass:hover { color: #111827; }
+.show-pass:focus { outline: none; box-shadow: none; }
+.show-pass svg { pointer-events: none; }
+
+.field-hint {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin: -2px 0 6px 2px;
 }
 
-.register-button:hover {
-  background-color: #00BCE4; /* azul más oscuro */
+/* Botón principal */
+.register-button {
+  height: 38px;
+  border: none;
+  border-radius: 8px;
+  background-color: #00BCE4;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .25s, transform .15s;
 }
+.register-button:hover { background-color: #009cc7; transform: translateY(-1px); }
 
-/* Link de login */
-.login-link {
-  margin-top: 1rem;
-  text-align: center;
-}
-
+/* Enlace: siempre dentro, centrado y sin desbordar */
+.login-link { text-align: center; margin-top: 4px; }
 .login-link a {
   color: #0e0e0f;
   text-decoration: none;
-  font-weight: 500;
+  font-size: 0.88rem;
+  font-weight: 600;
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;           /* si aún se sale, cámbialo a normal */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.login-link a:hover { text-decoration: underline; }
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .register-form { max-width: 90%; }
 }
 
-.login-link a:hover {
-  text-decoration: underline;
+/* Toast básico arriba derecha */
+.toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  background: #10b981; /* éxito */
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0,0,0,.15);
+  font-weight: 600;
+  z-index: 10000;
+  opacity: 0.98;
+}
+
+.toast.error {
+  background: #ef4444; /* error */
 }

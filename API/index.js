@@ -1,64 +1,54 @@
-//Declaracion de modulos requeridos
+// Declaración de módulos requeridos
+var Express = require("express");
+var bodyParser = require("body-parser");
+var cors = require("cors");
+var mysql = require("mysql2");
+var jwt = require("jsonwebtoken");
+var cookieParser = require("cookie-parser");
+var speakeasy = require("speakeasy");
+var QRCode = require("qrcode");
 
-var Express = require("express")
-var bodyParser = require("body-parser")
-var cors = require("cors")
-var mysql = require("mysql2")
-var jwt = require ("jsonwebtoken")
-var  cookieParser = require("cookie-parser") 
-var speakeasy = require("speakeasy")
-var QRCode = require("qrcode") // Instala la librería: npm install qrcode
-
+// Conexión a la base de datos
 var conexion = mysql.createConnection({
-
-    host:"localhost",
-    port:"3306",
-    user:"root",
-    password:"123456",
-    database:"marina_mercante",
+    host: "localhost",
+    port: "3306",
+    user: "root",
+    password: "123456",
+    database: "marina_mercante",
+    charset: "utf8mb4", // ✅ importante para ñ y acentos
     authPlugins: {
-
         mysql_native_password: () => () => Buffer.from('1984')
-
-      }
-
+    }
 });
 
-
-//Inicio del uso de Express.js
-
+// Inicio de Express.js
 var app = Express();
 
-//Declaracion usos y libs
-
+// Configuración de middlewares
 app.use(cors({
-
     origin: function (origin, callback) {
-      const allowedOrigins = ['http://localhost:49146', 'http://localhost:3000', 'http://localhost:3306', 'http://localhost:5173']; 
-  
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-
-        callback(new Error('Not allowed by CORS'));
-      }
+        const allowedOrigins = [
+            'http://localhost:49146',
+            'http://localhost:3000',
+            'http://localhost:5173'
+        ];
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
     },
-    
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true, // Habilita las cookies si es necesario
-
+    credentials: true,
 }));
 
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended:true}));
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-
-//Definicion del Listener
-
-const logger = require("./logger"); // Importar logger
-const query = "SELECT * FROM tbl_usuario WHERE nombre = ? AND contraseña = ?";
+// Listener y conexión a MySQL
+const logger = require("./logger");
 
 app.listen(49146, () => {
     conexion.connect((err) => {
@@ -70,25 +60,27 @@ app.listen(49146, () => {
     });
 });
 
-//Comprobando la conexion con un JS
-app.get('/api/json', (solicitud, respuesta) => {
-    respuesta.json({ text: "HOLA ESTE ES UN JSON" });
+// Comprobación de conexión
+app.get('/api/json', (req, res) => {
+    res.json({ text: "HOLA ESTE ES UN JSON" });
 });
 
-app.get('/', (solicitud, respuesta) => {
-    respuesta.send("¡Hola Mundo!");
+app.get('/', (req, res) => {
+    res.send("¡Hola Mundo!");
 });
 
+// Función para manejar errores
 function handleDatabaseError(err, res, message) {
-    logger.error(message, err);
+    console.error("❌ " + message, err);
     res.status(500).json({ error: err.message });
 }
 
-const SECRET_KEY = "1984"; 
+// Clave secreta para JWT
+const SECRET_KEY = "1984";
 
-// Middleware para verificar JWT en rutas protegidas
+// Middleware para verificar JWT
 const verificarToken = (req, res, next) => {
-    const token = req.cookies.token; // Obtiene el token de la cookie
+    const token = req.cookies.token;
     if (!token) return res.status(401).json({ mensaje: "Acceso denegado" });
 
     try {
@@ -100,87 +92,86 @@ const verificarToken = (req, res, next) => {
     }
 };
 
-
-// Ruta protegida con JWT
+// Ruta protegida
 app.get("/api/seguro", verificarToken, (req, res) => {
     res.json({ mensaje: "Acceso concedido a la ruta segura", usuario: req.usuario });
 });
 
-// Ruta para iniciar sesión y generar el token
+// 🔹 LOGIN (usa nombre_usuario y contraseña)
 app.post("/api/login", (req, res) => {
     console.log("Ruta /api/login llamada");
-    const { nombre, contraseña } = req.body;
+    const { nombre_usuario, contraseña, id_cargo } = req.body;
 
-    const query = "SELECT * FROM tbl_usuario WHERE nombre = ? AND contraseña = ?";
-    conexion.query(query, [nombre, contraseña], (err, rows) => {
+    // Validación de campos obligatorios
+    if (!nombre_usuario || !contraseña || !id_cargo) {
+        return res.status(400).json({ mensaje: "Faltan campos obligatorios." });
+    }
+
+    // Consulta que valida usuario, contraseña y cargo
+    const query = `
+        SELECT * FROM tbl_usuario 
+        WHERE nombre_usuario = ? AND contraseña = ? AND id_cargo = ?
+    `;
+
+    conexion.query(query, [nombre_usuario, contraseña, id_cargo], (err, rows) => {
         if (err) return handleDatabaseError(err, res, "Error en inicio de sesión:");
 
         if (rows.length === 0) {
-            return res.status(401).json({ mensaje: "Credenciales inválidas" });
+            return res.status(401).json({ mensaje: "Credenciales inválidas o cargo incorrecto." });
         }
 
         const usuario = rows[0];
         const token = jwt.sign(
-            { id_usuario: usuario.id_usuario, nombre: usuario.nombre },
+            { id_usuario: usuario.id_usuario, nombre_usuario: usuario.nombre_usuario, id_cargo: usuario.id_cargo },
             SECRET_KEY,
             { expiresIn: "1h" }
         );
 
-        // Enviar token en cookie y en respuesta
         res.cookie("token", token, {
-            httpOnly: true,   // No accesible por JavaScript
-            secure: false,    // Cambia a true en HTTPS
+            httpOnly: true,
+            secure: false,  // Cambiar a true en producción con HTTPS
             sameSite: "lax",
-            maxAge: 3600000   // 1 hora
+            maxAge: 3600000
         });
 
         res.json({
             mensaje: "Inicio de sesión exitoso",
-            token
+            token,
+            usuario: {
+                id_usuario: usuario.id_usuario,
+                nombre_usuario: usuario.nombre_usuario,
+                id_cargo: usuario.id_cargo
+            }
         });
     });
 });
 
-// Ruta para cerrar sesión
+
+// 🔹 LOGOUT
 app.get("/api/logout", (req, res) => {
     res.clearCookie("token");
     res.json({ mensaje: "Sesión cerrada" });
 });
 
+// 🔹 Recuperar contraseña (verifica código TOTP)
 app.post("/api/recuperar-contrasena", async (req, res) => {
     const { nombre_usuario, codigo } = req.body;
 
     try {
-        // Obtener el secreto del usuario de la base de datos
-        const query = "SELECT secreto_google_auth FROM imple.tbl_usuario WHERE nombre = ?";
+        const query = "SELECT secreto_google_auth FROM tbl_usuario WHERE nombre_usuario = ?";
         conexion.query(query, [nombre_usuario], async (err, rows) => {
-            if (err) {
-                return handleDatabaseError(err, res, "Error al obtener el secreto del usuario:");
-            }
-
-            if (rows.length === 0) {
-                return res.status(404).json({ mensaje: "Usuario no encontrado" });
-            }
+            if (err) return handleDatabaseError(err, res, "Error al obtener el secreto del usuario:");
+            if (rows.length === 0) return res.status(404).json({ mensaje: "Usuario no encontrado" });
 
             const secreto = rows[0].secreto_google_auth;
 
-            // Registrar el secreto y el código
-            console.log("Secreto:", secreto);
-            console.log("Código recibido:", codigo);
-
-            // Verificar el código de Google Authenticator
             const verificado = speakeasy.totp.verify({
                 secret: secreto,
                 encoding: "base32",
                 token: codigo,
             });
 
-            // Registrar el resultado de la verificación
-            console.log("Verificado:", verificado);
-
             if (verificado) {
-                // Permitir al usuario establecer una nueva contraseña
-                // (Implementa la lógica para actualizar la contraseña en la base de datos)
                 res.json({ mensaje: "Código válido. Nueva contraseña establecida." });
             } else {
                 res.status(400).json({ mensaje: "Código inválido" });
@@ -192,139 +183,77 @@ app.post("/api/recuperar-contrasena", async (req, res) => {
     }
 });
 
-// Ruta para verificar si un usuario existe por nombre de usuario
+// 🔹 Verificar si un usuario existe
 app.post("/api/verificar-usuario", (req, res) => {
     const { nombre_usuario } = req.body;
-
-    const query = "SELECT * FROM imple.tbl_usuario WHERE nombre = ?";
+    const query = "SELECT * FROM tbl_usuario WHERE nombre_usuario = ?";
     conexion.query(query, [nombre_usuario], (err, rows) => {
-        if (err) {
-            return res.status(500).json({ mensaje: "Error al verificar el usuario" });
-        }
-
-        if (rows.length > 0) {
-            res.json({ existe: true });
-        } else {
-            res.json({ existe: false });
-        }
+        if (err) return res.status(500).json({ mensaje: "Error al verificar el usuario" });
+        res.json({ existe: rows.length > 0 });
     });
 });
 
-//Get listado de usuarios
-app.get('/api/usuario', (request, response) => {
-    var query = "SELECT * FROM imple.tbl_usuario";
-
+// 🔹 Listar todos los usuarios
+app.get('/api/usuario', (req, res) => {
+    const query = "SELECT * FROM tbl_usuario";
     conexion.query(query, (err, rows) => {
-        if (err) {
-            logger.error("Error en listado de usuario: " + err.message);
-            return response.status(500).json({ error: "Error en listado de usuario" });
-        }
-        response.cookie('mi_cookie', 'valor_de_la_cookie', { 
-            expires: new Date(Date.now() + 900000), 
-            httpOnly: true, 
-            secure: false,  
-            sameSite: 'lax' 
-        });
-        response.json(rows);
-        logger.info("Listado de usuarios - OK");
+        if (err) return handleDatabaseError(err, res, "Error en listado de usuario:");
+        res.json(rows);
     });
 });
 
-
-
-
-app.get("/api/cookie", (req, res) => {
-    if (!req.cookies) {
-        return res.status(400).json({ error: "Las cookies no están habilitadas o enviadas correctamente." });
-    }
-
-    const miCookie = req.cookies.mi_cookie;
-
-    if (miCookie) {
-        logger.info("Cookie leída correctamente");
-        res.json({ mensaje: "Valor de la cookie:", cookie: miCookie });
-    } else {
-        res.status(404).json({ mensaje: "No se encontró la cookie" });
-    }
-});
-
-//Get listado de usuarios con where
-
-app.get('/api/usuario/:id', (request, response) => {
-    console.log(request.params);
-    const query = "SELECT * FROM imple.tbl_usuario WHERE id_usuario = ?";
-    const values = [parseInt(request.params.id)];
-    conexion.query(query, values, (err, rows) => {
-        if (err) {
-            handleDatabaseError(err, res, "Error en listado de usuarios con where:");
-            return;
-        }
-        logger.info("Listado de usuarios con where - OK");
-        response.json(rows);
+// 🔹 Obtener usuario por ID
+app.get('/api/usuario/:id', (req, res) => {
+    const query = "SELECT * FROM tbl_usuario WHERE id_usuario = ?";
+    conexion.query(query, [parseInt(req.params.id)], (err, rows) => {
+        if (err) return handleDatabaseError(err, res, "Error al obtener usuario por ID:");
+        res.json(rows);
     });
 });
 
-//Post insert de usuarios
-
+// 🔹 Insertar nuevo usuario (manteniendo “contraseña” y orden correcto)
 app.post('/api/usuario', (req, res) => {
-    
-    // Extraer datos del cuerpo de la solicitud
-    const { id_cargo, nombre, correo, contraseña } = req.body;
+    const { id_cargo, nombre, apellido, correo, nombre_usuario, contraseña } = req.body;
 
-    // Verificar que todos los campos obligatorios estén presentes
-    if (!id_cargo ||!nombre || !correo || !contraseña) {
+    if (!id_cargo || !nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
         return res.status(400).json({ error: "Faltan campos obligatorios." });
     }
 
-    // Consulta SQL
     const query = `
-        INSERT INTO imple.tbl_usuario (id_cargo, nombre, correo, contraseña)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO tbl_usuario (id_cargo, nombre, apellido, correo, nombre_usuario, contraseña)
+        VALUES (?, ?, ?, ?, ?, ?)
     `;
-    const values = [id_cargo, nombre,  correo, contraseña];
+    const values = [id_cargo, nombre, apellido, correo, nombre_usuario, contraseña];
 
-    // Ejecutar la inserción
-    conexion.query(query, values, (err, result) => {
-        if (err) {
-            console.error("Error en la base de datos:", err);
-            return res.status(500).json({ error: "Error en la base de datos." });
-        }
-
-       logger.info("INSERT de usuario - OK");
-       console.log("Usuario agregado:", nombre);
+    conexion.query(query, values, (err) => {
+        if (err) return handleDatabaseError(err, res, "Error al insertar usuario:");
+        res.json({ mensaje: "Usuario agregado correctamente" });
     });
 });
 
+// 🔹 Actualizar usuario
+app.put('/api/usuario', (req, res) => {
+    const { id_usuario, id_cargo, nombre, apellido, correo, nombre_usuario } = req.body;
 
+    const query = `
+        UPDATE tbl_usuario
+        SET id_cargo = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?
+        WHERE id_usuario = ?
+    `;
+    const values = [id_cargo, nombre, apellido, correo, nombre_usuario, id_usuario];
 
-
-//Put Update de usuarios
-
-app.put('/api/usuario', (request, response) => {
-    const query = "UPDATE imple.tbl_usuario SET id_cargo=?, nombre = ?, correo = ? = ? WHERE id_usuario = ?";
-    const values = [request.body.id_cargo, request.body.nombre, request.body.correo, request.body.id_usuario];
     conexion.query(query, values, (err) => {
-        if (err) {
-            handleDatabaseError(err, response, "Error en actualización de usuario:");
-            return;
-        }
-        logger.info("ACTUALIZACIÓN de usuarios - OK");
-        response.json("UPDATE EXITOSO!");
+        if (err) return handleDatabaseError(err, res, "Error al actualizar usuario:");
+        res.json({ mensaje: "Usuario actualizado correctamente" });
     });
 });
 
-//Delete de usuarios
-
-app.delete('/api/usuario/:id', (request, response) => {
-    const query = "DELETE FROM imple.tbl_usuario WHERE id_usuario = ?";
-    const values = [parseInt(req.params.id)];
-    conexion.query(query, values, (err) => {
-        if (err) {
-            handleDatabaseError(err, res, "Error en eliminación de usuario:");
-            return;
-        }
-        logger.info("DELETE de usuarios - OK");
-        response.json("DELETE EXITOSO!");
+// 🔹 Eliminar usuario
+app.delete('/api/usuario/:id', (req, res) => {
+    const query = "DELETE FROM tbl_usuario WHERE id_usuario = ?";
+    conexion.query(query, [parseInt(req.params.id)], (err) => {
+        if (err) return handleDatabaseError(err, res, "Error al eliminar usuario:");
+        res.json({ mensaje: "Usuario eliminado correctamente" });
     });
 });
 

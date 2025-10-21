@@ -1,98 +1,174 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import './Login.css';
-import miImagen from './imagenes/DGMM-Gobierno.png';
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { FaUser, FaLock, FaBriefcase } from "react-icons/fa";
+import "./Login.css";
+import miImagen from "./imagenes/DGMM-Gobierno.png";
+import Register from "./Register"; // ← se renderiza en la misma pantalla
 
-const Login = ({ onShowRegister }) => {
+const Login = () => {
   const [formData, setFormData] = useState({
-    nombre_usuario: '',
-    contraseña: '',
-    id_cargo: ''
+    nombre_usuario: "",
+    contraseña: "",
+    id_cargo: "",
   });
 
-  const [cargos, setCargos] = useState([]); // <-- para guardar los cargos
+  const [cargos, setCargos] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+  const [activeTab, setActiveTab] = useState("login"); // "login" | "register"
 
-  // Traer los cargos al cargar el componente
+  axios.defaults.withCredentials = true;
+
   useEffect(() => {
     const fetchCargos = async () => {
       try {
-        const response = await axios.get('http://localhost:49146/api/cargos'); // <-- tu endpoint de cargos
-        setCargos(response.data); // se asume que la respuesta es un array de objetos { id_cargo, descripcion }
+        const response = await axios.get("http://localhost:49146/api/cargos");
+        setCargos(response.data || []);
       } catch (error) {
-        console.error('Error al cargar los cargos:', error);
+        console.error("Error al cargar los cargos:", error);
       }
     };
     fetchCargos();
   }, []);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    let value = e.target.value;
+    const { name } = e.target;
+
+    if (name === "id_cargo") value = Number(value);
+    if (name === "nombre_usuario") value = value.toUpperCase();
+
+    // No permitir espacios en usuario/contraseña
+    if ((name === "nombre_usuario" || name === "contraseña") && /\s/.test(value)) return;
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const showToast = (message, type = "success") => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: "", type: "success" }), 3000);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
-      const response = await axios.post('http://localhost:49146/api/login', formData);
-      alert('¡Login exitoso!');
+      const response = await axios.post("http://localhost:49146/api/login", formData, {
+        withCredentials: true,
+      });
+      localStorage.setItem("token", response.data.token);
+
+      // Solo mostrar el toast azul (sin modal)
+      showToast("✅ ¡Inicio de sesión exitoso!", "success");
+
+      // Redirigir automáticamente después de 2 segundos
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 2000);
     } catch (error) {
-      alert('Error en login: ' + (error.response?.data?.mensaje || error.message));
+      showToast("❌ " + (error.response?.data?.mensaje || error.message), "error");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="login-card">
+      {/* Lado izquierdo con imagen institucional */}
       <div className="login-left">
         <img src={miImagen} alt="Login Visual" />
       </div>
 
+      {/* Lado derecho con pestañas y contenido dinámico */}
       <div className="login-right">
-        <form className="login-form" onSubmit={handleSubmit}>
-          <h2>Iniciar Sesión</h2>
-
-          <input
-            type="text"
-            name="nombre_usuario"
-            placeholder="Usuario"
-            value={formData.nombre_usuario}
-            onChange={handleChange}
-            required
-          />
-
-          <input
-            type="password"
-            name="contraseña"
-            placeholder="Contraseña"
-            value={formData.contraseña}
-            onChange={handleChange}
-            required
-          />
-
-          {/* Select de cargos */}
-          <select
-            name="id_cargo"
-            value={formData.id_cargo}
-            onChange={handleChange}
-            required
+        {/* Pestañas */}
+        <div className="tabs">
+          <button
+            className={activeTab === "login" ? "active" : ""}
+            onClick={() => setActiveTab("login")}
+            type="button"
           >
-            <option value="">Selecciona tu cargo</option>
-            {cargos.map((cargo) => (
-              <option key={cargo.id_cargo} value={cargo.id_cargo}>
-                {cargo.descripcion}
-              </option>
-            ))}
-          </select>
+            INGRESA
+          </button>
+          <button
+            className={activeTab === "register" ? "active" : ""}
+            onClick={() => setActiveTab("register")}
+            type="button"
+          >
+            REGÍSTRATE
+          </button>
+        </div>
 
-          <button type="submit">Ingresar</button>
+        {/* Contenido según pestaña */}
+        {activeTab === "login" ? (
+          <form className="login-form" onSubmit={handleSubmit}>
+            {/* Usuario */}
+            <div className="input-icon">
+              <FaUser className="icon" />
+              <input
+                type="text"
+                name="nombre_usuario"
+                placeholder="Ingresa tu nombre de usuario"
+                value={formData.nombre_usuario}
+                onChange={handleChange}
+                required
+                maxLength={20}
+                autoComplete="username"
+              />
+            </div>
 
-          <p className="register-link">
-            ¿No tienes cuenta?{' '}
-            <span onClick={onShowRegister}>Regístrate</span>
-          </p>
-        </form>
+            {/* Contraseña */}
+            <div className="input-icon">
+              <FaLock className="icon" />
+              <input
+                type="password"
+                name="contraseña"
+                placeholder="Ingresa tu contraseña"
+                value={formData.contraseña}
+                onChange={handleChange}
+                required
+                maxLength={20}
+                autoComplete="current-password"
+              />
+            </div>
+
+            {/* Cargo */}
+            {Array.isArray(cargos) && cargos.length > 0 && (
+              <div className="input-icon">
+                <FaBriefcase className="icon" />
+                <select
+                  name="id_cargo"
+                  value={formData.id_cargo}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Selecciona tu cargo</option>
+                  {cargos.map((cargo) => (
+                    <option key={cargo.id_cargo} value={cargo.id_cargo}>
+                      {cargo.descripcion}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Botón */}
+            <button type="submit" disabled={loading}>
+              {loading ? "Ingresando..." : "Ingresa"}
+            </button>
+
+            {/* Enlace de recuperación */}
+            <p className="forgot-link">¿Olvidaste tu usuario y/o contraseña?</p>
+          </form>
+        ) : (
+          <Register onShowLogin={() => setActiveTab("login")} />
+        )}
       </div>
+
+      {/* Solo se muestra el toast azul */}
+      {toast.show && (
+        <div className={`toast ${toast.type === "error" ? "error" : ""}`}>{toast.message}</div>
+      )}
     </div>
   );
 };

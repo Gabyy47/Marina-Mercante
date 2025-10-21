@@ -1,132 +1,206 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import './Register.css';
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { FaUser, FaLock, FaBriefcase, FaEye, FaEyeSlash } from "react-icons/fa";
+import "./Register.css"; // Puedes tener los estilos de .toast en Login.css; como el CSS es global, funcionará igual.
 
-const Register = () => {
+const Register = ({ onShowLogin }) => {
   const [formData, setFormData] = useState({
-    nombre: '',
-    apellido: '',
-    usuario: '',  // ahora coincide con el input
-    correo: '',
-    contraseña: '',
-    id_cargo: ''
+    nombre: "",
+    apellido: "",
+    nombre_usuario: "",
+    correo: "",
+    contraseña: "",
+    id_cargo: "",
   });
 
   const [cargos, setCargos] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
-  // Cargar los cargos desde la API al iniciar el componente
+  // --- Nuevo: estado de toast como en Login ---
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+  const showToast = (message, type = "success", duration = 3000) => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
+  };
+
   useEffect(() => {
     const fetchCargos = async () => {
       try {
-        const response = await axios.get('http://localhost:49146/api/cargos'); 
-        setCargos(response.data);
+        const { data } = await axios.get("http://localhost:49146/api/cargos");
+        setCargos(Array.isArray(data) ? data : []);
       } catch (error) {
-        console.error('Error al cargar cargos:', error);
+        console.error("Error al cargar cargos:", error);
       }
     };
     fetchCargos();
   }, []);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    let { name, value } = e.target;
+
+    if (name === "id_cargo") value = Number(value);
+
+    // Usuario en MAYÚSCULAS y sin espacios
+    if (name === "nombre_usuario") {
+      value = value.toUpperCase();
+      if (/\s/.test(value)) return; // no permitir espacios
+    }
+
+    // Contraseña sin espacios
+    if (name === "contraseña" && /\s/.test(value)) return;
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
+
+  // Contraseña robusta
+  const strongPassword =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#._-])[A-Za-z\d@$!%*?&#._-]{8,}$/;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!strongPassword.test(formData.contraseña)) {
+      showToast(
+        "La contraseña debe tener mínimo 8 caracteres e incluir mayúsculas, minúsculas, número y símbolo.",
+        "error"
+      );
+      return;
+    }
+
+    setLoading(true);
     try {
-      console.log('Registrando usuario:', formData);
-      const response = await axios.post('http://localhost:49146/api/usuario', formData);
-      console.log('Registro exitoso:', response.data);
-      alert('¡Registro exitoso! Revisa tu correo para el código QR');
+      await axios.post("http://localhost:49146/api/usuario", formData);
+
+      // Toast de éxito
+      showToast("✅ ¡Cuenta creada exitosamente!", "success");
 
       // Limpiar formulario
       setFormData({
-        nombre: '',
-        apellido: '',
-        usuario: '',
-        correo: '',
-        contraseña: '',
-        id_cargo: ''
+        nombre: "",
+        apellido: "",
+        nombre_usuario: "",
+        correo: "",
+        contraseña: "",
+        id_cargo: "",
       });
+
+      // Volver al login en el mismo panel tras 1.5s
+      setTimeout(() => onShowLogin?.(), 1500);
     } catch (error) {
-      console.error('Error en registro:', error);
-      alert('Error en registro: ' + (error.response?.data?.error || error.message));
+      showToast(
+        "❌ Error en el registro: " + (error.response?.data?.error || error.message),
+        "error"
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="register-container">
       <form className="register-form" onSubmit={handleSubmit}>
-        <h2 className="register-title">Crear Cuenta</h2>
-        
+        <h2 className="register-title"></h2>
+
+        {/* Nombre / Apellido */}
         <div className="input-row">
           <div className="input-group">
-            <input 
+            <FaUser className="icon" />
+            <input
+              className="input-field"
               type="text"
               name="nombre"
               placeholder="Nombre"
               value={formData.nombre}
               onChange={handleChange}
               required
-              className="input-field"
+              autoComplete="given-name"
+              maxLength={40}
             />
           </div>
-          
+
           <div className="input-group">
-            <input 
+            <FaUser className="icon" />
+            <input
+              className="input-field"
               type="text"
               name="apellido"
               placeholder="Apellido"
               value={formData.apellido}
               onChange={handleChange}
               required
-              className="input-field"
+              autoComplete="family-name"
+              maxLength={40}
             />
           </div>
         </div>
 
+        {/* Usuario */}
         <div className="input-group">
-          <input 
+          <FaUser className="icon" />
+          <input
+            className="input-field"
             type="text"
-            name="usuario"  // ✅ aquí es correcto
-            placeholder="Usuario"
-            value={formData.usuario}
+            name="nombre_usuario"
+            placeholder="Nombre de usuario (MAYÚSCULAS)"
+            value={formData.nombre_usuario}
             onChange={handleChange}
             required
-            className="input-field"
+            autoComplete="username"
+            maxLength={20}
           />
         </div>
 
+        {/* Correo */}
         <div className="input-group">
-          <input 
+          <span className="icon">✉️</span>
+          <input
+            className="input-field"
             type="email"
             name="correo"
             placeholder="Correo electrónico"
             value={formData.correo}
             onChange={handleChange}
             required
-            className="input-field"
+            autoComplete="email"
           />
         </div>
 
-        <div className="input-group">
-          <input 
-            type="password"
+        {/* Contraseña */}
+        <div className="input-group password-field">
+          <FaLock className="icon" />
+          <input
+            className="input-field"
+            type={showPass ? "text" : "password"}
             name="contraseña"
             placeholder="Contraseña"
             value={formData.contraseña}
             onChange={handleChange}
             required
-            className="input-field"
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={20}
           />
+          <button
+            type="button"
+            className="show-pass"
+            onClick={() => setShowPass((v) => !v)}
+            aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+            title={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+          >
+            {showPass ? <FaEyeSlash /> : <FaEye />}
+          </button>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="id_cargo">Cargo</label>
+        <p className="field-hint">
+          Debe incluir mayúsculas, minúsculas, número y símbolo (mín. 8).
+        </p>
+
+        {/* Cargo */}
+        <div className="input-group">
+          <FaBriefcase className="icon" />
           <select
+            className="input-field"
             id="id_cargo"
             name="id_cargo"
             value={formData.id_cargo}
@@ -141,15 +215,30 @@ const Register = () => {
             ))}
           </select>
         </div>
-        
-        <button type="submit" className="register-button">Registrarse</button>
-        
+
+        <button type="submit" className="register-button" disabled={loading}>
+          {loading ? "Registrando..." : "Registrarse"}
+        </button>
+
         <div className="login-link">
-          <a href="#" onClick={() => window.location.href = '/login'}>
-            ¿Ya tienes cuenta? Inicia Sesión
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              onShowLogin?.();
+            }}
+          >
+            Volver a Iniciar Sesión
           </a>
         </div>
       </form>
+
+      {/* Toast (igual estilo que en Login) */}
+      {toast.show && (
+        <div className={`toast ${toast.type === "error" ? "error" : ""}`}>
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 };
