@@ -14,7 +14,7 @@ var conexion = mysql.createConnection({
     host:"localhost",
     port:"3306",
     user:"root",
-    password:"123456",
+    password:"H0nduras",
     database:"marina_mercante",
     authPlugins: {
 
@@ -152,7 +152,7 @@ app.post("/api/recuperar-contrasena", async (req, res) => {
 
     try {
         // Obtener el secreto del usuario de la base de datos
-        const query = "SELECT secreto_google_auth FROM imple.tbl_usuario WHERE nombre = ?";
+        const query = "SELECT secreto_google_auth FROM marina_mercante.tbl_usuario WHERE nombre = ?";
         conexion.query(query, [nombre_usuario], async (err, rows) => {
             if (err) {
                 return handleDatabaseError(err, res, "Error al obtener el secreto del usuario:");
@@ -196,7 +196,7 @@ app.post("/api/recuperar-contrasena", async (req, res) => {
 app.post("/api/verificar-usuario", (req, res) => {
     const { nombre_usuario } = req.body;
 
-    const query = "SELECT * FROM imple.tbl_usuario WHERE nombre = ?";
+    const query = "SELECT * FROM marina_mercante.tbl_usuario WHERE nombre = ?";
     conexion.query(query, [nombre_usuario], (err, rows) => {
         if (err) {
             return res.status(500).json({ mensaje: "Error al verificar el usuario" });
@@ -212,7 +212,7 @@ app.post("/api/verificar-usuario", (req, res) => {
 
 //Get listado de usuarios
 app.get('/api/usuario', (request, response) => {
-    var query = "SELECT * FROM imple.tbl_usuario";
+    var query = "SELECT * FROM marina_mercante.tbl_usuario";
 
     conexion.query(query, (err, rows) => {
         if (err) {
@@ -252,7 +252,7 @@ app.get("/api/cookie", (req, res) => {
 
 app.get('/api/usuario/:id', (request, response) => {
     console.log(request.params);
-    const query = "SELECT * FROM imple.tbl_usuario WHERE id_usuario = ?";
+    const query = "SELECT * FROM marina_mercante.tbl_usuario WHERE id_usuario = ?";
     const values = [parseInt(request.params.id)];
     conexion.query(query, values, (err, rows) => {
         if (err) {
@@ -278,7 +278,7 @@ app.post('/api/usuario', (req, res) => {
 
     // Consulta SQL
     const query = `
-        INSERT INTO imple.tbl_usuario (id_cargo, nombre, correo, contraseña)
+        INSERT INTO marina_mercante.tbl_usuario (id_cargo, nombre, correo, contraseña)
         VALUES (?, ?, ?, ?)
     `;
     const values = [id_cargo, nombre,  correo, contraseña];
@@ -301,7 +301,7 @@ app.post('/api/usuario', (req, res) => {
 //Put Update de usuarios
 
 app.put('/api/usuario', (request, response) => {
-    const query = "UPDATE imple.tbl_usuario SET id_cargo=?, nombre = ?, correo = ? = ? WHERE id_usuario = ?";
+    const query = "UPDATE marina_mercante.tbl_usuario SET id_cargo=?, nombre = ?, correo = ? = ? WHERE id_usuario = ?";
     const values = [request.body.id_cargo, request.body.nombre, request.body.correo, request.body.id_usuario];
     conexion.query(query, values, (err) => {
         if (err) {
@@ -316,7 +316,7 @@ app.put('/api/usuario', (request, response) => {
 //Delete de usuarios
 
 app.delete('/api/usuario/:id', (request, response) => {
-    const query = "DELETE FROM imple.tbl_usuario WHERE id_usuario = ?";
+    const query = "DELETE FROM marina_mercante.tbl_usuario WHERE id_usuario = ?";
     const values = [parseInt(req.params.id)];
     conexion.query(query, values, (err) => {
         if (err) {
@@ -492,7 +492,7 @@ app.delete('/api/cliente/:id', (request, response) => {
 
 //Get 
 app.get('/api/estado_ticket',(request, response)=>{
-    var query = "SELECT * FROM imple.tl_estado_ticket"
+    var query = "SELECT * FROM marina_mercante.tl_estado_ticket"
     conexion.query(query,function(err,rows,fields){
         if (err){
             response.send("301 ERROR EN LISTADO DE ESTADOS DE TICKET")
@@ -505,7 +505,7 @@ app.get('/api/estado_ticket',(request, response)=>{
 
 //Get listado de estado de ticket con where
 app.get('/api/estado_ticket/:id',(request, response)=>{
-    var query = "SELECT * FROM imple.tl_estado_ticket WHERE id_estado_ticket = ?"
+    var query = "SELECT * FROM marina_mercante.tl_estado_ticket WHERE id_estado_ticket = ?"
     var values = [
         parseInt(request.params.id)
     ];
@@ -522,7 +522,7 @@ app.get('/api/estado_ticket/:id',(request, response)=>{
 
 //Post insert de productos
 app.post('/api/estado_ticket', (request, response) => {
-    var query = "INSERT INTO imple.tl_estado_ticket (estado) VALUES (?)";
+    var query = "INSERT INTO marina_mercante.tl_estado_ticket (estado) VALUES (?)";
     var values = [
         request.body["estado"],
         
@@ -541,7 +541,7 @@ app.post('/api/estado_ticket', (request, response) => {
 
 //Put Update de Estdo ticket
 app.put('/api/estado_ticket', (request, response) => {
-    var query = "UPDATE imple.tl_estado_ticket SET estado = ? where id_estado_ticket = ?";
+    var query = "UPDATE marina_mercante.tl_estado_ticket SET estado = ? where id_estado_ticket = ?";
     var values = [
         request.body["estado"]
        
@@ -560,7 +560,7 @@ app.put('/api/estado_ticket', (request, response) => {
 
 //Delete de estado de ticket
 app.delete('/api/estado_ticket/:id', (request, response) => {
-    var query = "DELETE FROM imple.tl_estado_ticket where id_producto = ?";
+    var query = "DELETE FROM marina_mercante.tl_estado_ticket where id_producto = ?";
     var values = [
         parseInt(request.params.id)
     ];
@@ -766,7 +766,7 @@ app.delete('/api/detalle_compra/:id', (req, res) => {
 
 // Get listado de tipo ticket
 app.get('/api/tipo_ticket', (request, response) => {
-    const query = "SELECT * FROM imple.tipo_ticket";
+    const query = "SELECT * FROM marina_mercante.tipo_ticket";
     conexion.query(query, (err, rows) => {
         if (err) {
             return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
@@ -779,7 +779,7 @@ app.get('/api/tipo_ticket', (request, response) => {
 
 // Get tipo ticket con where (por id)
 app.get('/api/tipo_ticket/:id', (request, response) => {
-    const query = "SELECT * FROM imple.tipo_ticket WHERE id_tipo_ticket= ?";
+    const query = "SELECT * FROM marina_mercante.tipo_ticket WHERE id_tipo_ticket= ?";
     const values = [parseInt(request.params.id)];
     conexion.query(query, values, (err, rows) => {
         if (err) {
@@ -796,7 +796,7 @@ app.post('/api/tipo_ticket', (request, response) => {
     try {
         const { tipo_ticket , estado, prefijo } = request.body;
         const query = `
-            INSERT INTO imple.tipo_ticket (tipo_ticket , estado, prefijo) 
+            INSERT INTO marina_mercante.tipo_ticket (tipo_ticket , estado, prefijo) 
             VALUES (?, ?, ?)
         `;
         const values = [tipo_ticket , estado, prefijo];
@@ -839,7 +839,7 @@ app.put('/api/tipo_ticket', (request, response) => {
 
 // Delete de tipo ticket
 app.delete('/api/tipo_ticket/:id', (request, response) => {
-    const query = "DELETE FROM imple.tipo_ticket WHERE id_tipo_ticket = ?";
+    const query = "DELETE FROM marina_mercante.tipo_ticket WHERE id_tipo_ticket = ?";
     const values = [parseInt(request.params.id)];
     conexion.query(query, values, (err) => {
         if (err) {
@@ -852,7 +852,7 @@ app.delete('/api/tipo_ticket/:id', (request, response) => {
 });
 
 app.get('/api/ticket', (req, res) => {
-    const query = "SELECT * FROM imple.ticket";
+    const query = "SELECT * FROM marina_mercante.ticket";
     conexion.query(query, (err, rows) => {
         if (err) return res.status(500).json({ error: "Error al obtener ticket" });
         registrarBitacora("Ticket", "GET");
@@ -861,7 +861,7 @@ app.get('/api/ticket', (req, res) => {
 });
 
 app.get('/api/ticket/:id', (req, res) => {
-    const query = "SELECT * FROM imple.tl_ticket WHERE id_ticket = ?";
+    const query = "SELECT * FROM marina_mercante.tl_ticket WHERE id_ticket = ?";
     const values = [parseInt(req.params.id)];
     conexion.query(query, values, (err, rows) => {
         if (err) return res.status(500).json({ error: "Error al obtener el ticket" });
@@ -876,7 +876,7 @@ app.post('/api/ticket', (req, res) => {
     if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket ) {
         return res.status(400).json({ error: "Todos los campos son obligatorios" });
     }
-    const query = "INSERT INTO imple.tb_ticket (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket) VALUES (?, ?, ?, ?)";
+    const query = "INSERT INTO marina_mercante.tb_ticket (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket) VALUES (?, ?, ?, ?)";
     const values = [id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket];
     conexion.query(query, values, (err, result) => {
         if (err) {
@@ -913,7 +913,7 @@ app.put('/api/ticket/:id', (req, res) => {
 });
 
 app.delete('/api/ticket/:id', (req, res) => {
-    const query = "DELETE FROM imple.tl_ticket WHERE id_ticket = ?";
+    const query = "DELETE FROM marina_mercante.tl_ticket WHERE id_ticket = ?";
     const values = [parseInt(req.params.id)];
     conexion.query(query, values, (err, result) => {
         if (err) {
