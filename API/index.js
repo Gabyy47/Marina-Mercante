@@ -491,7 +491,7 @@ app.delete('/api/cliente/:id', (request, response) => {
 });
 
 //Get 
-app.get('/api/tl_estado_ticket',(request, response)=>{
+app.get('/api/estado_ticket',(request, response)=>{
     var query = "SELECT * FROM imple.tl_estado_ticket"
     conexion.query(query,function(err,rows,fields){
         if (err){
@@ -504,7 +504,7 @@ app.get('/api/tl_estado_ticket',(request, response)=>{
 });
 
 //Get listado de estado de ticket con where
-app.get('/api/tl_estado_ticket/:id',(request, response)=>{
+app.get('/api/estado_ticket/:id',(request, response)=>{
     var query = "SELECT * FROM imple.tl_estado_ticket WHERE id_estado_ticket = ?"
     var values = [
         parseInt(request.params.id)
@@ -521,7 +521,7 @@ app.get('/api/tl_estado_ticket/:id',(request, response)=>{
 
 
 //Post insert de productos
-app.post('/api/tl_estado_ticket', (request, response) => {
+app.post('/api/estado_ticket', (request, response) => {
     var query = "INSERT INTO imple.tl_estado_ticket (estado) VALUES (?)";
     var values = [
         request.body["estado"],
@@ -540,7 +540,7 @@ app.post('/api/tl_estado_ticket', (request, response) => {
 
 
 //Put Update de Estdo ticket
-app.put('/api/tl_estado_ticket', (request, response) => {
+app.put('/api/estado_ticket', (request, response) => {
     var query = "UPDATE imple.tl_estado_ticket SET estado = ? where id_estado_ticket = ?";
     var values = [
         request.body["estado"]
@@ -559,7 +559,7 @@ app.put('/api/tl_estado_ticket', (request, response) => {
 
 
 //Delete de estado de ticket
-app.delete('/api/tl_estado_ticket/:id', (request, response) => {
+app.delete('/api/estado_ticket/:id', (request, response) => {
     var query = "DELETE FROM imple.tl_estado_ticket where id_producto = ?";
     var values = [
         parseInt(request.params.id)
@@ -765,7 +765,7 @@ app.delete('/api/detalle_compra/:id', (req, res) => {
 });
 
 // Get listado de tipo ticket
-app.get('/api/tl_tipo_ticket', (request, response) => {
+app.get('/api/tipo_ticket', (request, response) => {
     const query = "SELECT * FROM imple.tipo_ticket";
     conexion.query(query, (err, rows) => {
         if (err) {
@@ -778,7 +778,7 @@ app.get('/api/tl_tipo_ticket', (request, response) => {
 });
 
 // Get tipo ticket con where (por id)
-app.get('/api/tl_tipo_ticket/:id', (request, response) => {
+app.get('/api/tipo_ticket/:id', (request, response) => {
     const query = "SELECT * FROM imple.tipo_ticket WHERE id_tipo_ticket= ?";
     const values = [parseInt(request.params.id)];
     conexion.query(query, values, (err, rows) => {
@@ -792,7 +792,7 @@ app.get('/api/tl_tipo_ticket/:id', (request, response) => {
 });
 
 // Post insert de tipo ticket
-app.post('/api/tl_tipo_ticket', (request, response) => {
+app.post('/api/tipo_ticket', (request, response) => {
     try {
         const { tipo_ticket , estado, prefijo } = request.body;
         const query = `
@@ -815,7 +815,7 @@ app.post('/api/tl_tipo_ticket', (request, response) => {
 });
 
 // Put update de tipo ticket
-app.put('/api/tl_tipo_ticket', (request, response) => {
+app.put('/api/tipo_ticket', (request, response) => {
     try {
         const {  tipo_ticket , estado, prefijo, id_tipo_ticket  } = request.body;
         const query = `
@@ -838,7 +838,7 @@ app.put('/api/tl_tipo_ticket', (request, response) => {
 });
 
 // Delete de tipo ticket
-app.delete('/api/tl_tipo_ticket/:id', (request, response) => {
+app.delete('/api/tipo_ticket/:id', (request, response) => {
     const query = "DELETE FROM imple.tipo_ticket WHERE id_tipo_ticket = ?";
     const values = [parseInt(request.params.id)];
     conexion.query(query, values, (err) => {
@@ -851,7 +851,7 @@ app.delete('/api/tl_tipo_ticket/:id', (request, response) => {
     });
 });
 
-app.get('/api/tl_ticket', (req, res) => {
+app.get('/api/ticket', (req, res) => {
     const query = "SELECT * FROM imple.ticket";
     conexion.query(query, (err, rows) => {
         if (err) return res.status(500).json({ error: "Error al obtener ticket" });
@@ -860,7 +860,7 @@ app.get('/api/tl_ticket', (req, res) => {
     });
 });
 
-app.get('/api/tl_ticket/:id', (req, res) => {
+app.get('/api/ticket/:id', (req, res) => {
     const query = "SELECT * FROM imple.tl_ticket WHERE id_ticket = ?";
     const values = [parseInt(req.params.id)];
     conexion.query(query, values, (err, rows) => {
@@ -871,7 +871,7 @@ app.get('/api/tl_ticket/:id', (req, res) => {
     });
 });
 
-app.post('/api/tl_ticket', (req, res) => {
+app.post('/api/ticket', (req, res) => {
     const { id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket } = req.body;
     if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket ) {
         return res.status(400).json({ error: "Todos los campos son obligatorios" });
@@ -891,7 +891,7 @@ app.post('/api/tl_ticket', (req, res) => {
     });
 });
 
-app.put('/api/tl_ticket/:id', (req, res) => {
+app.put('/api/ticket/:id', (req, res) => {
     const { id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket } = req.body;
     const id_ticket = parseInt(req.params.id);
     if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket) {
@@ -912,7 +912,7 @@ app.put('/api/tl_ticket/:id', (req, res) => {
     });
 });
 
-app.delete('/api/tl_ticket/:id', (req, res) => {
+app.delete('/api/ticket/:id', (req, res) => {
     const query = "DELETE FROM imple.tl_ticket WHERE id_ticket = ?";
     const values = [parseInt(req.params.id)];
     conexion.query(query, values, (err, result) => {
