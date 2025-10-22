@@ -364,9 +364,6 @@ app.delete("/api/usuario/:id", (req, res) => {
   });
 });
 
-// ===== 404 =====
-app.use((req, res) => res.status(404).json({ mensaje: "Ruta no encontrada" }));
-
 //tabla cargos 
 //Get listado de cargos
 // Rutas de cargos
@@ -1405,3 +1402,6 @@ app.delete('/api/inventario/:id', (req, res) => {
     res.json({ message: "Inventario eliminado correctamente" });
   });
 });
+
+// ===== 404 =====
+app.use((req, res) => res.status(404).json({ mensaje: "Ruta no encontrada" }));
