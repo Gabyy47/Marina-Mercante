@@ -8,8 +8,7 @@ import Register from "./Register"; // ← se renderiza en la misma pantalla
 const Login = () => {
   const [formData, setFormData] = useState({
     nombre_usuario: "",
-    contraseña: "",
-    id_cargo: "",
+    contraseña: ""
   });
 
   const [cargos, setCargos] = useState([]);
@@ -19,17 +18,7 @@ const Login = () => {
 
   axios.defaults.withCredentials = true;
 
-  useEffect(() => {
-    const fetchCargos = async () => {
-      try {
-        const response = await axios.get("http://localhost:49146/api/cargos");
-        setCargos(response.data || []);
-      } catch (error) {
-        console.error("Error al cargar los cargos:", error);
-      }
-    };
-    fetchCargos();
-  }, []);
+
 
   const handleChange = (e) => {
     let value = e.target.value;
@@ -131,26 +120,6 @@ const Login = () => {
                 autoComplete="current-password"
               />
             </div>
-
-            {/* Cargo */}
-            {Array.isArray(cargos) && cargos.length > 0 && (
-              <div className="input-icon">
-                <FaBriefcase className="icon" />
-                <select
-                  name="id_cargo"
-                  value={formData.id_cargo}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="">Selecciona tu cargo</option>
-                  {cargos.map((cargo) => (
-                    <option key={cargo.id_cargo} value={cargo.id_cargo}>
-                      {cargo.descripcion}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
 
             {/* Botón */}
             <button type="submit" disabled={loading}>
