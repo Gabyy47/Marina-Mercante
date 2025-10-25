@@ -1,3 +1,20 @@
+/* ===== Página con fondo (imagen + overlay) ===== */
+.login-page {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background: url("/img/Fondo.jpg") center/cover no-repeat fixed; /* ← ajusta si usas otra ruta */
+  position: relative;
+}
+/* Oscurecer ligeramente el fondo para que la tarjeta resalte */
+.login-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
 /* ===== Card central (con opacidad real sin afectar contenido) ===== */
 .login-card {
   position: relative;
