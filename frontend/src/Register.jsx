@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import axios from "axios";
 import { FaUser, FaLock, FaBriefcase, FaEye, FaEyeSlash } from "react-icons/fa";
 import "./Register.css"; // Puedes tener los estilos de .toast en Login.css; como el CSS es global, funcionará igual.
@@ -9,11 +9,9 @@ const Register = ({ onShowLogin }) => {
     apellido: "",
     nombre_usuario: "",
     correo: "",
-    contraseña: "",
-    id_cargo: "",
-  });
+    contraseña: ""  });
 
-  const [cargos, setCargos] = useState([]);
+  
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
@@ -24,17 +22,6 @@ const Register = ({ onShowLogin }) => {
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
   };
 
-  useEffect(() => {
-    const fetchCargos = async () => {
-      try {
-        const { data } = await axios.get("http://localhost:49146/api/cargos");
-        setCargos(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Error al cargar cargos:", error);
-      }
-    };
-    fetchCargos();
-  }, []);
 
   const handleChange = (e) => {
     let { name, value } = e.target;
@@ -196,25 +183,6 @@ const Register = ({ onShowLogin }) => {
           Debe incluir mayúsculas, minúsculas, número y símbolo (mín. 8).
         </p>
 
-        {/* Cargo */}
-        <div className="input-group">
-          <FaBriefcase className="icon" />
-          <select
-            className="input-field"
-            id="id_cargo"
-            name="id_cargo"
-            value={formData.id_cargo}
-            onChange={handleChange}
-            required
-          >
-            <option value="">-- Selecciona un cargo --</option>
-            {cargos.map((cargo) => (
-              <option key={cargo.id_cargo} value={cargo.id_cargo}>
-                {cargo.descripcion}
-              </option>
-            ))}
-          </select>
-        </div>
 
         <button type="submit" className="register-button" disabled={loading}>
           {loading ? "Registrando..." : "Registrarse"}
