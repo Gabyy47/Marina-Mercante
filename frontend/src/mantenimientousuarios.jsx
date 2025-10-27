@@ -5,13 +5,13 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Link } from 'react-router-dom';
 
-const BASE_URL = "http://localhost:49146/API/";
+const BASE_URL = "http://localhost:49146/api/";
 
 Modal.setAppElement('#root');
 
 const App = () => {
   const [items, setItems] = useState([]);
-  //const [newId, setNewId] = useState("");
+  const [newId_cargo, setNewId_cargo] = useState("");
   const [newNombre, setNewNombre] = useState("");
   const [newApellido, setNewApellido] = useState("");
   const [newCorreo, setNewCorreo] = useState("");
@@ -37,8 +37,9 @@ const App = () => {
   }, []);
 
   const handleCreate = () => {
-    if(newNombre.trim() && newApellido.trim() && newCorreo.trim() && newNombre_usuario.trim() && newContraseña.trim()) {
+    if(newId_cargo.trim() && newNombre.trim() && newApellido.trim() && newCorreo.trim() && newNombre_usuario.trim() && newContraseña.trim()) {
       axios.post(`${BASE_URL}usuario`, {
+        id_cargo: newId_cargo,
         nombre: newNombre,
         apellido: newApellido,
         correo: newCorreo,
@@ -74,8 +75,9 @@ const App = () => {
   };
 
   const handleUpdate = () => {
-    const { nombre, apellido, correo, nombre_usuario, contraseña } = { newNombre, newApellido, newCorreo, newNombre_usuario, newContraseña };
+    const { id_cargo, nombre, apellido, correo, nombre_usuario, contraseña } = { newId_cargo, newNombre, newApellido, newCorreo, newNombre_usuario, newContraseña };
     axios.put(`${BASE_URL}usuario/${editItemId}`, {
+      id_cargo,
       nombre,
       apellido,
       correo,
@@ -85,7 +87,7 @@ const App = () => {
     .then(() => {
       toast.success('¡Guardado con éxito!');
       setItems((prevItems) => prevItems.map((item) => 
-        item.id_usuario === editItemId ? { ...item, nombre, apellido, correo, nombre_usuario, contraseña } : item
+        item.id_usuario === editItemId ? { ...item, id_cargo, nombre, apellido, correo, nombre_usuario, contraseña } : item
       ));
       closeEditModal();
     })
@@ -98,6 +100,7 @@ const App = () => {
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => {
     setIsModalOpen(false);
+    setNewId_cargo("");
     setNewNombre("");
     setNewApellido("");
     setNewCorreo("");
@@ -107,6 +110,7 @@ const App = () => {
 
   const openEditModal = (item) => {
     setEditItemId(item.id_usuario); // Asegúrate de usar el campo correcto
+    setNewId_cargo(item.id_cargo);
     setNewNombre(item.nombre);
     setNewApellido(item.apellido);
     setNewCorreo(item.correo);
@@ -131,6 +135,7 @@ const App = () => {
       {/* Modal para crear usuario */}
       <Modal isOpen={isModalOpen} onRequestClose={closeModal}>
         <h2>Crear Usuario</h2>
+        <input type="text" value={newId_cargo} onChange={(e) => setNewId_cargo(e.target.value)} placeholder='Id_cargo' />
         <input type="text" value={newNombre} onChange={(e) => setNewNombre(e.target.value)} placeholder='Nombre' />
         <input type="text" value={newApellido} onChange={(e) => setNewApellido(e.target.value)} placeholder='Apellido' />
         <input type="text" value={newCorreo} onChange={(e) => setNewCorreo(e.target.value)} placeholder='Correo' />
@@ -143,6 +148,7 @@ const App = () => {
       {/* Modal para editar usuario */}
       <Modal isOpen={isEditModalOpen} onRequestClose={closeEditModal}>
         <h2>Editar Usuario</h2>
+        <input type="text" value={newId_cargo} onChange={(e) => setNewId_cargo(e.target.value)} placeholder='Id_cargo' />
         <input type="text" value={newNombre} onChange={(e) => setNewNombre(e.target.value)} placeholder='Nombre' />
         <input type="text" value={newApellido} onChange={(e) => setNewApellido(e.target.value)} placeholder='Apellido' />
         <input type="text" value={newCorreo} onChange={(e) => setNewCorreo(e.target.value)} placeholder='Correo' />
@@ -156,6 +162,7 @@ const App = () => {
         {items.map((item) => (
           <li key={item.id_usuario}>
             <span style={{ marginRight: '10px' }}>{item.id_usuario}</span>
+            <span style={{ marginRight: '10px' }}>{item.id_cargo}</span>
             <span style={{ marginRight: '10px' }}>{item.nombre}</span>
             <span style={{ marginRight: '10px' }}>{item.apellido}</span>
             <span style={{ marginRight: '10px' }}>{item.correo}</span>
