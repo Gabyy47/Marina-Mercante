@@ -21,7 +21,7 @@ var conexion = mysql.createConnection({
   host: "localhost",
   port: "3306",
   user: "root",
-  password: "1984",
+  password: "123456",
   database: "marina_mercante",
   charset: "utf8mb4", //  importante para ñ y acentos
   authPlugins: {

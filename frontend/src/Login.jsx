@@ -1,7 +1,7 @@
 // src/Login.jsx
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { FaUser, FaLock, FaBriefcase } from "react-icons/fa";
+import { FaUser, FaLock, FaBriefcase, FaEye, FaEyeSlash } from "react-icons/fa";
 import miImagen from "./imagenes/DGMM-Gobierno.png";
 import Register from "./Register";
 import "./Login.css";
@@ -17,11 +17,11 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const [activeTab, setActiveTab] = useState("login"); // "login" | "register"
+  const [showPass, setShowPass] = useState(false); // 👁️ para mostrar/ocultar contraseña
 
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || "/";
-
 
   // Cargar cargos
   useEffect(() => {
@@ -69,111 +69,113 @@ const Login = () => {
     }
   };
 
-  //const isDisabled =
-    //loading ||
-    //!formData.nombre_usuario ||
-    //!formData.contraseña ||
-    //!formData.id_cargo;
-
- return (
-  <div
-    className="login-page"
-    style={{ background: `url(${fondo}) center / cover no-repeat fixed` }}
-  >
-    <div className="login-card">
-      <div className="login-left">
-        <img src={miImagen} alt="Login Visual" />
-      </div>
-
-      <div className="login-right">
-        <div className="tabs">
-          <button
-            className={activeTab === "login" ? "active" : ""}
-            onClick={() => setActiveTab("login")}
-            type="button"
-          >
-            INGRESA
-          </button>
-          <button
-            className={activeTab === "register" ? "active" : ""}
-            onClick={() => setActiveTab("register")}
-            type="button"
-          >
-            REGÍSTRATE
-          </button>
+  return (
+    <div
+      className="login-page"
+      style={{ background: `url(${fondo}) center / cover no-repeat fixed` }}
+    >
+      <div className="login-card">
+        <div className="login-left">
+          <img src={miImagen} alt="Login Visual" />
         </div>
 
-        {activeTab === "login" ? (
-          <form className="login-form" onSubmit={handleSubmit}>
-            {/* Usuario */}
-            <div className="input-icon">
-              <FaUser className="icon" />
-              <input
-                type="text"
-                name="nombre_usuario"
-                placeholder="Ingresa tu nombre de usuario"
-                value={formData.nombre_usuario}
-                onChange={handleChange}
-                required
-                maxLength={20}
-              />
-            </div>
+        <div className="login-right">
+          <div className="tabs">
+            <button
+              className={activeTab === "login" ? "active" : ""}
+              onClick={() => setActiveTab("login")}
+              type="button"
+            >
+              INGRESA
+            </button>
+            <button
+              className={activeTab === "register" ? "active" : ""}
+              onClick={() => setActiveTab("register")}
+              type="button"
+            >
+              REGÍSTRATE
+            </button>
+          </div>
 
-            {/* Contraseña */}
-            <div className="input-icon">
-              <FaLock className="icon" />
-              <input
-                type="password"
-                name="contraseña"
-                placeholder="Ingresa tu contraseña"
-                value={formData.contraseña}
-                onChange={handleChange}
-                required
-                maxLength={20}
-              />
-            </div>
-
-            {/* Cargo */}
-            {Array.isArray(cargos) && cargos.length > 0 && (
+          {activeTab === "login" ? (
+            <form className="login-form" onSubmit={handleSubmit}>
+              {/* Usuario */}
               <div className="input-icon">
-                <FaBriefcase className="icon" />
-                <select
-                  name="id_cargo"
-                  value={formData.id_cargo}
+                <FaUser className="icon" />
+                <input
+                  type="text"
+                  name="nombre_usuario"
+                  placeholder="Ingresa tu nombre de usuario"
+                  value={formData.nombre_usuario}
                   onChange={handleChange}
                   required
-                >
-                  <option value="">Selecciona tu cargo</option>
-                  {cargos.map((cargo) => (
-                    <option key={cargo.id_cargo} value={cargo.id_cargo}>
-                      {cargo.descripcion}
-                    </option>
-                  ))}
-                </select>
+                  maxLength={20}
+                />
               </div>
-            )}
 
-            <button type="submit" disabled={loading}>
-              {loading ? "Ingresando..." : "Ingresa"}
-            </button>
-            <p className="forgot-link">¿Olvidaste tu usuario y/o contraseña?</p>
-          </form>
-        ) : (
-          <Register onShowLogin={() => setActiveTab("login")} />
-        )}
-      </div> {/* <- cierre correcto del login-right */}
-    </div>   {/* <- cierre correcto del login-card */}
+              {/* Contraseña con ojito  */}
+              <div className="input-icon">
+                <FaLock className="icon" />
+                <input
+                  type={showPass ? "text" : "password"}
+                  name="contraseña"
+                  placeholder="Ingresa tu contraseña"
+                  value={formData.contraseña}
+                  onChange={handleChange}
+                  required
+                  maxLength={20}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className="toggle-pass"
+                  aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-pressed={showPass}
+                  onClick={() => setShowPass((s) => !s)}
+                >
+                  {showPass ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
 
-    {/* Toast separado correctamente */}
-    {toast.show && (
-      <div className={`toast ${toast.type === "error" ? "error" : ""}`}>
-        {toast.message}
-      </div>
-    )}
-  </div>     /* <- cierre del login-page */
-);
+              {/* Cargo */}
+              {Array.isArray(cargos) && cargos.length > 0 && (
+                <div className="input-icon">
+                  <FaBriefcase className="icon" />
+                  <select
+                    name="id_cargo"
+                    value={formData.id_cargo}
+                    onChange={handleChange}
+                    required
+                  >
+                    <option value="">Selecciona tu cargo</option>
+                    {cargos.map((cargo) => (
+                      <option key={cargo.id_cargo} value={cargo.id_cargo}>
+                        {cargo.descripcion}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
+              <button type="submit" disabled={loading}>
+                {loading ? "Ingresando..." : "Ingresa"}
+              </button>
+              <p className="forgot-link">¿Olvidaste tu usuario y/o contraseña?</p>
+            </form>
+          ) : (
+            <Register onShowLogin={() => setActiveTab("login")} />
+          )}
+        </div> {/* cierre login-right */}
+      </div>   {/* cierre login-card */}
 
+      {/* Toast */}
+      {toast.show && (
+        <div className={`toast ${toast.type === "error" ? "error" : ""}`}>
+          {toast.message}
+        </div>
+      )}
+    </div> /* cierre login-page */
+  );
 };
 
 export default Login;

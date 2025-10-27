@@ -240,3 +240,46 @@
   .input-icon select { height: 40px; font-size: 0.9rem; }
   .login-form button[type="submit"] { height: 40px; font-size: 0.95rem; }
 }
+
+/* ===== Ojito para mostrar/ocultar contraseña ===== */
+/* Asegura el posicionamiento relativo del contenedor */
+.input-icon:has(.toggle-pass),
+.input-icon.password-field {
+  position: relative;
+}
+
+/* Solo el campo que tenga ojito recibe padding extra a la derecha */
+.input-icon:has(.toggle-pass) input,
+.input-icon.password-field input {
+  padding-right: 44px; /* espacio para el botón ojo */
+}
+
+/* Botón del ojito (soporta .toggle-pass y .show-pass) */
+.toggle-pass,
+.show-pass {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+}
+
+.toggle-pass:hover,
+.show-pass:hover {
+  color: #111827;
+}
+
+.toggle-pass:focus,
+.show-pass:focus {
+  outline: none;
+  box-shadow: none;
+}
