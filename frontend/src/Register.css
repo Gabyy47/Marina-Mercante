@@ -160,3 +160,8 @@
 .toast.error {
   background: #ef4444; /* error */
 }
+/* Mensaje de error bajo confirmar contraseña */
+.field-hint.error-hint {
+  color: #e74c3c;
+  margin-top: -6px;
+}

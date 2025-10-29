@@ -1,3 +1,20 @@
+/* ===== Página con fondo (imagen + overlay) ===== */
+.login-page {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background: url("/img/Fondo.jpg") center/cover no-repeat fixed; /* ← ajusta si usas otra ruta */
+  position: relative;
+}
+/* Oscurecer ligeramente el fondo para que la tarjeta resalte */
+.login-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
 /* ===== Card central (con opacidad real sin afectar contenido) ===== */
 .login-card {
   position: relative;
@@ -161,6 +178,37 @@
 .show-pass:hover { color: #111827; }
 .show-pass:focus { outline: none; box-shadow: none; }
 
+/* === Contraseña: candado + ojo dentro === */
+.password-field { position: relative; }
+
+.password-field .icon {
+  left: 10px;
+  color: #6b7280;
+}
+
+.password-field .input-field {
+  padding-left: 34px;       /* candado */
+  padding-right: 40px;      /* ojo */
+}
+
+.show-pass {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none;
+  background: transparent;  /* evita rectángulo azul */
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+}
+.show-pass:hover { color: #111827; }
+.show-pass:focus { outline: none; box-shadow: none; }
+.show-pass svg { pointer-events: none; }
+
+
 /* ===== Botón de ingreso ===== */
 .login-form button[type="submit"] {
   height: 42px;
@@ -222,4 +270,47 @@
   .input-icon input,
   .input-icon select { height: 40px; font-size: 0.9rem; }
   .login-form button[type="submit"] { height: 40px; font-size: 0.95rem; }
+}
+
+/* ===== Ojito para mostrar/ocultar contraseña ===== */
+/* Asegura el posicionamiento relativo del contenedor */
+.input-icon:has(.toggle-pass),
+.input-icon.password-field {
+  position: relative;
+}
+
+/* Solo el campo que tenga ojito recibe padding extra a la derecha */
+.input-icon:has(.toggle-pass) input,
+.input-icon.password-field input {
+  padding-right: 44px; /* espacio para el botón ojo */
+}
+
+/* Botón del ojito (soporta .toggle-pass y .show-pass) */
+.toggle-pass,
+.show-pass {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+}
+
+.toggle-pass:hover,
+.show-pass:hover {
+  color: #111827;
+}
+
+.toggle-pass:focus,
+.show-pass:focus {
+  outline: none;
+  box-shadow: none;
 }

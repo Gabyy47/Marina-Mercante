@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import axios from "axios";
 import { FaUser, FaLock, FaBriefcase, FaEye, FaEyeSlash } from "react-icons/fa";
-import "./Register.css"; // Puedes tener los estilos de .toast en Login.css; como el CSS es global, funcionará igual.
+import "./Register.css"; // estilos existentes
 
 const Register = ({ onShowLogin }) => {
   const [formData, setFormData] = useState({
@@ -9,19 +9,20 @@ const Register = ({ onShowLogin }) => {
     apellido: "",
     nombre_usuario: "",
     correo: "",
-    contraseña: ""  });
+    contraseña: "",
+    confirmar_contraseña: "",
+  });
 
-  const [cargos, setCargos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
 
-  // --- Nuevo: estado de toast como en Login ---
+  // Toast
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const showToast = (message, type = "success", duration = 3000) => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
   };
-
 
   const handleChange = (e) => {
     let { name, value } = e.target;
@@ -34,20 +35,25 @@ const Register = ({ onShowLogin }) => {
       if (/\s/.test(value)) return; // no permitir espacios
     }
 
-    // Contraseña sin espacios
-    if (name === "contraseña" && /\s/.test(value)) return;
+    // Contraseñas sin espacios
+    if ((name === "contraseña" || name === "confirmar_contraseña") && /\s/.test(value)) {
+      return;
+    }
 
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Contraseña robusta
+  // Reglas de contraseña robusta
   const strongPassword =
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#._-])[A-Za-z\d@$!%*?&#._-]{8,}$/;
+
+  const passwordsMatch = formData.contraseña === formData.confirmar_contraseña;
+  const passwordStrong = strongPassword.test(formData.contraseña);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!strongPassword.test(formData.contraseña)) {
+    if (!passwordStrong) {
       showToast(
         "La contraseña debe tener mínimo 8 caracteres e incluir mayúsculas, minúsculas, número y símbolo.",
         "error"
@@ -55,12 +61,22 @@ const Register = ({ onShowLogin }) => {
       return;
     }
 
+    if (!passwordsMatch) {
+      showToast("Las contraseñas no coinciden.", "error");
+      return;
+    }
+
     setLoading(true);
     try {
-      await axios.post("http://localhost:49146/api/usuario", formData);
+      await axios.post("http://localhost:49146/api/usuario", {
+        nombre: formData.nombre,
+        apellido: formData.apellido,
+        nombre_usuario: formData.nombre_usuario,
+        correo: formData.correo,
+        contraseña: formData.contraseña,
+      });
 
-      // Toast de éxito
-      showToast("✅ ¡Cuenta creada exitosamente!", "success");
+      showToast("¡Cuenta creada exitosamente! Revisa tu correo para verificar tu cuenta.", "success");
 
       // Limpiar formulario
       setFormData({
@@ -69,14 +85,15 @@ const Register = ({ onShowLogin }) => {
         nombre_usuario: "",
         correo: "",
         contraseña: "",
+        confirmar_contraseña: "",
         id_cargo: "",
       });
 
-      // Volver al login en el mismo panel tras 1.5s
+      // Volver al login luego de 1.5s
       setTimeout(() => onShowLogin?.(), 1500);
     } catch (error) {
       showToast(
-        "❌ Error en el registro: " + (error.response?.data?.error || error.message),
+        "Error en el registro: " + (error.response?.data?.error || error.message),
         "error"
       );
     } finally {
@@ -167,6 +184,7 @@ const Register = ({ onShowLogin }) => {
             autoComplete="new-password"
             minLength={8}
             maxLength={20}
+            aria-invalid={!passwordStrong}
           />
           <button
             type="button"
@@ -179,10 +197,42 @@ const Register = ({ onShowLogin }) => {
           </button>
         </div>
 
+        {/* Pista de robustez */}
         <p className="field-hint">
           Debe incluir mayúsculas, minúsculas, número y símbolo (mín. 8).
         </p>
 
+        {/* Confirmar contraseña */}
+        <div className="input-group password-field">
+          <FaLock className="icon" />
+          <input
+            className="input-field"
+            type={showConfirmPass ? "text" : "password"}
+            name="confirmar_contraseña"
+            placeholder="Confirmar contraseña"
+            value={formData.confirmar_contraseña}
+            onChange={handleChange}
+            required
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={20}
+            aria-invalid={formData.confirmar_contraseña ? !passwordsMatch : false}
+          />
+          <button
+            type="button"
+            className="show-pass"
+            onClick={() => setShowConfirmPass((v) => !v)}
+            aria-label={showConfirmPass ? "Ocultar confirmación" : "Mostrar confirmación"}
+            title={showConfirmPass ? "Ocultar confirmación" : "Mostrar confirmación"}
+          >
+            {showConfirmPass ? <FaEyeSlash /> : <FaEye />}
+          </button>
+        </div>
+
+        {/* Mensaje de coincidencia (en tiempo real) */}
+        {formData.confirmar_contraseña && !passwordsMatch && (
+          <p className="field-hint error-hint">Las contraseñas no coinciden.</p>
+        )}
 
         <button type="submit" className="register-button" disabled={loading}>
           {loading ? "Registrando..." : "Registrarse"}
@@ -201,7 +251,7 @@ const Register = ({ onShowLogin }) => {
         </div>
       </form>
 
-      {/* Toast (igual estilo que en Login) */}
+      {/* Toast */}
       {toast.show && (
         <div className={`toast ${toast.type === "error" ? "error" : ""}`}>
           {toast.message}
