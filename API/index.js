@@ -21,11 +21,7 @@ var conexion = mysql.createConnection({
   host: "localhost",
   port: "3306",
   user: "root",
-<<<<<<< HEAD
   password: "H0nduras",
-=======
-  password: "1984",
->>>>>>> 0ff252d648086e6a3af46a62f9f7213a0486b4ab
   database: "marina_mercante",
   charset: "utf8mb4", //  importante para ñ y acentos
   authPlugins: {
@@ -127,22 +123,22 @@ app.get("/api/cargos", (req, res) => {
 // ===== LOGIN =====
 app.post("/api/login", (req, res) => {
   console.log("Ruta /api/login llamada");
-  const { nombre_usuario, contraseña, id_cargo } = req.body;
+  const { nombre_usuario, contraseña } = req.body;
 
   // Validación de campos obligatorios
-  if (!nombre_usuario || !contraseña || !id_cargo) {
+  if (!nombre_usuario || !contraseña ) {
     return res.status(400).json({ mensaje: "Faltan campos obligatorios." });
   }
 
   // Consulta que valida usuario, contraseña y cargo
   const query = `
-    SELECT id_usuario, nombre_usuario, id_cargo 
+    SELECT id_usuario, nombre_usuario 
     FROM tbl_usuario 
-    WHERE nombre_usuario = ? AND contraseña = ? AND id_cargo = ?
+    WHERE nombre_usuario = ? AND contraseña = ? 
     LIMIT 1
   `;
 
-  conexion.query(query, [nombre_usuario, contraseña, id_cargo], (err, rows) => {
+  conexion.query(query, [nombre_usuario, contraseña], (err, rows) => {
     if (err) return handleDatabaseError(err, res, "Error en inicio de sesión:");
 
     if (rows.length === 0) {
@@ -155,8 +151,7 @@ app.post("/api/login", (req, res) => {
     const token = jwt.sign(
       {
         id_usuario: usuario.id_usuario,
-        nombre_usuario: usuario.nombre_usuario,
-        id_cargo: usuario.id_cargo,
+        nombre_usuario: usuario.nombre_usuario
       },
       SECRET_KEY,
       { expiresIn: "1h" }
