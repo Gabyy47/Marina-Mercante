@@ -338,12 +338,12 @@ app.put("/api/usuario", (req, res) => {
     WHERE id_usuario = ?
   `;
   const values = [
+    id_usuario,
     id_cargo,
+    id_usuario,
     nombre,
     apellido,
     correo,
-    nombre_usuario,
-    id_usuario,
   ];
 
   conexion.query(query, values, (err) => {
