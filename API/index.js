@@ -21,7 +21,7 @@ var conexion = mysql.createConnection({
   host: "localhost",
   port: "3306",
   user: "root",
-  password: "H0nduras",
+  password: "123456",
   database: "marina_mercante",
   charset: "utf8mb4", //  importante para ñ y acentos
   authPlugins: {
@@ -110,48 +110,148 @@ app.get("/api/seguro", verificarToken, (req, res) => {
   });
 });
 
-// ===== CARGOS (para el select del frontend) =====
-app.get("/api/cargos", (req, res) => {
-  const query =
-    "SELECT id_cargo, descripcion FROM tbl_cargo ORDER BY descripcion ASC";
-  conexion.query(query, (err, rows) => {
-    if (err) return handleDatabaseError(err, res, "Error al listar cargos:");
+// ====== CRUD PARA tbl_rol ======
+// Listar roles
+app.get("/api/roles", (req, res) => {
+  const q = "SELECT id_rol, nombre, descripcion FROM tbl_rol ORDER BY nombre ASC";
+  conexion.query(q, (err, rows) => {
+    if (err) return handleDatabaseError(err, res, "Error al listar roles:");
     res.json(rows);
   });
 });
 
-// ===== LOGIN =====
+// Obtener rol por ID
+app.get("/api/roles/:id", (req, res) => {
+  const q = "SELECT id_rol, nombre, descripcion FROM tbl_rol WHERE id_rol = ? LIMIT 1";
+  conexion.query(q, [parseInt(req.params.id)], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, "Error al obtener rol:");
+    if (rows.length === 0) return res.status(404).json({ mensaje: "Rol no encontrado" });
+    res.json(rows[0]);
+  });
+});
+
+// Crear rol
+app.post("/api/roles", (req, res) => {
+  let { nombre, descripcion } = req.body;
+  if (!nombre || typeof nombre !== "string" || !nombre.trim()) {
+    return res.status(400).json({ mensaje: "El nombre del rol es requerido" });
+  }
+  nombre = nombre.trim().toUpperCase();
+  descripcion = (descripcion ?? "").toString().trim();
+
+  const q = "INSERT INTO tbl_rol (nombre, descripcion) VALUES (?, ?)";
+  conexion.query(q, [nombre, descripcion], (err, result) => {
+    if (err) {
+      if (err.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ mensaje: "Ya existe un rol con ese nombre" });
+      }
+      return handleDatabaseError(err, res, "Error al crear rol:");
+    }
+    res.status(201).json({
+      mensaje: "Rol creado correctamente",
+      id_rol: result.insertId,
+      nombre,
+      descripcion
+    });
+  });
+});
+
+// Actualizar rol
+app.put("/api/roles/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  let { nombre, descripcion } = req.body;
+
+  if (!id) return res.status(400).json({ mensaje: "ID inválido" });
+  if (!nombre || typeof nombre !== "string" || !nombre.trim()) {
+    return res.status(400).json({ mensaje: "El nombre del rol es requerido" });
+  }
+  nombre = nombre.trim().toUpperCase();
+  descripcion = (descripcion ?? "").toString().trim();
+
+  const q = "UPDATE tbl_rol SET nombre = ?, descripcion = ? WHERE id_rol = ?";
+  conexion.query(q, [nombre, descripcion, id], (err, result) => {
+    if (err) {
+      if (err.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ mensaje: "Ya existe un rol con ese nombre" });
+      }
+      return handleDatabaseError(err, res, "Error al actualizar rol:");
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ mensaje: "Rol no encontrado" });
+    }
+    res.json({ mensaje: "Rol actualizado correctamente" });
+  });
+});
+
+// Eliminar rol
+app.delete("/api/roles/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ mensaje: "ID inválido" });
+
+  const q = "DELETE FROM tbl_rol WHERE id_rol = ?";
+  conexion.query(q, [id], (err, result) => {
+    if (err) {
+      // Si el rol está asignado a usuarios y la FK es RESTRICT, devolver 409
+      if (err.code === "ER_ROW_IS_REFERENCED_2" || err.code === "ER_ROW_IS_REFERENCED") {
+        return res.status(409).json({
+          mensaje: "No se puede eliminar: el rol está asignado a uno o más usuarios"
+        });
+      }
+      return handleDatabaseError(err, res, "Error al eliminar rol:");
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ mensaje: "Rol no encontrado" });
+    }
+    res.json({ mensaje: "Rol eliminado correctamente" });
+  });
+});
+
+// ===== LOGIN (permitir a todo usuario con rol asignado distinto de "SIN ROL") =====
 app.post("/api/login", (req, res) => {
   console.log("Ruta /api/login llamada");
   const { nombre_usuario, contraseña } = req.body;
 
-  // Validación de campos obligatorios
-  if (!nombre_usuario || !contraseña ) {
+  if (!nombre_usuario || !contraseña) {
     return res.status(400).json({ mensaje: "Faltan campos obligatorios." });
   }
 
-  // Consulta que valida usuario, contraseña y cargo
   const query = `
-    SELECT id_usuario, nombre_usuario 
-    FROM tbl_usuario 
-    WHERE nombre_usuario = ? AND contraseña = ? 
+    SELECT 
+      u.id_usuario, 
+      u.nombre_usuario, 
+      u.contraseña,
+      u.id_rol,
+      r.nombre AS rol_nombre
+    FROM tbl_usuario u
+    LEFT JOIN tbl_rol r ON r.id_rol = u.id_rol
+    WHERE UPPER(u.nombre_usuario) = UPPER(?) AND u.contraseña = ?
     LIMIT 1
   `;
 
   conexion.query(query, [nombre_usuario, contraseña], (err, rows) => {
     if (err) return handleDatabaseError(err, res, "Error en inicio de sesión:");
-
     if (rows.length === 0) {
-      return res
-        .status(401)
-        .json({ mensaje: "Credenciales inválidas o cargo incorrecto." });
+      return res.status(401).json({ mensaje: "Credenciales inválidas." });
     }
 
     const usuario = rows[0];
+    const rolNombre = (usuario.rol_nombre || "").trim().toUpperCase();
+
+    // Sin rol asignado o rol "SIN ROL" => bloquear
+    if (!usuario.id_rol || !usuario.rol_nombre || rolNombre === "SIN ROL") {
+      return res.status(403).json({
+        mensaje:
+          "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
+      });
+    }
+
+    // Si tiene cualquier rol válido => permitir
     const token = jwt.sign(
       {
         id_usuario: usuario.id_usuario,
-        nombre_usuario: usuario.nombre_usuario
+        nombre_usuario: usuario.nombre_usuario,
+        id_rol: usuario.id_rol,
+        rol_nombre: usuario.rol_nombre,
       },
       SECRET_KEY,
       { expiresIn: "1h" }
@@ -159,7 +259,7 @@ app.post("/api/login", (req, res) => {
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false, // Cambiar a true en producción con HTTPS
+      secure: false, // true en producción con HTTPS
       sameSite: "lax",
       maxAge: 3600000,
     });
@@ -167,10 +267,16 @@ app.post("/api/login", (req, res) => {
     res.json({
       mensaje: "Inicio de sesión exitoso",
       token,
-      usuario,
+      usuario: {
+        id_usuario: usuario.id_usuario,
+        nombre_usuario: usuario.nombre_usuario,
+        id_rol: usuario.id_rol,
+        rol_nombre: usuario.rol_nombre,
+      },
     });
   });
 });
+
 
 // ===== LOGOUT =====
 app.get("/api/logout", (req, res) => {
@@ -282,10 +388,10 @@ app.get("/api/cookie", (req, res) => {
   }
 });
 
-// ===== Insertar nuevo usuario =====
+// ===== Insertar nuevo usuario (rol opcional; por defecto sin rol) =====
 app.post("/api/usuario", (req, res) => {
   const {
-    id_cargo,
+    id_rol,          // opcional: admin puede pasarlo; si no, NULL
     nombre,
     apellido,
     correo,
@@ -293,23 +399,16 @@ app.post("/api/usuario", (req, res) => {
     contraseña,
   } = req.body;
 
-  if (
-    !id_cargo ||
-    !nombre ||
-    !apellido ||
-    !correo ||
-    !nombre_usuario ||
-    !contraseña
-  ) {
+  if (!nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
     return res.status(400).json({ error: "Faltan campos obligatorios." });
   }
 
   const query = `
-    INSERT INTO tbl_usuario (id_cargo, nombre, apellido, correo, nombre_usuario, contraseña)
+    INSERT INTO tbl_usuario (id_rol, nombre, apellido, correo, nombre_usuario, contraseña)
     VALUES (?, ?, ?, ?, ?, ?)
   `;
   const values = [
-    id_cargo,
+    id_rol ?? null,
     nombre,
     apellido,
     correo,
@@ -323,34 +422,27 @@ app.post("/api/usuario", (req, res) => {
   });
 });
 
+
 // ===== Actualizar usuario =====
 app.put("/api/usuario", (req, res) => {
-  const { id_usuario, id_cargo, nombre, apellido, correo, nombre_usuario } =
-    req.body;
+  const { id_usuario, id_rol, nombre, apellido, correo, nombre_usuario } = req.body;
 
   if (!id_usuario)
     return res.status(400).json({ error: "id_usuario es requerido" });
 
   const query = `
     UPDATE tbl_usuario
-    SET id_cargo = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?
+    SET id_rol = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?
     WHERE id_usuario = ?
   `;
-  const values = [
-    id_cargo,
-    nombre,
-    apellido,
-    correo,
-    nombre_usuario,
-    id_usuario,
-  ];
+  const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, id_usuario];
 
   conexion.query(query, values, (err) => {
-    if (err)
-      return handleDatabaseError(err, res, "Error al actualizar usuario:");
+    if (err) return handleDatabaseError(err, res, "Error al actualizar usuario:");
     res.json({ mensaje: "Usuario actualizado correctamente" });
   });
 });
+
 
 // ===== Eliminar usuario =====
 app.delete("/api/usuario/:id", (req, res) => {
@@ -360,73 +452,6 @@ app.delete("/api/usuario/:id", (req, res) => {
     if (err)
       return handleDatabaseError(err, res, "Error al eliminar usuario:");
     res.json({ mensaje: "Usuario eliminado correctamente" });
-  });
-});
-
-//tabla cargos 
-//Get listado de cargos
-// Rutas de cargos
-// ====== CRUD PARA tbl_cargo ======
-
-app.get('/api/cargos', (req, res) => {
-  const query = "SELECT * FROM tbl_cargo";
-  conexion.query(query, (err, rows) => {
-    if (err) {
-      console.error("Error al listar cargos:", err);
-      res.status(500).json({ error: "Error al listar cargos" });
-      return;
-    }
-    res.json(rows);
-  });
-});
-
-app.get('/api/cargos/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_cargo WHERE id_cargo = ?";
-  conexion.query(query, [req.params.id], (err, rows) => {
-    if (err) {
-      console.error("Error al obtener cargo:", err);
-      res.status(500).json({ error: "Error al obtener cargo" });
-      return;
-    }
-    res.json(rows[0]);
-  });
-});
-
-app.post('/api/cargos', (req, res) => {
-  const { descripcion } = req.body;
-  const query = "INSERT INTO tbl_cargo (descripcion) VALUES (?)";
-  conexion.query(query, [descripcion], (err, result) => {
-    if (err) {
-      console.error("Error al insertar cargo:", err);
-      res.status(500).json({ error: "Error al insertar cargo" });
-      return;
-    }
-    res.json({ message: "Cargo insertado correctamente", id: result.insertId });
-  });
-});
-
-app.put('/api/cargos/:id', (req, res) => {
-  const { descripcion } = req.body;
-  const query = "UPDATE tbl_cargo SET descripcion = ? WHERE id_cargo = ?";
-  conexion.query(query, [descripcion, req.params.id], (err) => {
-    if (err) {
-      console.error("Error al actualizar cargo:", err);
-      res.status(500).json({ error: "Error al actualizar cargo" });
-      return;
-    }
-    res.json({ message: "Cargo actualizado correctamente" });
-  });
-});
-
-app.delete('/api/cargos/:id', (req, res) => {
-  const query = "DELETE FROM tbl_cargo WHERE id_cargo = ?";
-  conexion.query(query, [req.params.id], (err) => {
-    if (err) {
-      console.error("Error al eliminar cargo:", err);
-      res.status(500).json({ error: "Error al eliminar cargo" });
-      return;
-    }
-    res.json({ message: "Cargo eliminado correctamente" });
   });
 });
 
