@@ -1352,6 +1352,14 @@ app.get('/api/inventario', (req, res) => {
   });
 });
 
+app.get("/api/inventario", (req, res) => {
+  conexion.query("SELECT * FROM vista_inventario_estado_colores", (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+
 app.get('/api/inventario/:id', (req, res) => {
   const query = "SELECT * FROM tbl_inventario WHERE id_inventario = ?";
   conexion.query(query, [req.params.id], (err, rows) => {
