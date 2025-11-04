@@ -2,10 +2,11 @@
 import { Routes, Route, Navigate  } from "react-router-dom";
 import MainPage from "./mainpage.jsx";                 
 //import Main from "./main.jsx";
-import Login from "./Login.jsx";
+import Login from "./login.jsx";
 import Register from "./Register.jsx";
 import MantUsuarios from "./mantenimientousuarios.jsx";
-import MantCliente from "./mantenimientocliente.jsx";  
+import MantCliente from "./mantenimientocliente.jsx";
+import InventarioStatus from "./inventariostatus.jsx"; 
 import RequireAuth from "./RequireAuth.jsx";
 import PublicOnly from "./PublicOnly.jsx";  
 
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/dashboard" element={<MainPage />} />
         <Route path="/mantenimientousuarios" element={<MantUsuarios />} />
         <Route path="/mantenimientocliente" element={<MantCliente />} />
+        <Route path="/inventariostatus" element={<InventarioStatus />} />
         {/* agrega aquí más rutas protegidas */}
       </Route>
 

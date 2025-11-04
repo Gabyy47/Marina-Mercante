@@ -91,6 +91,15 @@ const MainPage = () => {
               Mantenimiento de Cliente
             </Link>
           </li>
+          <li className="nav-item">
+            <Link
+              to="/inventariostatus"
+              className="nav-link text-white"
+              onClick={() => setActiveView("inventariostatus")}
+            >
+              Inventario Status
+            </Link>
+          </li>
 
           {/* 👇 Aquí agregamos el botón de cerrar sesión */}
           <li className="nav-item mt-4">
