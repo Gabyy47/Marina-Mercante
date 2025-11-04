@@ -4,7 +4,8 @@ import MainPage from "./mainpage.jsx";
 //import Main from "./main.jsx";
 import Login from "./Login.jsx";
 import Register from "./Register.jsx";
-import MantUsuarios from "./mantenimientousuarios.jsx";   
+import MantUsuarios from "./mantenimientousuarios.jsx";
+import MantCliente from "./mantenimientocliente.jsx";  
 import RequireAuth from "./RequireAuth.jsx";
 import PublicOnly from "./PublicOnly.jsx";  
 
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/" element={<MainPage />} />
         <Route path="/dashboard" element={<MainPage />} />
         <Route path="/mantenimientousuarios" element={<MantUsuarios />} />
+        <Route path="/mantenimientocliente" element={<MantCliente />} />
         {/* agrega aquí más rutas protegidas */}
       </Route>
 
