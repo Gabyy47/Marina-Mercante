@@ -1,8 +1,8 @@
 // src/Register.jsx
 import React, { useState } from "react";
-import axios from "axios";
-import { FaUser, FaLock, FaBriefcase, FaEye, FaEyeSlash } from "react-icons/fa";
-import "./Register.css"; // Puedes tener los estilos de .toast en Login.css; como el CSS es global, funcionará igual.
+import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
+import "./Register.css";
+import api from "./api"; // instancia con baseURL y credenciales
 
 const Register = ({ onShowLogin }) => {
   const [formData, setFormData] = useState({
@@ -16,49 +16,52 @@ const Register = ({ onShowLogin }) => {
 
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
 
-  // --- Nuevo: estado de toast como en Login ---
+  // Toast simple
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
-  const [verifyOpen, setVerifyOpen] = useState(false);
-  const [code, setCode] = useState("");
-  const [verifyLoading, setVerifyLoading] = useState(false);
-  const [resendLoading, setResendLoading] = useState(false);
-  const [lastEmail, setLastEmail] = useState("");
-  const [resendOpen, setResendOpen] = useState(false);
-  const [resendEmail, setResendEmail] = useState("");
-
-  // ==== Toast ====
-  const showToast = (message, type = "success", duration = 3500) => {
+  const showToast = (message, type = "success", duration = 3000) => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
   };
 
+  // Modal verificación
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [sendLoading, setSendLoading] = useState(false);
+  const [lastEmail, setLastEmail] = useState("");
 
   const handleChange = (e) => {
     let { name, value } = e.target;
 
-    if (name === "id_cargo") value = Number(value);
-
-    // Usuario en MAYÚSCULAS y sin espacios
+    // Usuario: MAYÚSCULAS y sin espacios
     if (name === "nombre_usuario") {
       value = value.toUpperCase();
-      if (/\s/.test(value)) return; // no permitir espacios
+      if (/\s/.test(value)) return;
     }
 
-    // Contraseña sin espacios
-    if (name === "contraseña" && /\s/.test(value)) return;
+    // Contraseñas: sin espacios
+    if ((name === "contraseña" || name === "confirmar_contraseña") && /\s/.test(value)) {
+      return;
+    }
 
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Contraseña robusta
+  // Regla de contraseña robusta
   const strongPassword =
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#._-])[A-Za-z\d@$!%*?&#._-]{8,}$/;
 
+  const passwordStrong = strongPassword.test(formData.contraseña);
+  const passwordsMatch = formData.contraseña === formData.confirmar_contraseña;
+
+  // === REGISTRO ===
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!strongPassword.test(formData.contraseña)) {
+    if (!passwordStrong) {
       showToast(
         "La contraseña debe tener mínimo 8 caracteres e incluir mayúsculas, minúsculas, número y símbolo.",
         "error"
@@ -66,41 +69,137 @@ const Register = ({ onShowLogin }) => {
       return;
     }
 
+    if (!passwordsMatch) {
+      showToast("Las contraseñas no coinciden.", "error");
+      return;
+    }
+
     setLoading(true);
     try {
-      await axios.post("http://localhost:49146/api/usuario", formData);
+      const { data } = await api.post("/usuario", {
+        nombre: formData.nombre.trim(),
+        apellido: formData.apellido.trim(),
+        nombre_usuario: formData.nombre_usuario.trim().toUpperCase(),
+        correo: formData.correo.trim(),
+        contraseña: formData.contraseña,
+      });
 
-      // Toast de éxito
-      showToast("✅ ¡Cuenta creada exitosamente!", "success");
+      const msgBackend =
+        data?.mensaje ||
+        data?.message ||
+        "¡Cuenta creada! Te enviamos un código. Revisa tu correo.";
 
-      // Limpiar formulario
+      // Guarda el correo para usarlo en verificar / reenviar
+      setLastEmail(formData.correo.trim());
+
+      // Abre el modal para ingresar el código
+      setVerifyOpen(true);
+      showToast(" Código enviado, revisa tu correo.", "success", 5000);
+
+      // Limpia los campos visibles (opcional)
       setFormData({
         nombre: "",
         apellido: "",
         nombre_usuario: "",
         correo: "",
         contraseña: "",
-        id_cargo: "",
+        confirmar_contraseña: "",
       });
-
-      // Volver al login en el mismo panel tras 1.5s
-      setTimeout(() => onShowLogin?.(), 1500);
     } catch (error) {
-      showToast(
-        "❌ Error en el registro: " + (error.response?.data?.error || error.message),
-        "error"
-      );
+      console.error("Error en registro:", error);
+      const raw = error.response?.data?.error || error.response?.data?.mensaje || error.message;
+
+      let msg = raw;
+      if (/Duplicate entry/i.test(raw)) {
+        if (/correo/i.test(raw)) msg = "Ese correo ya está registrado.";
+        else if (/nombre_usuario/i.test(raw)) msg = "Ese nombre de usuario ya existe.";
+        else msg = "Registro duplicado. Verifica tus datos.";
+      }
+
+      showToast("Error en el registro: " + msg, "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // === VERIFICAR CÓDIGO ===
+  const handleVerify = async (e) => {
+    e.preventDefault();
+
+    const correo = lastEmail || formData.correo.trim();
+    if (!correo) return showToast("Falta el correo para verificar.", "error");
+
+    if (!/^\d{6}$/.test(code)) {
+      showToast("El código debe tener 6 dígitos.", "error");
+      return;
+    }
+
+    setVerifyLoading(true);
+    try {
+      await api.post("/auth/verify-code", { correo, code });
+      showToast(" Cuenta verificada.", "success");
+      setVerifyOpen(false);
+      setCode("");
+      onShowLogin?.();
+    } catch (error) {
+      const msg = error.response?.data?.mensaje || error.response?.data?.error || error.message;
+      showToast("No se pudo verificar: " + msg, "error");
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  // === REENVIAR CÓDIGO ===
+  const handleResend = async () => {
+    const correo = lastEmail || formData.correo.trim();
+    if (!correo) return showToast("Escribe tu correo primero.", "error");
+
+    setResendLoading(true);
+    try {
+      await api.post("/reenviar", { correo });
+      showToast("Código reenviado. Revisa tu bandeja.", "success");
+    } catch (error) {
+      const msg = error.response?.data?.mensaje || error.response?.data?.error || error.message;
+      showToast("No se pudo reenviar: " + msg, "error");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  // === ENVIAR CÓDIGO 
+  const handleSend = async () => {
+    const correo = lastEmail || formData.correo.trim();
+    if (!correo) return showToast("Escribe tu correo primero.", "error");
+
+    setSendLoading(true);
+    try {
+      await api.post("/reenviar", { correo });
+      showToast( "Código enviado. Revisa tu bandeja.", "success");
+    } catch (error) {
+      // Fallback si /enviar no existe
+      if (error.response?.status === 404) {
+        try {
+          await api.post("/reenviar", { correo });
+          showToast("Código enviado. Revisa tu bandeja.", "success");
+        } catch (e2) {
+          const m2 = e2.response?.data?.mensaje || e2.response?.data?.error || e2.message;
+          showToast("No se pudo enviar: " + m2, "error");
+        }
+      } else {
+        const msg = error.response?.data?.mensaje || error.response?.data?.error || error.message;
+        showToast("No se pudo enviar: " + msg, "error");
+      }
+    } finally {
+      setSendLoading(false);
     }
   };
 
   return (
     <div className="register-container">
       <form className="register-form" onSubmit={handleSubmit}>
-        <h2 className="register-title">Crear cuenta</h2>
+        <h2 className="register-title"></h2>
 
-        {/* Campos principales */}
+        {/* Nombre / Apellido */}
         <div className="input-row">
           <div className="input-group">
             <FaUser className="icon" />
@@ -112,6 +211,7 @@ const Register = ({ onShowLogin }) => {
               value={formData.nombre}
               onChange={handleChange}
               required
+              autoComplete="given-name"
               maxLength={40}
             />
           </div>
@@ -126,11 +226,13 @@ const Register = ({ onShowLogin }) => {
               value={formData.apellido}
               onChange={handleChange}
               required
+              autoComplete="family-name"
               maxLength={40}
             />
           </div>
         </div>
 
+        {/* Usuario */}
         <div className="input-group">
           <FaUser className="icon" />
           <input
@@ -141,10 +243,12 @@ const Register = ({ onShowLogin }) => {
             value={formData.nombre_usuario}
             onChange={handleChange}
             required
+            autoComplete="username"
             maxLength={20}
           />
         </div>
 
+        {/* Correo */}
         <div className="input-group">
           <span className="icon">✉️</span>
           <input
@@ -155,24 +259,11 @@ const Register = ({ onShowLogin }) => {
             value={formData.correo}
             onChange={handleChange}
             required
+            autoComplete="email"
           />
         </div>
 
-        <div className="resend-row">
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => {
-              const prefill = formData.correo || lastEmail || "";
-              setResendEmail(prefill);
-              setResendOpen(true);
-            }}
-            disabled={resendLoading}
-          >
-            {resendLoading ? "Reenviando..." : "Reenviar código"}
-          </button>
-        </div>
-
+        {/* Contraseña */}
         <div className="input-group password-field">
           <FaLock className="icon" />
           <input
@@ -183,6 +274,7 @@ const Register = ({ onShowLogin }) => {
             value={formData.contraseña}
             onChange={handleChange}
             required
+            autoComplete="new-password"
             minLength={8}
             maxLength={20}
             aria-invalid={!passwordStrong}
@@ -192,6 +284,7 @@ const Register = ({ onShowLogin }) => {
             className="show-pass"
             onClick={() => setShowPass((v) => !v)}
             aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+            title={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
           >
             {showPass ? <FaEyeSlash /> : <FaEye />}
           </button>
@@ -201,6 +294,36 @@ const Register = ({ onShowLogin }) => {
           Debe incluir mayúsculas, minúsculas, número y símbolo (mín. 8).
         </p>
 
+        {/* Confirmar contraseña */}
+        <div className="input-group password-field">
+          <FaLock className="icon" />
+          <input
+            className="input-field"
+            type={showConfirmPass ? "text" : "password"}
+            name="confirmar_contraseña"
+            placeholder="Confirmar contraseña"
+            value={formData.confirmar_contraseña}
+            onChange={handleChange}
+            required
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={20}
+            aria-invalid={formData.confirmar_contraseña ? !(formData.contraseña === formData.confirmar_contraseña) : false}
+          />
+          <button
+            type="button"
+            className="show-pass"
+            onClick={() => setShowConfirmPass((v) => !v)}
+            aria-label={showConfirmPass ? "Ocultar confirmación" : "Mostrar confirmación"}
+            title={showConfirmPass ? "Ocultar confirmación" : "Mostrar confirmación"}
+          >
+            {showConfirmPass ? <FaEyeSlash /> : <FaEye />}
+          </button>
+        </div>
+
+        {formData.confirmar_contraseña && formData.contraseña !== formData.confirmar_contraseña && (
+          <p className="field-hint error-hint">Las contraseñas no coinciden.</p>
+        )}
 
         <button type="submit" className="register-button" disabled={loading}>
           {loading ? "Registrando..." : "Registrarse"}
@@ -219,10 +342,75 @@ const Register = ({ onShowLogin }) => {
         </div>
       </form>
 
-      {/* Toast (igual estilo que en Login) */}
+      {/* Toast */}
       {toast.show && (
-        <div className={`toast ${toast.type === "error" ? "error" : ""}`}>
+        <div
+          className={`toast ${toast.type === "error" ? "error" : ""}`}
+          onClick={() => setToast({ show: false, message: "", type: "success" })}
+        >
           {toast.message}
+        </div>
+      )}
+
+      {/* Modal: Verificar código (incluye Reenviar y Enviar) */}
+      {verifyOpen && (
+        <div className="code-modal-backdrop">
+          <div className="code-modal">
+            <h3>Verifica tu correo</h3>
+            <p>Ingresa el código de 6 dígitos que te enviamos a <b>{lastEmail}</b>.</p>
+
+            <form onSubmit={handleVerify} className="code-form">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="000000"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="code-input"
+                required
+              />
+
+              <div className="code-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setVerifyOpen(false)}
+                  disabled={verifyLoading || resendLoading || sendLoading}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={handleResend}
+                  disabled={resendLoading || verifyLoading || sendLoading}
+                  title="Reenviar el código al mismo correo"
+                >
+                  {resendLoading ? "Reenviando..." : "Reenviar código"}
+                </button>
+
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={handleSend}
+                  disabled={sendLoading || verifyLoading || resendLoading}
+                  title="Enviar un nuevo código"
+                >
+                  {sendLoading ? "Enviando..." : "Enviar código"}
+                </button>
+
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={verifyLoading || code.length !== 6 || resendLoading || sendLoading}
+                >
+                  {verifyLoading ? "Verificando..." : "Verificar"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

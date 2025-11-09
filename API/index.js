@@ -2,12 +2,11 @@
 var Express = require("express");
 var bodyParser = require("body-parser");
 var cors = require("cors");
-var mysql = require("mysql2");
+const mysql = require("mysql2/promise");
 var jwt = require("jsonwebtoken");
 var cookieParser = require("cookie-parser");
 var speakeasy = require("speakeasy");
-var QRCode = require("qrcode"); // si luego quieres enrolar 2FA con QR
-
+var QRCode = require("qrcode"); 
 
 // Código para preparar el envío de correo
 require('dotenv').config();
@@ -39,7 +38,7 @@ function gen6Code() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-// Hash del código (puedes salarlo con el id si quieres)
+// Hash del código 
 function hashCode(code) {
   return crypto.createHash('sha256').update(code).digest('hex');
 }
@@ -92,16 +91,16 @@ try {
 
 // ===== Conexión a la base de datos =====
 
-var conexion = mysql.createConnection({
+const conexion = mysql.createPool({
   host: "localhost",
-  port: "3306",
+  port: 3306,
   user: "root",
   password: "MysqlRoot47!",
   database: "marina_mercante",
-  charset: "utf8mb4", 
-  authPlugins: {
-    mysql_native_password: () => () => Buffer.from("MysqlRoot47!"),
-  },
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  charset: "utf8mb4",
 });
 
 // ===== Inicio de Express.js =====
@@ -133,18 +132,17 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ===== Listener y conexión a MySQL =====
-const PORT = 49146;
-const SECRET_KEY = "1984";
+//Mensaje para verificar conexión a la BD
+const PORT = process.env.PORT || 49146; 
 
-app.listen(PORT, () => {
-  conexion.connect((err) => {
-    if (err) {
-      logger.error("Error al conectar a la BD: " + err.message);
-      throw err;
-    }
-    logger.info(`Conexión a la BD con éxito! API en http://localhost:${PORT}`);
-  });
+app.listen(PORT, async () => {
+  try {
+    await conexion.query("SELECT 1");
+    console.log(` Conexión a la BD con éxito. API en http://localhost:${PORT}`);
+  } catch (err) {
+    console.error(" Error al conectar a la BD:", err.message);
+    process.exit(1);
+  }
 });
 
 // ===== Utilidades =====
@@ -351,33 +349,33 @@ app.delete("/api/roles/:id", async (req, res) => {
   }
 });
 
-// ===== LOGIN =====
+
+//LOGIN
 app.post("/api/login", async (req, res) => {
   console.log("Ruta /api/login llamada");
-
   const { nombre_usuario, contraseña } = req.body;
-  const ID_OBJETO_LOGIN = 1; 
 
   if (!nombre_usuario || !contraseña) {
     return res.status(400).json({ mensaje: "Faltan campos obligatorios." });
   }
 
-  const q = `
-    SELECT 
-      u.id_usuario, 
-      u.nombre_usuario, 
-      u.contraseña, 
-      u.is_verified, 
-      u.id_rol, 
-      r.nombre AS rol_nombre
-    FROM tbl_usuario u
-    LEFT JOIN tbl_rol r ON u.id_rol = r.id_rol
-    WHERE u.nombre_usuario = ? AND u.contraseña = ?
-    LIMIT 1
-  `;
-
   try {
-    const [rows] = await conexion.query(q, [nombre_usuario, contraseña]);
+    const [rows] = await conexion.query(
+      `
+      SELECT 
+        u.id_usuario, 
+        u.nombre_usuario, 
+        u.contraseña, 
+        u.is_verified, 
+        u.id_rol, 
+        r.nombre AS rol_nombre
+      FROM tbl_usuario u
+      LEFT JOIN tbl_rol r ON u.id_rol = r.id_rol
+      WHERE u.nombre_usuario = ? AND u.contraseña = ?
+      LIMIT 1
+      `,
+      [nombre_usuario, contraseña]
+    );
 
     if (rows.length === 0) {
       return res.status(401).json({ mensaje: "Credenciales inválidas." });
@@ -386,19 +384,20 @@ app.post("/api/login", async (req, res) => {
     const usuario = rows[0];
     const rolNombre = (usuario.rol_nombre || "").trim().toUpperCase();
 
-    if (!usuario.id_rol || !rolNombre || rolNombre === "SIN ROL") {
+    // Bloquear si no tiene rol o correo verificado
+    if (!usuario.id_rol || !usuario.rol_nombre || rolNombre === "SIN ROL") {
       return res.status(403).json({
-        mensaje: "No tiene un rol asignado. Comuníquese con el Administrador.",
+        mensaje:
+          "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
       });
     }
-
-    if (Number(usuario.is_verified) !== 1) {
+    if (!usuario.is_verified) {
       return res.status(403).json({
         mensaje: "Debes verificar tu correo antes de iniciar sesión.",
       });
     }
 
-    // === Crear token ===
+    // Generar token JWT
     const token = jwt.sign(
       {
         id_usuario: usuario.id_usuario,
@@ -417,19 +416,6 @@ app.post("/api/login", async (req, res) => {
       maxAge: 3600000,
     });
 
-    // === Registrar en bitácora ===
-    try {
-      await logBitacora(conexion, {
-        id_objeto: ID_OBJETO_LOGIN,
-        id_usuario: usuario.id_usuario,
-        accion: 'LOGIN',
-        descripcion: `El usuario ${usuario.nombre_usuario} inició sesión.`,
-        usuario: usuario.nombre_usuario
-      });
-    } catch (error) {
-      console.error("Error al registrar en bitácora:", error);
-    }
-
     res.json({
       mensaje: "Inicio de sesión exitoso",
       token,
@@ -440,10 +426,9 @@ app.post("/api/login", async (req, res) => {
         rol_nombre: usuario.rol_nombre,
       },
     });
-
   } catch (err) {
     console.error("Error general en login:", err);
-    res.status(500).json({ mensaje: "Error interno del servidor." });
+    res.status(500).json({ mensaje: "Error interno del servidor" });
   }
 });
 
@@ -817,7 +802,15 @@ app.get("/api/cookie", (req, res) => {
   }
 });
 
-// REGISTRO con envío de CÓDIGO
+function gen6Code() {
+  return Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
+}
+
+function hashCode(code) {
+  return crypto.createHash('sha256').update(String(code)).digest('hex');
+}
+
+// === REGISTRO con envío de CÓDIGO ===
 app.post('/api/auth/register', (req, res) => {
   const { nombre, apellido, correo, nombre_usuario, contraseña } = req.body;
 
@@ -825,43 +818,36 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(400).json({ mensaje: 'Rellena todos los campos.' });
   }
 
-  const qUser = `
-    INSERT INTO tbl_usuario (nombre, apellido, correo, nombre_usuario, contraseña, is_verified, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 0, NOW(), NOW())
-  `;
-  const vals = [nombre, apellido, correo, nombre_usuario, contraseña];
+  const qTok = `
+  INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, used, created_at)
+  VALUES (?, ?, ?, 0, NOW())
+`;
 
-  conexion.query(qUser, vals, (err, result) => {
+
+  conexion.query(qUser, [nombre, apellido, correo, nombre_usuario, contraseña], (err, result) => {
     if (err) {
       if (err.code === 'ER_DUP_ENTRY') {
         return res.status(409).json({ mensaje: 'Correo o nombre de usuario ya existe.' });
       }
       return handleDatabaseError(err, res, 'Error al registrar usuario:');
     }
+
     const id_usuario = result.insertId;
 
-// Generar nuevo código
-const code = gen6Code(); 
-const code_hash = hashCode(code); 
-const expires_at = new Date(Date.now() + 15 * 60 * 1000);
+    // 1) Generar y hashear código
+    const code = gen6Code();
+    const code_hash = hashCode(code);
+    const expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
 
-function gen6Code() {
-  return Math.floor(100000 + Math.random() * 900000).toString(); 
-}
-
-// función para hashear (sha256) el código antes de guardar
-const crypto = require('crypto');
-function hashCode(code) {
-  return crypto.createHash('sha256').update(String(code)).digest('hex');
-}
+    // 2) Guardar token
     const qTok = `
-      INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, created_at)
-      VALUES (?, ?, ?, NOW())
-    `;
-
+  INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, used, created_at)
+  VALUES (?, ?, ?, 0, NOW())
+`;
     conexion.query(qTok, [id_usuario, code_hash, expires_at], async (err2) => {
       if (err2) return handleDatabaseError(err2, res, 'Error al crear token:');
 
+      // 3) Enviar correo
       try {
         await SendVerifyMail({ to: correo, name: nombre, code });
         return res.status(201).json({
@@ -877,8 +863,8 @@ function hashCode(code) {
   });
 });
 
-// ENVIAR CÓDIGO
-app.post('/api/enviar', (req, res) => {
+// REENVIAR CÓDIGO
+app.post('/api/reenviar', (req, res) => {
   const { correo } = req.body;
   if (!correo) return res.status(400).json({ mensaje: 'correo es requerido' });
 
@@ -915,54 +901,64 @@ app.post('/api/enviar', (req, res) => {
   });
 });
 
-// VERIFICAR CÓDIGO 
+//Verificar código
 app.post('/api/auth/verify-code', (req, res) => {
   const { correo, code } = req.body;
-  if (!correo || !code) return res.status(400).json({ mensaje: 'correo y code son requeridos' });
+  if (!correo || !code) {
+    return res.status(400).json({ mensaje: 'Faltan datos: correo o código.' });
+  }
 
-  // buscar usuario por correo
-  const qUser = `SELECT id_usuario, is_verified FROM tbl_usuario WHERE correo = ? LIMIT 1`;
-  conexion.query(qUser, [correo], (e1, rows) => {
-    if (e1) return handleDatabaseError(e1, res, 'Error al buscar usuario:');
-    if (rows.length === 0) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+  // Buscar usuario
+  const qUser = `SELECT id_usuario FROM tbl_usuario WHERE correo = ? LIMIT 1`;
+  conexion.query(qUser, [correo], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, 'Error al buscar usuario:');
+    if (rows.length === 0) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
 
-    const u = rows[0];
-    if (u.is_verified) return res.json({ mensaje: 'El correo ya está verificado.' });
+    const id_usuario = rows[0].id_usuario;
 
-    // hashear el code ingresado
-    const code_hash = hashCode(code);
+    // Generar hash del código recibido
+    const code_hash = crypto.createHash('sha256').update(String(code)).digest('hex');
 
-    const qSel = `
+    // Buscar token válido
+    const qTok = `
       SELECT id_verificar_email, expires_at, used
       FROM verificar_email_tokens
       WHERE id_usuario = ? AND token_hash = ?
       ORDER BY created_at DESC
       LIMIT 1
     `;
+    conexion.query(qTok, [id_usuario, code_hash], (err2, tokRows) => {
+      if (err2) return handleDatabaseError(err2, res, 'Error al verificar token:');
+      if (tokRows.length === 0) {
+        return res.status(400).json({ mensaje: 'Código inválido o incorrecto.' });
+      }
 
-    conexion.query(qSel, [u.id_usuario, code_hash], (e2, toks) => {
-      if (e2) return handleDatabaseError(e2, res, 'Error al validar código:');
-      if (toks.length === 0) return res.status(400).json({ mensaje: 'Código inválido' });
+      const token = tokRows[0];
+      if (token.used) {
+        return res.status(400).json({ mensaje: 'Este código ya fue utilizado.' });
+      }
 
-      const t = toks[0];
+      const now = new Date();
+      if (new Date(token.expires_at) < now) {
+        return res.status(400).json({ mensaje: 'El código ha expirado. Solicita uno nuevo.' });
+      }
 
-      if (t.used) return res.status(400).json({ mensaje: 'Código ya utilizado' });
-      if (new Date(t.expires_at) < new Date()) return res.status(400).json({ mensaje: 'Código expirado' });
+      // Marcar token como usado y usuario como verificado
+      const qUpdTok = `UPDATE verificar_email_tokens SET used = 1 WHERE id_verificar_email = ?`;
+      const qUpdUser = `UPDATE tbl_usuario SET is_verified = 1 WHERE id_usuario = ?`;
 
-      // Marcar usuario verificado y marcar token como usado 
-      const qUpdUser = `UPDATE tbl_usuario SET is_verified = 1, email_verified_at = NOW(), updated_at = NOW() WHERE id_usuario = ?`;
-      const qUpdTok  = `UPDATE verificar_email_tokens SET used = 1 WHERE id_verificar_email = ?`;
+      conexion.query(qUpdTok, [token.id_verificar_email], (err3) => {
+        if (err3) return handleDatabaseError(err3, res, 'Error al actualizar token:');
+        conexion.query(qUpdUser, [id_usuario], (err4) => {
+          if (err4) return handleDatabaseError(err4, res, 'Error al actualizar usuario:');
 
-      conexion.query(qUpdUser, [u.id_usuario], (e3) => {
-        if (e3) return handleDatabaseError(e3, res, 'No se pudo verificar el usuario');
-        conexion.query(qUpdTok, [t.id_verificar_email], (e4) => {
-          if (e4) return handleDatabaseError(e4, res, 'No se pudo cerrar el token');
-          return res.json({ mensaje: 'Correo verificado correctamente.' });
+          res.json({ mensaje: 'Cuenta verificada correctamente.' });
         });
       });
     });
   });
 });
+
 
 //GET cliente 
 app.get('/api/cliente', (request, response) => {
