@@ -1,8 +1,8 @@
 // src/Register.jsx
 import React, { useState } from "react";
-import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
-import "./Register.css";
-import api from "./api"; // usa la instancia con baseURL y credenciales
+import axios from "axios";
+import { FaUser, FaLock, FaBriefcase, FaEye, FaEyeSlash } from "react-icons/fa";
+import "./Register.css"; // Puedes tener los estilos de .toast en Login.css; como el CSS es global, funcionará igual.
 
 const Register = ({ onShowLogin }) => {
   const [formData, setFormData] = useState({
@@ -16,110 +16,91 @@ const Register = ({ onShowLogin }) => {
 
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
-  const [showConfirmPass, setShowConfirmPass] = useState(false);
 
-  // Toast simple
+  // --- Nuevo: estado de toast como en Login ---
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
-  const showToast = (message, type = "success", duration = 3000) => {
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [lastEmail, setLastEmail] = useState("");
+  const [resendOpen, setResendOpen] = useState(false);
+  const [resendEmail, setResendEmail] = useState("");
+
+  // ==== Toast ====
+  const showToast = (message, type = "success", duration = 3500) => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
   };
 
+
   const handleChange = (e) => {
     let { name, value } = e.target;
 
-    // Usuario: MAYÚSCULAS y sin espacios
+    if (name === "id_cargo") value = Number(value);
+
+    // Usuario en MAYÚSCULAS y sin espacios
     if (name === "nombre_usuario") {
       value = value.toUpperCase();
-      if (/\s/.test(value)) return;
+      if (/\s/.test(value)) return; // no permitir espacios
     }
 
-    // Contraseñas: sin espacios
-    if ((name === "contraseña" || name === "confirmar_contraseña") && /\s/.test(value)) {
-      return;
-    }
+    // Contraseña sin espacios
+    if (name === "contraseña" && /\s/.test(value)) return;
 
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Regla de contraseña robusta
+  // Contraseña robusta
   const strongPassword =
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#._-])[A-Za-z\d@$!%*?&#._-]{8,}$/;
 
-  const passwordStrong = strongPassword.test(formData.contraseña);
-  const passwordsMatch = formData.contraseña === formData.confirmar_contraseña;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
-
-  if (!passwordStrong) {
-    showToast(
-      "La contraseña debe tener mínimo 8 caracteres e incluir mayúsculas, minúsculas, número y símbolo.",
-      "error"
-    );
-    return;
-  }
-
-  if (!passwordsMatch) {
-    showToast("Las contraseñas no coinciden.", "error");
-    return;
-  }
-
-  setLoading(true);
-  try {
-    const { data } = await api.post("/usuario", {
-      nombre: formData.nombre.trim(),
-      apellido: formData.apellido.trim(),
-      nombre_usuario: formData.nombre_usuario.trim().toUpperCase(),
-      correo: formData.correo.trim(),
-      contraseña: formData.contraseña,
-    });
-
-    // 👇 Mostrar el mensaje real del backend (si lo trae)
-    const msgBackend =
-      data?.mensaje ||
-      data?.message ||
-      "¡Cuenta creada exitosamente! Revisa tu correo para verificar tu cuenta.";
-
-    showToast("" + msgBackend, "success");
-
-    // Limpiar formulario
-    setFormData({
-      nombre: "",
-      apellido: "",
-      nombre_usuario: "",
-      correo: "",
-      contraseña: "",
-      confirmar_contraseña: "",
-    });
-
-    // Regresar al login en 1.5s
-    setTimeout(() => onShowLogin?.(), 1500);
-  } catch (error) {
-    console.error("Error en registro:", error);
-    const raw =
-      error.response?.data?.error || error.response?.data?.mensaje || error.message;
-
-    let msg = raw;
-    if (/Duplicate entry/i.test(raw)) {
-      if (/correo/i.test(raw)) msg = "Ese correo ya está registrado.";
-      else if (/nombre_usuario/i.test(raw)) msg = "Ese nombre de usuario ya existe.";
-      else msg = "Registro duplicado. Verifica tus datos.";
+    if (!strongPassword.test(formData.contraseña)) {
+      showToast(
+        "La contraseña debe tener mínimo 8 caracteres e incluir mayúsculas, minúsculas, número y símbolo.",
+        "error"
+      );
+      return;
     }
 
-    showToast("Error en el registro: " + msg, "error");
-  } finally {
-    setLoading(false);
-  }
-};
+    setLoading(true);
+    try {
+      await axios.post("http://localhost:49146/api/usuario", formData);
 
+      // Toast de éxito
+      showToast("✅ ¡Cuenta creada exitosamente!", "success");
+
+      // Limpiar formulario
+      setFormData({
+        nombre: "",
+        apellido: "",
+        nombre_usuario: "",
+        correo: "",
+        contraseña: "",
+        id_cargo: "",
+      });
+
+      // Volver al login en el mismo panel tras 1.5s
+      setTimeout(() => onShowLogin?.(), 1500);
+    } catch (error) {
+      showToast(
+        "❌ Error en el registro: " + (error.response?.data?.error || error.message),
+        "error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="register-container">
       <form className="register-form" onSubmit={handleSubmit}>
-        <h2 className="register-title"></h2>
+        <h2 className="register-title">Crear cuenta</h2>
 
-        {/* Nombre / Apellido */}
+        {/* Campos principales */}
         <div className="input-row">
           <div className="input-group">
             <FaUser className="icon" />
@@ -131,7 +112,6 @@ const Register = ({ onShowLogin }) => {
               value={formData.nombre}
               onChange={handleChange}
               required
-              autoComplete="given-name"
               maxLength={40}
             />
           </div>
@@ -146,13 +126,11 @@ const Register = ({ onShowLogin }) => {
               value={formData.apellido}
               onChange={handleChange}
               required
-              autoComplete="family-name"
               maxLength={40}
             />
           </div>
         </div>
 
-        {/* Usuario */}
         <div className="input-group">
           <FaUser className="icon" />
           <input
@@ -163,12 +141,10 @@ const Register = ({ onShowLogin }) => {
             value={formData.nombre_usuario}
             onChange={handleChange}
             required
-            autoComplete="username"
             maxLength={20}
           />
         </div>
 
-        {/* Correo */}
         <div className="input-group">
           <span className="icon">✉️</span>
           <input
@@ -179,11 +155,24 @@ const Register = ({ onShowLogin }) => {
             value={formData.correo}
             onChange={handleChange}
             required
-            autoComplete="email"
           />
         </div>
 
-        {/* Contraseña */}
+        <div className="resend-row">
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              const prefill = formData.correo || lastEmail || "";
+              setResendEmail(prefill);
+              setResendOpen(true);
+            }}
+            disabled={resendLoading}
+          >
+            {resendLoading ? "Reenviando..." : "Reenviar código"}
+          </button>
+        </div>
+
         <div className="input-group password-field">
           <FaLock className="icon" />
           <input
@@ -194,7 +183,6 @@ const Register = ({ onShowLogin }) => {
             value={formData.contraseña}
             onChange={handleChange}
             required
-            autoComplete="new-password"
             minLength={8}
             maxLength={20}
             aria-invalid={!passwordStrong}
@@ -204,7 +192,6 @@ const Register = ({ onShowLogin }) => {
             className="show-pass"
             onClick={() => setShowPass((v) => !v)}
             aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
-            title={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
           >
             {showPass ? <FaEyeSlash /> : <FaEye />}
           </button>
@@ -214,36 +201,6 @@ const Register = ({ onShowLogin }) => {
           Debe incluir mayúsculas, minúsculas, número y símbolo (mín. 8).
         </p>
 
-        {/* Confirmar contraseña */}
-        <div className="input-group password-field">
-          <FaLock className="icon" />
-          <input
-            className="input-field"
-            type={showConfirmPass ? "text" : "password"}
-            name="confirmar_contraseña"
-            placeholder="Confirmar contraseña"
-            value={formData.confirmar_contraseña}
-            onChange={handleChange}
-            required
-            autoComplete="new-password"
-            minLength={8}
-            maxLength={20}
-            aria-invalid={formData.confirmar_contraseña ? !passwordsMatch : false}
-          />
-          <button
-            type="button"
-            className="show-pass"
-            onClick={() => setShowConfirmPass((v) => !v)}
-            aria-label={showConfirmPass ? "Ocultar confirmación" : "Mostrar confirmación"}
-            title={showConfirmPass ? "Ocultar confirmación" : "Mostrar confirmación"}
-          >
-            {showConfirmPass ? <FaEyeSlash /> : <FaEye />}
-          </button>
-        </div>
-
-        {formData.confirmar_contraseña && !passwordsMatch && (
-          <p className="field-hint error-hint">Las contraseñas no coinciden.</p>
-        )}
 
         <button type="submit" className="register-button" disabled={loading}>
           {loading ? "Registrando..." : "Registrarse"}
@@ -262,15 +219,12 @@ const Register = ({ onShowLogin }) => {
         </div>
       </form>
 
-    {toast.show && (
-    <div
-    className={`toast-box ${toast.type === "error" ? "error" : "success"}`}
-    onClick={() => setToast({ show: false, message: "", type: "success" })}
-  >
-    {toast.message}
-  </div>
-)}
-
+      {/* Toast (igual estilo que en Login) */}
+      {toast.show && (
+        <div className={`toast ${toast.type === "error" ? "error" : ""}`}>
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 };

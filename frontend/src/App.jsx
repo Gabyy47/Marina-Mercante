@@ -7,6 +7,8 @@ import Register from "./Register.jsx";
 import MantUsuarios from "./mantenimientousuarios.jsx";   
 import RequireAuth from "./RequireAuth.jsx";
 import PublicOnly from "./PublicOnly.jsx";  
+import Proveedores from "./proveedores.jsx";
+import Bitacora from "./bitacora.jsx";
 
 export default function App() {
   return (
@@ -27,6 +29,9 @@ export default function App() {
         <Route path="/" element={<MainPage />} />
         <Route path="/dashboard" element={<MainPage />} />
         <Route path="/mantenimientousuarios" element={<MantUsuarios />} />
+        <Route path="/proveedores" element={<Proveedores />} />
+        <Route path="/bitácora" element={<Bitacora/>} />
+
         {/* agrega aquí más rutas protegidas */}
       </Route>
 

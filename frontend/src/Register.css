@@ -9,11 +9,11 @@
 
 .register-form {
   width: 100%;
-  max-width: 320px;          /* ancho reducido; sube/baja 300–360 a gusto */
+  max-width: 320px;          
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 5px;
 }
 
 .register-title {
@@ -131,7 +131,7 @@
   font-weight: 600;
   display: inline-block;
   max-width: 100%;
-  white-space: nowrap;           /* si aún se sale, cámbialo a normal */
+  white-space: nowrap;           
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -147,7 +147,7 @@
   position: fixed;
   top: 16px;
   right: 16px;
-  background: #10b981; /* éxito */
+  background: #10b981; 
   color: #fff;
   padding: 10px 14px;
   border-radius: 10px;
@@ -159,40 +159,4 @@
 
 .toast.error {
   background: #ef4444; /* error */
-}
-/* Mensaje de error bajo confirmar contraseña */
-.field-hint.error-hint {
-  color: #e74c3c;
-  margin-top: -6px;
-}
-
-/* ==== Toast flotante superior derecha ==== */
-.toast-box {
-  position: fixed;
-  top: 20px;            /* 🔼 Aparece arriba */
-  right: 20px;
-  background-color: #16a34a; /* verde éxito */
-  color: white;
-  padding: 14px 18px;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  font-size: 14px;
-  z-index: 9999;
-  cursor: pointer;
-  animation: slideDown 0.3s ease forwards;
-  max-width: 320px;
-}
-.toast-box.error {
-  background-color: #dc2626; /* rojo error */
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }

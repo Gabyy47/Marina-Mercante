@@ -6,6 +6,8 @@ import "bootstrap/dist/css/bootstrap.min.css";
 const Dashboard = () => <h2>Salpicadero</h2>;
 const Settings = () => <h2>Configuración</h2>;
 const MantenimientoUsuarios = () => <h2>Mantenimiento de Usuario</h2>;
+const Proveedores = () => <h2>Proveedores</h2>
+const Bitacora = () => <h2>Bitácora</h2>
 
 const MainPage = () => {
   const [activeView, setActiveView] = useState("dashboard");
@@ -26,6 +28,10 @@ const MainPage = () => {
         return <Settings />;
       case "mantenimientousuarios":
         return <MantenimientoUsuarios />;
+        case "proveedores":
+        return <Proveedores />;
+         case "bitacora":
+        return <Bitacora />;
       default:
         return <Dashboard />;
     }
@@ -77,6 +83,24 @@ const MainPage = () => {
               onClick={() => setActiveView("mantenimientousuarios")}
             >
               Mantenimiento de Usuarios
+            </Link>
+          </li>
+           <li className="nav-item">
+            <Link
+              to="/proveedores"
+              className="nav-link text-white"
+              onClick={() => setActiveView("proveedores")}
+            >
+              Proveedores
+            </Link>
+          </li>
+           <li className="nav-item">
+            <Link
+              to="/bitácora"
+              className="nav-link text-white"
+              onClick={() => setActiveView("bitacora")}
+            >
+              Bitácora
             </Link>
           </li>
 
