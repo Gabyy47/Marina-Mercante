@@ -45,7 +45,7 @@ export default function Bitacora() {
 
   const cargarBitacora = async () => {
     setLoading(true);
-    try { const { data } = await api.get("/bitacoras"); setBitacoras(data); }
+    try { const { data } = await api.get("/bitacora"); setBitacoras(data); }
     catch (e) { console.error(e); } finally { setLoading(false); }
   };
   useEffect(() => { cargarBitacora(); }, []);

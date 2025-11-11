@@ -33,7 +33,7 @@ const Proveedores = () => {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${BASE_URL}proveedor`);
+      const response = await axios.get(`${BASE_URL}proveedores`);
       setItems(response.data);
     } catch (error) {
       toast.error("Error al cargar los datos");
@@ -57,7 +57,7 @@ const Proveedores = () => {
     }
 
     try {
-      const { data } = await axios.post(`${BASE_URL}proveedor`, {
+      const { data } = await axios.post(`${BASE_URL}proveedores`, {
         nombre: newNombre,
         telefono: newTelefono,
         direccion: newDireccion,
@@ -81,7 +81,7 @@ const Proveedores = () => {
     }
 
     try {
-      await axios.put(`${BASE_URL}proveedor/${editItemId}`, {
+      await axios.put(`${BASE_URL}proveedores/${editItemId}`, {
         nombre: newNombre,
         telefono: newTelefono,
         direccion: newDireccion,
@@ -106,7 +106,7 @@ const Proveedores = () => {
   const handleDelete = (id) => {
     if (window.confirm("¿Seguro que deseas eliminar este proveedor?")) {
       axios
-        .delete(`${BASE_URL}proveedor/${id}`)
+        .delete(`${BASE_URL}proveedores/${id}`)
         .then(() => {
           toast.success("Proveedor eliminado");
           setItems((prev) => prev.filter((i) => i.id_proveedor !== id));
