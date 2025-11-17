@@ -60,6 +60,16 @@ const MainPage = () => {
           </li>
 
           <li className="nav-item">
+            <Link
+              to="/inventario"
+              className="nav-link text-white"
+              onClick={() => setActiveView("inventario")}
+            >
+              Inventario
+            </Link>
+          </li>
+
+          <li className="nav-item">
             <button
               className={`nav-link btn text-white ${
                 activeView === "settings" ? "active" : ""
@@ -77,6 +87,56 @@ const MainPage = () => {
               onClick={() => setActiveView("mantenimientousuarios")}
             >
               Mantenimiento de Usuarios
+            </Link>
+          </li>
+
+          <li className="nav-item">
+            <Link
+              to="/productos"
+              className="nav-link text-white"
+              onClick={() => setActiveView("productos")}
+            >
+              Productos
+            </Link>
+          </li>
+
+          <li className="nav-item">
+            <Link
+              to="/proveedores"
+              className="nav-link text-white"
+              onClick={() => setActiveView("proveedores")}
+            >
+              Proveedores
+            </Link>
+          </li>
+
+          <li className="nav-item">
+            <Link
+              to="/kardex"
+              className="nav-link text-white"
+              onClick={() => setActiveView("kardex")}
+            >
+              Kardex
+            </Link>
+          </li>
+
+          <li className="nav-item">
+            <Link
+              to="/historial"
+              className="nav-link text-white"
+              onClick={() => setActiveView("historial")}
+            >
+              Historial Kardex
+            </Link>
+          </li>
+
+          <li className="nav-item">
+            <Link
+              to="/detalle_compra"
+              className="nav-link text-white"
+              onClick={() => setActiveView("detalle_compra")}
+            >
+              Detalle Compra
             </Link>
           </li>
 

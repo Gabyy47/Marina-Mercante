@@ -21,8 +21,8 @@ var conexion = mysql.createConnection({
   host: "localhost",
   port: "3306",
   user: "root",
-  password: "123456",
-  database: "marina_mercante",
+  password: "",
+  database: "marina_mercante_v3",
   charset: "utf8mb4", //  importante para ñ y acentos
   authPlugins: {
     mysql_native_password: () => () => Buffer.from("1984"),
@@ -40,6 +40,7 @@ app.use(
         "http://localhost:49146",
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:5174"
       ];
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -552,7 +553,7 @@ app.delete('/api/cliente/:id', (request, response) => {
 
 //Get 
 app.get('/api/estado_ticket',(request, response)=>{
-    var query = "SELECT * FROM marina_mercante.tl_estado_ticket"
+  var query = "SELECT * FROM marina_mercante.tbl_estado_ticket"
     conexion.query(query,function(err,rows,fields){
         if (err){
             response.send("301 ERROR EN LISTADO DE ESTADOS DE TICKET")
@@ -565,7 +566,7 @@ app.get('/api/estado_ticket',(request, response)=>{
 
 //Get listado de estado de ticket con where
 app.get('/api/estado_ticket/:id',(request, response)=>{
-    var query = "SELECT * FROM marina_mercante.tl_estado_ticket WHERE id_estado_ticket = ?"
+  var query = "SELECT * FROM marina_mercante.tbl_estado_ticket WHERE id_estado_ticket = ?"
     var values = [
         parseInt(request.params.id)
     ];
@@ -582,7 +583,7 @@ app.get('/api/estado_ticket/:id',(request, response)=>{
 
 //Post insert de productos
 app.post('/api/estado_ticket', (request, response) => {
-    var query = "INSERT INTO marina_mercante.tl_estado_ticket (estado) VALUES (?)";
+  var query = "INSERT INTO marina_mercante.tbl_estado_ticket (estado) VALUES (?)";
     var values = [
         request.body["estado"],
         
@@ -601,7 +602,7 @@ app.post('/api/estado_ticket', (request, response) => {
 
 //Put Update de Estdo ticket
 app.put('/api/estado_ticket', (request, response) => {
-    var query = "UPDATE marina_mercante.tl_estado_ticket SET estado = ? where id_estado_ticket = ?";
+  var query = "UPDATE marina_mercante.tbl_estado_ticket SET estado = ? where id_estado_ticket = ?";
     var values = [
         request.body["estado"]
        
@@ -620,7 +621,7 @@ app.put('/api/estado_ticket', (request, response) => {
 
 //Delete de estado de ticket
 app.delete('/api/estado_ticket/:id', (request, response) => {
-    var query = "DELETE FROM marina_mercante.tl_estado_ticket where id_producto = ?";
+  var query = "DELETE FROM marina_mercante.tbl_estado_ticket WHERE id_estado_ticket = ?";
     var values = [
         parseInt(request.params.id)
     ];
@@ -637,7 +638,8 @@ app.delete('/api/estado_ticket/:id', (request, response) => {
 
 // ====== CRUD PARA tl_proveedor ======  
 app.get('/api/proveedor', (req, res) => {  
-  const query = "SELECT * FROM tl_proveedor";  
+  // Nota: usar el nombre de tabla correcto 'tbl_proveedor' (homogeneizar prefijo 'tbl_')
+  const query = "SELECT * FROM tbl_proveedor";  
   conexion.query(query, (err, rows) => {  
     if (err) {  
       console.error("Error al listar proveedor:", err);  
@@ -649,7 +651,7 @@ app.get('/api/proveedor', (req, res) => {
 });  
   
 app.get('/api/proveedor/:id', (req, res) => {  
-  const query = "SELECT * FROM tl_proveedor WHERE id_proveedor = ?";  
+  const query = "SELECT * FROM tbl_proveedor WHERE id_proveedor = ?";  
   conexion.query(query, [req.params.id], (err, rows) => {  
     if (err) {  
       console.error("Error al obtener proveedor:", err);  
@@ -687,7 +689,7 @@ app.put('/api/proveedor/:id', (req, res) => {
 });  
   
 app.delete('/api/proveedor/:id', (req, res) => {  
-  const query = "DELETE FROM tl_proveedor WHERE id_proveedor = ?";  
+  const query = "DELETE FROM tbl_proveedor WHERE id_proveedor = ?";  
   conexion.query(query, [req.params.id], (err) => {  
     if (err) {  
       console.error("Error al eliminar proveedor:", err);  
@@ -698,9 +700,9 @@ app.delete('/api/proveedor/:id', (req, res) => {
   });  
 });  
 
-// ====== CRUD PARA tl_compra ======  
+// ====== CRUD PARA tbl_compra ======  
 app.get('/api/compra', (req, res) => {  
-  const query = "SELECT * FROM tl_compra";  
+  const query = "SELECT * FROM tbl_compra";  
   conexion.query(query, (err, rows) => {  
     if (err) {  
       console.error("Error al listar compras:", err);  
@@ -712,7 +714,7 @@ app.get('/api/compra', (req, res) => {
 });  
   
 app.get('/api/compra/:id', (req, res) => {  
-  const query = "SELECT * FROM tl_compra WHERE id_compra = ?";  
+  const query = "SELECT * FROM tbl_compra WHERE id_compra = ?";  
   conexion.query(query, [req.params.id], (err, rows) => {  
     if (err) {  
       console.error("Error al obtener compra:", err);  
@@ -725,7 +727,7 @@ app.get('/api/compra/:id', (req, res) => {
   
 app.post('/api/compra', (req, res) => {  
   const { id_proveedor, monto_total, fecha_hora_compra, estado_compra } = req.body;  
-  const query = "INSERT INTO tl_compra (id_proveedor, monto_total, fecha_hora_compra, estado_compra) VALUES (?, ?, ?, ?)";  
+  const query = "INSERT INTO tbl_compra (id_proveedor, monto_total, fecha_hora_compra, estado_compra) VALUES (?, ?, ?, ?)";  
   conexion.query(query, [id_proveedor, monto_total, fecha_hora_compra, estado_compra], (err, result) => {  
     if (err) {  
       console.error("Error al insertar compra:", err);  
@@ -738,7 +740,7 @@ app.post('/api/compra', (req, res) => {
   
 app.put('/api/compra/:id', (req, res) => {  
   const { id_proveedor, monto_total, fecha_hora_compra, estado_compra } = req.body;  
-  const query = "UPDATE tl_compra SET id_proveedor = ?, monto_total = ?, fecha_hora_compra = ?, estado_compra = ? WHERE id_compra = ?";  
+  const query = "UPDATE tbl_compra SET id_proveedor = ?, monto_total = ?, fecha_hora_compra = ?, estado_compra = ? WHERE id_compra = ?";  
   conexion.query(query, [id_proveedor, monto_total, fecha_hora_compra, estado_compra, req.params.id], (err) => {  
     if (err) {  
       console.error("Error al actualizar compra:", err);  
@@ -750,7 +752,7 @@ app.put('/api/compra/:id', (req, res) => {
 });  
   
 app.delete('/api/compra/:id', (req, res) => {  
-  const query = "DELETE FROM tl_compra WHERE id_compra = ?";  
+  const query = "DELETE FROM tbl_compra WHERE id_compra = ?";  
   conexion.query(query, [req.params.id], (err) => {  
     if (err) {  
       console.error("Error al eliminar compra:", err);  
@@ -761,34 +763,142 @@ app.delete('/api/compra/:id', (req, res) => {
   });  
 });
 
-// ====== CRUD PARA tl_detalle_compra ======  
-app.get('/api/detalle_compra', (req, res) => {  
-  const query = "SELECT * FROM tl_detalle_compra";  
-  conexion.query(query, (err, rows) => {  
-    if (err) {  
-      console.error("Error al listar detalles de compra:", err);  
-      res.status(500).json({ error: "Error al listar detalles de compra" });  
-      return;  
-    }  
-    res.json(rows);  
-  });  
-});  
-  
-app.get('/api/detalle_compra/:id', (req, res) => {  
-  const query = "SELECT * FROM tl_detalle_compra WHERE id_detalle_compra = ?";  
-  conexion.query(query, [req.params.id], (err, rows) => {  
-    if (err) {  
-      console.error("Error al obtener detalle de compra:", err);  
-      res.status(500).json({ error: "Error al obtener detalle de compra" });  
-      return;  
-    }  
-    res.json(rows[0]);  
-  });  
-});  
+// ====== CRUD PARA tbl_detalle_compra ======  
+app.get('/api/detalle_compra', (req, res) => {
+  // Safer: primero obtener filas de detalle y después enriquecer en JS
+  const query = `SELECT dc.* FROM tbl_detalle_compra dc ORDER BY dc.id_detalle_compra DESC`;
+  conexion.query(query, (err, detalleRows) => {
+    if (err) {
+      console.error("Error al listar detalle_compra:", err);
+      return res.status(500).json({ error: "Error al listar detalles de compra" });
+    }
+
+    // Si no hay registros, devolver lista vacía
+    if (!detalleRows || detalleRows.length === 0) return res.json([]);
+
+    // Obtener listados de productos y compras/proveedores para enriquecer
+    const productoIds = [...new Set(detalleRows.map(r => r.id_producto).filter(Boolean))];
+    const compraIds = [...new Set(detalleRows.map(r => r.id_compra).filter(Boolean))];
+
+    // Consultas paralelas
+    const qProductos = productoIds.length > 0
+      ? `SELECT * FROM tbl_productos WHERE id_producto IN (${productoIds.map(() => '?').join(',')})`
+      : null;
+    const qCompras = compraIds.length > 0
+      ? `SELECT c.*, prov.nombre AS nombre_proveedor FROM tbl_compra c LEFT JOIN tbl_proveedor prov ON prov.id_proveedor = c.id_proveedor WHERE c.id_compra IN (${compraIds.map(() => '?').join(',')})`
+      : null;
+
+    // Ejecutar consultas
+    const tasks = [];
+    if (qProductos) tasks.push(new Promise((resolve) => conexion.query(qProductos, productoIds, (e, rows) => resolve({ e, rows }))));
+    else tasks.push(Promise.resolve({ e: null, rows: [] }));
+    if (qCompras) tasks.push(new Promise((resolve) => conexion.query(qCompras, compraIds, (e, rows) => resolve({ e, rows }))));
+    else tasks.push(Promise.resolve({ e: null, rows: [] }));
+
+    Promise.all(tasks).then(results => {
+      const prodRes = results[0];
+      const compRes = results[1];
+      if (prodRes.e) {
+        console.error('Error al obtener productos para detalle_compra:', prodRes.e);
+        return res.status(500).json({ error: 'Error al obtener productos asociados' });
+      }
+      if (compRes.e) {
+        console.error('Error al obtener compras/proveedores para detalle_compra:', compRes.e);
+        return res.status(500).json({ error: 'Error al obtener compras asociadas' });
+      }
+
+      const productosMap = (prodRes.rows || []).reduce((acc, p) => { acc[p.id_producto] = p; return acc; }, {});
+      const comprasMap = (compRes.rows || []).reduce((acc, c) => { acc[c.id_compra] = c; return acc; }, {});
+
+      // Mapear y enriquecer filas retornadas
+      const out = detalleRows.map(r => {
+        const prod = productosMap[r.id_producto] || {};
+        const compra = comprasMap[r.id_compra] || {};
+
+        // intentar detectar campo de nombre del producto
+        const productName = prod.nombre_producto || prod.nombre || prod.nombre_producto || prod.descripcion || null;
+        const proveedorName = compra.nombre_proveedor || compra.nombre || null;
+
+        return {
+          id_detalle_compra: r.id_detalle_compra,
+          id_kardex: r.id_kardex || null,
+          id_compra: r.id_compra,
+          id_producto: r.id_producto,
+          cantidad: r.cantidad,
+          precio_compra: r.precio_compra,
+          monto_total: compra.monto_total || null,
+          fecha_hora_compra: compra.fecha_hora_compra || null,
+          id_proveedor: compra.id_proveedor || null,
+          nombre_proveedor: proveedorName,
+          nombre_producto: productName,
+        };
+      });
+
+      res.json(out);
+    }).catch(ex => {
+      console.error('Error al procesar detalle_compra:', ex);
+      res.status(500).json({ error: 'Error interno al procesar detalles' });
+    });
+  });
+});
+
+app.get('/api/detalle_compra/:id', (req, res) => {
+  const query = `SELECT dc.* FROM tbl_detalle_compra dc WHERE dc.id_detalle_compra = ? LIMIT 1`;
+  conexion.query(query, [req.params.id], (err, rows) => {
+    if (err) {
+      console.error('Error al obtener detalle_compra por id:', err);
+      return res.status(500).json({ error: 'Error al obtener detalle de compra' });
+    }
+    const r = (rows && rows[0]) || null;
+    if (!r) return res.json(null);
+
+    // Obtener producto y compra relacionados
+    const tasks = [];
+    tasks.push(new Promise((resolve) => conexion.query('SELECT * FROM tbl_productos WHERE id_producto = ?', [r.id_producto], (e, pr) => resolve({ e, pr }))));
+    tasks.push(new Promise((resolve) => conexion.query('SELECT c.*, prov.nombre AS nombre_proveedor FROM tbl_compra c LEFT JOIN tbl_proveedor prov ON prov.id_proveedor = c.id_proveedor WHERE c.id_compra = ?', [r.id_compra], (e, cr) => resolve({ e, cr }))));
+
+    Promise.all(tasks).then(results => {
+      const prodRes = results[0];
+      const compRes = results[1];
+      if (prodRes.e) {
+        console.error('Error al obtener producto para detalle:', prodRes.e);
+        return res.status(500).json({ error: 'Error al obtener producto asociado' });
+      }
+      if (compRes.e) {
+        console.error('Error al obtener compra para detalle:', compRes.e);
+        return res.status(500).json({ error: 'Error al obtener compra asociada' });
+      }
+
+      const prod = (prodRes.pr && prodRes.pr[0]) || {};
+      const compra = (compRes.cr && compRes.cr[0]) || {};
+      const productName = prod.nombre_producto || prod.nombre || prod.descripcion || null;
+      const proveedorName = compra.nombre_proveedor || compra.nombre || null;
+
+      const out = {
+        id_detalle_compra: r.id_detalle_compra,
+        id_kardex: r.id_kardex || null,
+        id_compra: r.id_compra,
+        id_producto: r.id_producto,
+        cantidad: r.cantidad,
+        precio_compra: r.precio_compra,
+        monto_total: compra.monto_total || null,
+        fecha_hora_compra: compra.fecha_hora_compra || null,
+        id_proveedor: compra.id_proveedor || null,
+        nombre_proveedor: proveedorName,
+        nombre_producto: productName,
+      };
+
+      res.json(out);
+    }).catch(ex => {
+      console.error('Error al enriquecer detalle_compra:', ex);
+      res.status(500).json({ error: 'Error interno al procesar detalle' });
+    });
+  });
+});
   
 app.post('/api/detalle_compra', (req, res) => {  
   const { id_compra, id_producto, cantidad, precio_compra } = req.body;  
-  const query = "INSERT INTO tl_detalle_compra (id_compra, id_producto, cantidad, precio_compra) VALUES (?, ?, ?, ?)";  
+  const query = "INSERT INTO tbl_detalle_compra (id_compra, id_producto, cantidad, precio_compra) VALUES (?, ?, ?, ?)";  
   conexion.query(query, [id_compra, id_producto, cantidad, precio_compra], (err, result) => {  
     if (err) {  
       console.error("Error al insertar detalle de compra:", err);  
@@ -801,7 +911,7 @@ app.post('/api/detalle_compra', (req, res) => {
   
 app.put('/api/detalle_compra/:id', (req, res) => {  
   const { id_compra, id_producto, cantidad, precio_compra } = req.body;  
-  const query = "UPDATE tl_detalle_compra SET id_compra = ?, id_producto = ?, cantidad = ?, precio_compra = ? WHERE id_detalle_compra = ?";  
+  const query = "UPDATE tbl_detalle_compra SET id_compra = ?, id_producto = ?, cantidad = ?, precio_compra = ? WHERE id_detalle_compra = ?";  
   conexion.query(query, [id_compra, id_producto, cantidad, precio_compra, req.params.id], (err) => {  
     if (err) {  
       console.error("Error al actualizar detalle de compra:", err);  
@@ -813,7 +923,7 @@ app.put('/api/detalle_compra/:id', (req, res) => {
 });  
   
 app.delete('/api/detalle_compra/:id', (req, res) => {  
-  const query = "DELETE FROM tl_detalle_compra WHERE id_detalle_compra = ?";  
+  const query = "DELETE FROM tbl_detalle_compra WHERE id_detalle_compra = ?";  
   conexion.query(query, [req.params.id], (err) => {  
     if (err) {  
       console.error("Error al eliminar detalle de compra:", err);  
@@ -921,8 +1031,8 @@ app.get('/api/ticket', (req, res) => {
 });
 
 app.get('/api/ticket/:id', (req, res) => {
-    const query = "SELECT * FROM marina_mercante.tl_ticket WHERE id_ticket = ?";
-    const values = [parseInt(req.params.id)];
+  const query = "SELECT * FROM marina_mercante.tbl_ticket WHERE id_ticket = ?";
+  const values = [parseInt(req.params.id)];
     conexion.query(query, values, (err, rows) => {
         if (err) return res.status(500).json({ error: "Error al obtener el ticket" });
         if (rows.length === 0) return res.status(404).json({ error: "Ticket no encontrado" });
@@ -936,7 +1046,7 @@ app.post('/api/ticket', (req, res) => {
     if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket ) {
         return res.status(400).json({ error: "Todos los campos son obligatorios" });
     }
-    const query = "INSERT INTO marina_mercante.tb_ticket (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket) VALUES (?, ?, ?, ?)";
+  const query = "INSERT INTO marina_mercante.tbl_ticket (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket) VALUES (?, ?, ?, ?)";
     const values = [id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket];
     conexion.query(query, values, (err, result) => {
         if (err) {
@@ -957,8 +1067,8 @@ app.put('/api/ticket/:id', (req, res) => {
     if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket) {
         return res.status(400).json({ error: "Todos los campos son obligatorios" });
     }
-    const query = "UPDATE proveedores SET  id_cliente= ?, id_estado_ticket = ?, id_tipo_ticket = ?, NO_ticket = ? WHERE id_ticket = ?";
-    const values = [id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket];
+  const query = "UPDATE marina_mercante.tbl_ticket SET id_cliente= ?, id_estado_ticket = ?, id_tipo_ticket = ?, NO_ticket = ? WHERE id_ticket = ?";
+  const values = [id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket, id_ticket];
     conexion.query(query, values, (err, result) => {
         if (err) {
             console.error("Error al actualizar ticket:", err.message);
@@ -973,7 +1083,7 @@ app.put('/api/ticket/:id', (req, res) => {
 });
 
 app.delete('/api/ticket/:id', (req, res) => {
-    const query = "DELETE FROM marina_mercante.tl_ticket WHERE id_ticket = ?";
+  const query = "DELETE FROM marina_mercante.tbl_ticket WHERE id_ticket = ?";
     const values = [parseInt(req.params.id)];
     conexion.query(query, values, (err, result) => {
         if (err) {
@@ -1282,6 +1392,21 @@ app.delete('/api/kardex/:id', (req, res) => {
       return;
     }
     res.json({ message: "Kardex eliminado correctamente" });
+  });
+});
+
+// Ruta para historial de kardex (read-only, usada por el frontend)
+app.get('/api/historial_kardex', (req, res) => {
+  // Devolvemos el historial de movimientos del kardex. Si en el futuro
+  // quieres joins con usuarios/productos, podemos ampliarlo aquí.
+  const query = "SELECT * FROM tbl_kardex ORDER BY fecha_hora DESC";
+  conexion.query(query, (err, rows) => {
+    if (err) {
+      console.error("Error al listar historial kardex:", err);
+      res.status(500).json({ error: "Error al listar historial kardex" });
+      return;
+    }
+    res.json(rows);
   });
 });
 
