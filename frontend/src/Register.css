@@ -165,3 +165,34 @@
   color: #e74c3c;
   margin-top: -6px;
 }
+
+/* ==== Toast flotante superior derecha ==== */
+.toast-box {
+  position: fixed;
+  top: 20px;            /* 🔼 Aparece arriba */
+  right: 20px;
+  background-color: #16a34a; /* verde éxito */
+  color: white;
+  padding: 14px 18px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  font-size: 14px;
+  z-index: 9999;
+  cursor: pointer;
+  animation: slideDown 0.3s ease forwards;
+  max-width: 320px;
+}
+.toast-box.error {
+  background-color: #dc2626; /* rojo error */
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
