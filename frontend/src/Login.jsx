@@ -40,44 +40,62 @@ const Login = () => {
   };
 
   // ====== LOGIN ======
-  const handleChange = (e) => {
-    let { name, value } = e.target;
-    if (name === "nombre_usuario") value = value.toUpperCase();
-    if ((name === "nombre_usuario" || name === "contraseña") && /\s/.test(value)) return;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+const handleChange = (e) => {
+  let { name, value } = e.target;
+  if (name === "nombre_usuario") value = value.toUpperCase();
+  if ((name === "nombre_usuario" || name === "contraseña") && /\s/.test(value)) return;
+  setFormData((prev) => ({ ...prev, [name]: value }));
+};
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.nombre_usuario || !formData.contraseña) {
-      showToast("Completa usuario y contraseña.", "error");
-      return;
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!formData.nombre_usuario || !formData.contraseña) {
+    showToast("Completa usuario y contraseña.", "error");
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const { data } = await api.post("/login", formData);
+
+    // Asegurarse que viene el token
+    if (data?.token) {
+      localStorage.setItem("token", data.token);
     }
 
-    setLoading(true);
-    try {
-      const { data } = await api.post("/login", formData);
-      if (data?.token) localStorage.setItem("token", data.token);
-      showToast("¡Inicio de sesión exitoso!", "success");
-      setTimeout(() => navigate(from === "/login" ? "/" : from, { replace: true }), 1000);
-    } catch (error) {
-      const status = error.response?.status;
-      const msg = error.response?.data?.mensaje || "Error al iniciar sesión.";
-      if (status === 403 && msg.includes("No tiene un rol")) {
-        setModal({
-          show: true,
-          message:
-            "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
-        });
-      } else if (status === 401) {
-        showToast("Credenciales inválidas. Verifica usuario y contraseña.", "error");
-      } else {
-        showToast(msg, "error");
-      }
-    } finally {
-      setLoading(false);
+    // Guardar datos del usuario que inició sesión
+    if (data?.usuario) {
+      localStorage.setItem("usuarioData", JSON.stringify(data.usuario));
     }
-  };
+
+    showToast("¡Inicio de sesión exitoso!", "success");
+
+    // Redirigir después de 1s
+    setTimeout(() => {
+      navigate(from === "/login" ? "/" : from, { replace: true });
+    }, 1000);
+
+  } catch (error) {
+    const status = error.response?.status;
+    const msg = error.response?.data?.mensaje || "Error al iniciar sesión.";
+
+    if (status === 403 && msg.includes("No tiene un rol")) {
+      setModal({
+        show: true,
+        message:
+          "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
+      });
+    } else if (status === 401) {
+      showToast("Credenciales inválidas. Verifica usuario y contraseña.", "error");
+    } else {
+      showToast(msg, "error");
+    }
+
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ====== RECUPERACIÓN DE CONTRASEÑA ======
 

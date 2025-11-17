@@ -29,94 +29,137 @@ const Proveedores = () => {
   const [filterTelefono, setFilterTelefono] = useState("");
   const [filterDireccion, setFilterDireccion] = useState("");
 
-  // === Cargar datos ===
-  const fetchItems = async () => {
-    setLoading(true);
-    try {
-      const response = await axios.get(`${BASE_URL}proveedores`);
-      setItems(response.data);
-    } catch (error) {
-      toast.error("Error al cargar los datos");
-      console.error("Error al obtener los proveedores:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Guardar información del usuario para registrar en la bitácora las consultas
+  const usuarioData = JSON.parse(localStorage.getItem("usuarioData")) || {};
 
-  useEffect(() => {
-    fetchItems();
-  }, []);
+// === Cargar datos ===
+const fetchItems = async () => {
+  setLoading(true);
+  try {
+    const response = await axios.get(`${BASE_URL}proveedores`, {
+      params: {
+        id_usuario: usuarioData.id_usuario,
+        usuario: usuarioData.nombre_usuario,
+      },
+    });
 
-  // === Crear nuevo proveedor ===
-  const handleCreate = async () => {
-    if (!newNombre.trim() || !newTelefono.trim() || !newDireccion.trim()) {
-      return toast.error("Por favor completa todos los campos");
-    }
-    if (newTelefono.length !== 8) {
-      return toast.error("El número de teléfono debe tener 8 dígitos");
-    }
+    setItems(response.data);
+  } catch (error) {
+    toast.error("Error al cargar los datos");
+    console.error("Error al obtener los proveedores:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
-    try {
-      const { data } = await axios.post(`${BASE_URL}proveedores`, {
+useEffect(() => {
+  fetchItems();
+}, []);
+
+
+// === Crear nuevo proveedor ===
+const handleCreate = async () => {
+  if (!newNombre.trim() || !newTelefono.trim() || !newDireccion.trim()) {
+    return toast.error("Por favor completa todos los campos");
+  }
+  if (newTelefono.length !== 8) {
+    return toast.error("El número de teléfono debe tener 8 dígitos");
+  }
+
+  try {
+    const response = await axios.post(
+      `${BASE_URL}proveedores`,
+      {
         nombre: newNombre,
         telefono: newTelefono,
         direccion: newDireccion,
-      });
-      toast.success("Proveedor agregado correctamente");
-      setItems((prev) => [...prev, data]);
-      closeModal();
-    } catch (err) {
-      toast.error("Error al guardar proveedor");
-      console.error(err);
-    }
-  };
+      },
+      {
+        params: {
+          id_usuario: usuarioData.id_usuario,
+          usuario: usuarioData.nombre_usuario,
+        },
+      }
+    );
 
-  // === Editar proveedor ===
-  const handleUpdate = async () => {
-    if (!newNombre.trim() || !newTelefono.trim() || !newDireccion.trim()) {
-      return toast.error("Completa todos los campos");
-    }
-    if (newTelefono.length !== 8) {
-      return toast.error("El número de teléfono debe tener 8 dígitos");
-    }
+    toast.success("Proveedor agregado correctamente");
+    setItems((prev) => [...prev, response.data]);
+    closeModal();
+  } catch (err) {
+    toast.error("Error al guardar proveedor");
+    console.error(err);
+  }
+};
 
-    try {
-      await axios.put(`${BASE_URL}proveedores/${editItemId}`, {
+
+// === Editar proveedor ===
+const handleUpdate = async () => {
+  if (!newNombre.trim() || !newTelefono.trim() || !newDireccion.trim()) {
+    return toast.error("Completa todos los campos");
+  }
+  if (newTelefono.length !== 8) {
+    return toast.error("El número de teléfono debe tener 8 dígitos");
+  }
+
+  try {
+    await axios.put(
+      `${BASE_URL}proveedores/${editItemId}`,
+      {
         nombre: newNombre,
         telefono: newTelefono,
         direccion: newDireccion,
-      });
+      },
+      {
+        params: {
+          id_usuario: usuarioData.id_usuario,
+          usuario: usuarioData.nombre_usuario,
+        },
+      }
+    );
 
-      toast.success("Proveedor actualizado correctamente");
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id_proveedor === editItemId
-            ? { ...i, nombre: newNombre, telefono: newTelefono, direccion: newDireccion }
-            : i
-        )
-      );
-      closeEditModal();
-    } catch (err) {
-      toast.error("Error al actualizar proveedor");
-      console.error(err);
-    }
-  };
+    toast.success("Proveedor actualizado correctamente");
 
-  // === Eliminar proveedor ===
-  const handleDelete = (id) => {
-    if (window.confirm("¿Seguro que deseas eliminar este proveedor?")) {
-      axios
-        .delete(`${BASE_URL}proveedores/${id}`)
-        .then(() => {
-          toast.success("Proveedor eliminado");
-          setItems((prev) => prev.filter((i) => i.id_proveedor !== id));
-        })
-        .catch((err) => {
-          toast.error("Error al eliminar proveedor");
-          console.error(err);
-        });
-    }
-  };
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id_proveedor === editItemId
+          ? {
+              ...i,
+              nombre: newNombre,
+              telefono: newTelefono,
+              direccion: newDireccion,
+            }
+          : i
+      )
+    );
+
+    closeEditModal();
+  } catch (err) {
+    toast.error("Error al actualizar proveedor");
+    console.error(err);
+  }
+};
+
+
+// === Eliminar proveedor ===
+const handleDelete = async (id) => {
+  if (!window.confirm("¿Seguro que deseas eliminar este proveedor?")) return;
+
+  try {
+    await axios.delete(`${BASE_URL}proveedores/${id}`, {
+      params: {
+        id_usuario: usuarioData.id_usuario,
+        usuario: usuarioData.nombre_usuario,
+      },
+    });
+
+    toast.success("Proveedor eliminado");
+
+    setItems((prev) => prev.filter((i) => i.id_proveedor !== id));
+  } catch (err) {
+    toast.error("Error al eliminar proveedor");
+    console.error(err);
+  }
+};
 
   // === Generar PDF ===
   const generarPDF = () => {

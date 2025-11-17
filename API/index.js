@@ -43,22 +43,25 @@ function hashCode(code) {
   return crypto.createHash('sha256').update(code).digest('hex');
 }
 
-// ===== Registrar acción en la bitácora  =====
-function logBitacora(conexion, { id_objeto, id_usuario, accion, descripcion, usuario }, callback) { 
+// ===== Registrar acción en la bitácora =====
+function logBitacora(conexion, { id_objeto, id_usuario, accion, descripcion, usuario }, callback) {
+  
+  // Validación y valores por defecto
   const params = [
     id_objeto ?? null,
     id_usuario ?? null,
     accion ?? 'SIN_ACCION',
-    descripcion ?? null,
-    usuario ?? 'sistema',
+    descripcion ?? '',
+    usuario ?? 'sistema'
   ];
-  conexion.query("CALL event_bitacora(?, ?, ?, ?, ?)", params, (err) => {
+  const query = "CALL event_bitacora(?, ?, ?, ?, ?)";
+  conexion.query(query, params, (err, results) => {
     if (err) {
-      console.error(" Error al registrar en bitácora:", err);
+      console.error(" Error al registrar en bitácora:", err.message);
       if (callback) callback(err);
     } else {
-      console.log(` Bitácora registrada correctamente: ${accion}`);
-      if (callback) callback(null);
+      console.log(` Bitácora registrada correctamente → Acción: ${accion}`);
+      if (callback) callback(null, results);
     }
   });
 }
@@ -360,7 +363,7 @@ app.delete("/api/roles/:id", async (req, res) => {
   }
 });
 
-// ===== LOGIN 
+// ===== LOGIN =====
 app.post("/api/login", (req, res) => {
   console.log("Ruta /api/login llamada");
 
@@ -368,7 +371,7 @@ app.post("/api/login", (req, res) => {
 
   // Validar campos
   if (!nombre_usuario || !contraseña) {
-    return res.status(400).json({ mensaje: "Faltan campos obligatorios." });
+    return res.status(400).json({ mensaje: "Faltan campos obligatorios." }); 
   }
 
   const q = `
@@ -388,7 +391,7 @@ app.post("/api/login", (req, res) => {
   // Ejecutar consulta
   conexion.query(q, [nombre_usuario, contraseña], (err, rows) => {
     if (err) {
-      console.error(" Error en consulta de login:", err);
+      console.error("Error en consulta de login:", err);
       return res.status(500).json({ mensaje: "Error interno en la base de datos." });
     }
 
@@ -402,13 +405,12 @@ app.post("/api/login", (req, res) => {
     // Verificar rol
     if (!usuario.id_rol || !usuario.rol_nombre || rolNombre === "SIN ROL") {
       return res.status(403).json({
-        mensaje:
-          "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
+        mensaje: "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
       });
     }
 
-    // Verificar correo
-    if (!usuario.is_verified) {
+    // Verificar correo (asegúrate de que is_verified sea 1)
+    if (Number(usuario.is_verified) !== 1) {
       return res.status(403).json({
         mensaje: "Debes verificar tu correo antes de iniciar sesión.",
       });
@@ -431,70 +433,78 @@ app.post("/api/login", (req, res) => {
       httpOnly: true,
       secure: false, // Cambiar a true en producción (HTTPS)
       sameSite: "lax",
-      maxAge: 3600000,
+      maxAge: 3600000, // 1h
     });
 
-    // Registrar inicio en bitácora 
-    conexion.query(
-      "CALL event_bitacora(?, ?, ?, ?)",
-      [usuario.id_usuario, 1, "LOGIN", `El usuario ${usuario.nombre_usuario} inició sesión.`],
+    // Registrar inicio en bitácora
+    const ID_OBJETO_LOGIN = 1; 
+
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_LOGIN,
+        id_usuario: usuario.id_usuario,
+        accion: "LOGIN",
+        descripcion: `El usuario ${usuario.nombre_usuario} inició sesión.`,
+        usuario: usuario.nombre_usuario,
+      },
       (bitErr) => {
-        if (bitErr) console.error(" Error registrando bitácora LOGIN:", bitErr);
+        if (bitErr) {
+          console.error("No se pudo registrar LOGIN en bitácora:", bitErr.message);
+        }
+        // Responder al cliente (no bloqueamos por bitácora)
+        return res.json({
+          mensaje: "Inicio de sesión exitoso",
+          token,
+          usuario: {
+            id_usuario: usuario.id_usuario,
+            nombre_usuario: usuario.nombre_usuario,
+            id_rol: usuario.id_rol,
+            rol_nombre: usuario.rol_nombre,
+          },
+        });
       }
     );
-
-    res.json({
-      mensaje: "Inicio de sesión exitoso",
-      token,
-      usuario: {
-        id_usuario: usuario.id_usuario,
-        nombre_usuario: usuario.nombre_usuario,
-        id_rol: usuario.id_rol,
-        rol_nombre: usuario.rol_nombre,
-      },
-    });
   });
 });
 
-// ===== LOGOUT 
+// ===== LOGOUT =====
 app.get("/api/logout", (req, res) => {
   console.log("Ruta /api/logout llamada");
-
   const token = req.cookies.token;
-  const ID_OBJETO_LOGIN = 1;
+  const ID_OBJETO_LOGIN = 1; 
 
   if (token) {
     try {
-      // Verificar token
+      // Verificar y decodificar token
       const decoded = jwt.verify(token, SECRET_KEY);
-      const id_usuario = decoded.id_usuario;
-      const nombre_usuario = decoded.nombre_usuario;
 
-      // Registrar en bitácora
-      conexion.query(
-        "CALL event_bitacora(?, ?, ?, ?)",
-        [
-          id_usuario,
-          ID_OBJETO_LOGIN,
-          "LOGOUT",
-          `El usuario ${nombre_usuario} cerró sesión.`,
-        ],
+      // Registrar acción en bitácora
+      logBitacora(
+        conexion,
+        {
+          id_objeto: ID_OBJETO_LOGIN,
+          id_usuario: decoded.id_usuario,
+          accion: "LOGOUT",
+          descripcion: `El usuario ${decoded.nombre_usuario} cerró sesión.`,
+          usuario: decoded.nombre_usuario,
+        },
         (err) => {
           if (err) {
-            console.error(" Error al registrar LOGOUT en bitácora:", err);
+            console.error(" Error al registrar LOGOUT en bitácora:", err.message);
           } else {
-            console.log(" Bitácora: cierre de sesión registrado correctamente");
+            console.log(" LOGOUT registrado correctamente en bitácora");
           }
         }
       );
     } catch (tokenError) {
-      console.warn(" Token inválido o expirado durante LOGOUT:", tokenError.message);
+      console.warn(" Token inválido o expirado al registrar LOGOUT:", tokenError.message);
     }
   } else {
     console.warn(" No se encontró token en cookie durante LOGOUT.");
   }
 
-  // Eliminar cookie de sesión
+  // Eliminar cookie de sesión 
   res.clearCookie("token", { httpOnly: true, sameSite: "lax" });
   res.json({ mensaje: "Sesión cerrada correctamente." });
 });
@@ -1193,7 +1203,7 @@ app.delete('/api/estado_ticket/:id', (request, response) => {
     conexion.query(query, values, function(err, rows, fields) {
         if (err) {
             console.log(err.message);
-            return response.status(500).json({ error: err.message }); // Mejor manejo de errores
+            return response.status(500).json({ error: err.message }); 
         }
         registrarBitacora("productos", "DELETE", request.body);
         response.json("DELETE EXITOSO!");
@@ -1201,38 +1211,43 @@ app.delete('/api/estado_ticket/:id', (request, response) => {
     });
 });
 
-// GET /api/proveedores
-app.get('/api/proveedores', (req, res) => {
-  const { id_usuario } = req.query;
 
-  conexion.query(
-    'SELECT * FROM tbl_proveedor',
-    (err, rows) => {
-      if (err) {
-        console.error('Error al listar proveedores:', err);
-        return res.status(500).json({ mensaje: 'Error al listar proveedores' });
-      }
+//CRUD PROVEEDORES
 
-      if (id_usuario) {
-        conexion.query(
-          'CALL event_bitacora(?, ?, ?, ?)',
-          [id_usuario, 2, 'GET', 'Se consultó la lista de proveedores'],
-          (e) => {
-            if (e) console.error('Error bitácora (GET lista proveedores):', e);
-            return res.json(rows);
-          }
-        );
-      } else {
-        return res.json(rows);
-      }
+app.get('/api/proveedores', (req, res) => { 
+  const { id_usuario, usuario } = req.query;
+  const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
+
+  const ID_OBJETO_PROVEEDOR = 2;
+
+  conexion.query('SELECT * FROM tbl_proveedor', (err, rows) => {
+    if (err) {
+      console.error('Error al listar proveedores:', err);
+      return res.status(500).json({ mensaje: 'Error al listar proveedores' });
     }
-  );
+
+    if (id_usuario) {
+      console.log("🔎 Ejecutando logBitacora(GET proveedores)");
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_PROVEEDOR,
+        id_usuario: Number(id_usuario),
+        accion: 'GET',
+        descripcion: 'Se consultó la lista de proveedores',
+        usuario: usuarioNombre
+      });
+    }
+
+    return res.json(rows);
+  });
 });
 
-// GET /api/proveedores/:id
 app.get('/api/proveedores/:id', (req, res) => {
   const { id } = req.params;
-  const { id_usuario } = req.query;
+  const { id_usuario, usuario } = req.query;
+  const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
+
+  const ID_OBJETO_PROVEEDOR = 2;
 
   conexion.query(
     'SELECT * FROM tbl_proveedor WHERE id_proveedor = ?',
@@ -1242,38 +1257,34 @@ app.get('/api/proveedores/:id', (req, res) => {
         console.error('Error al obtener proveedor:', err);
         return res.status(500).json({ error: 'Error al obtener proveedor' });
       }
-      if (!rows || rows.length === 0) {
+      if (!rows.length) {
         return res.status(404).json({ error: 'Proveedor no encontrado' });
       }
 
       if (id_usuario) {
-        conexion.query(
-          'CALL event_bitacora(?, ?, ?, ?)',
-          [id_usuario, 2, 'GET', `Se consultó el proveedor id=${id}`],
-          (e) => {
-            if (e) console.error('Error bitácora (GET proveedor):', e);
-            return res.json(rows[0]);
-          }
-        );
-      } else {
-        return res.json(rows[0]);
+        logBitacora(conexion, {
+          id_objeto: ID_OBJETO_PROVEEDOR,
+          id_usuario: Number(id_usuario),
+          accion: 'GET',
+          descripcion: `Se consultó el proveedor id=${id}`,
+          usuario: usuarioNombre
+        });
       }
+
+      return res.json(rows[0]);
     }
   );
 });
 
-// POST /api/proveedor
 app.post('/api/proveedores', (req, res) => {
   const { nombre, telefono, direccion } = req.body;
-  const { id_usuario } = req.query;
+  const { id_usuario, usuario } = req.query;
+  const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
+
+  const ID_OBJETO_PROVEEDOR = 2;
 
   if (!nombre || !telefono || !direccion) {
-    return res
-      .status(400)
-      .json({ error: 'Faltan campos obligatorios (nombre, telefono, direccion)' });
-  }
-  if (!/^\d{8}$/.test(telefono)) {
-    return res.status(400).json({ error: 'El teléfono debe ser numérico de 8 dígitos' });
+    return res.status(400).json({ error: 'Faltan campos obligatorios' });
   }
 
   conexion.query(
@@ -1285,76 +1296,64 @@ app.post('/api/proveedores', (req, res) => {
         return res.status(500).json({ error: 'Error al insertar proveedor' });
       }
 
-      const nuevo = {
+      if (id_usuario) {
+        logBitacora(conexion, {
+          id_objeto: ID_OBJETO_PROVEEDOR,
+          id_usuario: Number(id_usuario),
+          accion: 'POST',
+          descripcion: `Se creó proveedor (${nombre})`,
+          usuario: usuarioNombre
+        });
+      }
+
+      return res.status(201).json({
         id_proveedor: result.insertId,
         nombre,
         telefono,
-        direccion,
-      };
-
-      if (id_usuario) {
-        conexion.query(
-          'CALL event_bitacora(?, ?, ?, ?)',
-          [id_usuario, 2, 'POST', `Se creó proveedor id=${result.insertId}`],
-          (e) => {
-            if (e) console.error('Error bitácora (POST proveedor):', e);
-            return res.status(201).json(nuevo);
-          }
-        );
-      } else {
-        return res.status(201).json(nuevo);
-      }
+        direccion
+      });
     }
   );
 });
 
-// PUT /api/proveedor/:id
 app.put('/api/proveedores/:id', (req, res) => {
   const { id } = req.params;
   const { nombre, telefono, direccion } = req.body;
-  const { id_usuario } = req.query;
+  const { id_usuario, usuario } = req.query;
+  const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
 
-  if (!nombre || !telefono || !direccion) {
-    return res
-      .status(400)
-      .json({ error: 'Faltan campos obligatorios (nombre, telefono, direccion)' });
-  }
-  if (!/^\d{8}$/.test(telefono)) {
-    return res.status(400).json({ error: 'El teléfono debe ser numérico de 8 dígitos' });
-  }
+  const ID_OBJETO_PROVEEDOR = 2;
 
   conexion.query(
-    'UPDATE tbl_proveedor SET nombre = ?, telefono = ?, direccion = ? WHERE id_proveedor = ?',
+    'UPDATE tbl_proveedor SET nombre=?, telefono=?, direccion=? WHERE id_proveedor=?',
     [nombre, telefono, direccion, id],
     (err, result) => {
       if (err) {
         console.error('Error al actualizar proveedor:', err);
         return res.status(500).json({ error: 'Error al actualizar proveedor' });
       }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ error: 'Proveedor no encontrado' });
-      }
 
       if (id_usuario) {
-        conexion.query(
-          'CALL event_bitacora(?, ?, ?, ?)',
-          [id_usuario, 2, 'PUT', `Se actualizó proveedor id=${id}`],
-          (e) => {
-            if (e) console.error('Error bitácora (PUT proveedor):', e);
-            return res.json({ message: 'Proveedor actualizado correctamente' });
-          }
-        );
-      } else {
-        return res.json({ message: 'Proveedor actualizado correctamente' });
+        logBitacora(conexion,{
+          id_objeto: ID_OBJETO_PROVEEDOR,
+          id_usuario: Number(id_usuario),
+          accion: 'PUT',
+          descripcion: `Se actualizó proveedor (${nombre})`,
+          usuario: usuarioNombre
+        });
       }
+
+      return res.json({ message: 'Proveedor actualizado correctamente' });
     }
   );
 });
 
-// DELETE /api/proveedor/:id
 app.delete('/api/proveedores/:id', (req, res) => {
   const { id } = req.params;
-  const { id_usuario } = req.query;
+  const { id_usuario, usuario } = req.query;
+  const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
+
+  const ID_OBJETO_PROVEEDOR = 2;
 
   conexion.query(
     'DELETE FROM tbl_proveedor WHERE id_proveedor = ?',
@@ -1364,22 +1363,18 @@ app.delete('/api/proveedores/:id', (req, res) => {
         console.error('Error al eliminar proveedor:', err);
         return res.status(500).json({ error: 'Error al eliminar proveedor' });
       }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ error: 'Proveedor no encontrado' });
-      }
 
       if (id_usuario) {
-        conexion.query(
-          'CALL event_bitacora(?, ?, ?, ?)',
-          [id_usuario, 2, 'DELETE', `Se eliminó proveedor id=${id}`],
-          (e) => {
-            if (e) console.error('Error bitácora (DELETE proveedor):', e);
-            return res.json({ message: 'Proveedor eliminado correctamente' });
-          }
-        );
-      } else {
-        return res.json({ message: 'Proveedor eliminado correctamente' });
+        logBitacora(conexion,{
+          id_objeto: ID_OBJETO_PROVEEDOR,
+          id_usuario: Number(id_usuario),
+          accion: 'DELETE',
+          descripcion: `Se eliminó proveedor (${nombre})`,
+          usuario: usuarioNombre
+        });
       }
+
+      return res.json({ message: 'Proveedor eliminado correctamente' });
     }
   );
 });
