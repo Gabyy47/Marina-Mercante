@@ -2,11 +2,95 @@
 var Express = require("express");
 var bodyParser = require("body-parser");
 var cors = require("cors");
-var mysql = require("mysql2");
+const mysql = require('mysql2');
 var jwt = require("jsonwebtoken");
 var cookieParser = require("cookie-parser");
 var speakeasy = require("speakeasy");
-var QRCode = require("qrcode"); // si luego quieres enrolar 2FA con QR
+var QRCode = require("qrcode"); 
+
+// Código para preparar el envío de correo
+require('dotenv').config();
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
+
+const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
+
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT),
+  secure: true, 
+  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  connectionTimeout: 10000,
+  greetingTimeout: 8000,
+  socketTimeout: 10000,
+});
+
+transporter.verify((err, ok) => {
+  if (err) {
+    console.error('SMTP VERIFY ERROR:', err);
+  } else {
+    console.log('SMTP READY:', ok);
+  }
+});
+
+// Genera un código de 6 dígitos
+function gen6Code() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// Hash del código 
+function hashCode(code) {
+  return crypto.createHash('sha256').update(code).digest('hex');
+}
+
+// ===== Registrar acción en la bitácora =====
+function logBitacora(conexion, { id_objeto, id_usuario, accion, descripcion, usuario }, callback) {
+  
+  // Validación y valores por defecto
+  const params = [
+    id_objeto ?? null,
+    id_usuario ?? null,
+    accion ?? 'SIN_ACCION',
+    descripcion ?? '',
+    usuario ?? 'sistema'
+  ];
+  const query = "CALL event_bitacora(?, ?, ?, ?, ?)";
+  conexion.query(query, params, (err, results) => {
+    if (err) {
+      console.error(" Error al registrar en bitácora:", err.message);
+      if (callback) callback(err);
+    } else {
+      console.log(` Bitácora registrada correctamente → Acción: ${accion}`);
+      if (callback) callback(null, results);
+    }
+  });
+}
+
+// Envía email con código 
+async function SendVerifyMail({ to, name, code }) {
+  try {
+    console.log("Intentando enviar correo a:", to);
+
+    const info = await transporter.sendMail({
+      from: `"Soporte Marina Mercante" <${process.env.SMTP_USER}>`,
+      to,
+      subject: "Tu código de verificación",
+      html: `
+        <p>Hola ${name || ""},</p>
+        <p>Tu código de verificación es:</p>
+        <p style="font-size:20px;font-weight:bold;letter-spacing:3px;">${code}</p>
+        <p>Caduca en 15 minutos.</p>
+      `,
+    });
+    console.log("Correo de verificación enviado a:", to);
+    console.log("ID del mensaje:", info.messageId);
+
+    return info; 
+  } catch (err) {
+    console.error("Error enviando código:", err.message || err);
+    throw err;
+  }
+}
 
 // Logger opcional
 let logger;
@@ -17,16 +101,17 @@ try {
 }
 
 // ===== Conexión a la base de datos =====
-var conexion = mysql.createConnection({
+
+const conexion = mysql.createPool({
   host: "localhost",
-  port: "3306",
+  port: 3306,
   user: "root",
-  password: "123456",
+  password: "MysqlRoot47!",
   database: "marina_mercante",
-  charset: "utf8mb4", //  importante para ñ y acentos
-  authPlugins: {
-    mysql_native_password: () => () => Buffer.from("1984"),
-  },
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  charset: "utf8mb4",
 });
 
 // ===== Inicio de Express.js =====
@@ -58,17 +143,19 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ===== Listener y conexión a MySQL =====
-const PORT = 49146;
-const SECRET_KEY = "1984";
+// ===== Verificar conexión a la BD y levantar servidor =====
+const PORT = process.env.PORT || 49146; 
+const SECRET_KEY = process.env.SECRET_KEY || "1984"; 
 
 app.listen(PORT, () => {
-  conexion.connect((err) => {
+  conexion.query("SELECT 1", (err, results) => {
     if (err) {
-      logger.error("Error al conectar a la BD: " + err.message);
-      throw err;
+      console.error(" Error al conectar a la BD:", err.message);
+      process.exit(1);
+    } else {
+      console.log(" Conexión a la BD con éxito.");
+      console.log(` API corriendo en http://localhost:${PORT}`);
     }
-    logger.info(`Conexión a la BD con éxito! API en http://localhost:${PORT}`);
   });
 });
 
@@ -111,141 +198,225 @@ app.get("/api/seguro", verificarToken, (req, res) => {
 });
 
 // ====== CRUD PARA tbl_rol ======
+
 // Listar roles
-app.get("/api/roles", (req, res) => {
-  const q = "SELECT id_rol, nombre, descripcion FROM tbl_rol ORDER BY nombre ASC";
-  conexion.query(q, (err, rows) => {
-    if (err) return handleDatabaseError(err, res, "Error al listar roles:");
+app.get("/api/roles", async (req, res) => {
+  const { id_usuario } = req.query; 
+  try {
+    const [rows] = await conexion.promise().query(
+      "SELECT id_rol, nombre, descripcion FROM tbl_rol ORDER BY nombre ASC"
+    );
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 4, "GET", "Se consultó la lista de roles"]
+      );
+    }
+
     res.json(rows);
-  });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al listar roles:");
+  }
 });
 
 // Obtener rol por ID
-app.get("/api/roles/:id", (req, res) => {
-  const q = "SELECT id_rol, nombre, descripcion FROM tbl_rol WHERE id_rol = ? LIMIT 1";
-  conexion.query(q, [parseInt(req.params.id)], (err, rows) => {
-    if (err) return handleDatabaseError(err, res, "Error al obtener rol:");
-    if (rows.length === 0) return res.status(404).json({ mensaje: "Rol no encontrado" });
+app.get("/api/roles/:id", async (req, res) => {
+  const { id } = req.params;
+  const { id_usuario } = req.query;
+  try {
+    const [rows] = await conexion.promise().query(
+      "SELECT id_rol, nombre, descripcion FROM tbl_rol WHERE id_rol = ? LIMIT 1",
+      [parseInt(id)]
+    );
+
+    if (rows.length === 0)
+      return res.status(404).json({ mensaje: "Rol no encontrado" });
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 4, "GET", `Se consultó el rol con ID ${id}`]
+      );
+    }
+
     res.json(rows[0]);
-  });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al obtener rol:");
+  }
 });
 
 // Crear rol
-app.post("/api/roles", (req, res) => {
-  let { nombre, descripcion } = req.body;
+app.post("/api/roles", async (req, res) => {
+  let { nombre, descripcion, id_usuario } = req.body;
+
   if (!nombre || typeof nombre !== "string" || !nombre.trim()) {
     return res.status(400).json({ mensaje: "El nombre del rol es requerido" });
   }
+
   nombre = nombre.trim().toUpperCase();
   descripcion = (descripcion ?? "").toString().trim();
 
-  const q = "INSERT INTO tbl_rol (nombre, descripcion) VALUES (?, ?)";
-  conexion.query(q, [nombre, descripcion], (err, result) => {
-    if (err) {
-      if (err.code === "ER_DUP_ENTRY") {
-        return res.status(409).json({ mensaje: "Ya existe un rol con ese nombre" });
-      }
-      return handleDatabaseError(err, res, "Error al crear rol:");
+  try {
+    const [result] = await conexion.promise().query(
+      "INSERT INTO tbl_rol (nombre, descripcion) VALUES (?, ?)",
+      [nombre, descripcion]
+    );
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 4, "INSERT", `Se creó el rol ${nombre}`]
+      );
     }
+
     res.status(201).json({
       mensaje: "Rol creado correctamente",
       id_rol: result.insertId,
       nombre,
       descripcion
     });
-  });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ mensaje: "Ya existe un rol con ese nombre" });
+    }
+    handleDatabaseError(err, res, "Error al crear rol:");
+  }
 });
 
 // Actualizar rol
-app.put("/api/roles/:id", (req, res) => {
+app.put("/api/roles/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  let { nombre, descripcion } = req.body;
+  let { nombre, descripcion, id_usuario } = req.body;
 
   if (!id) return res.status(400).json({ mensaje: "ID inválido" });
   if (!nombre || typeof nombre !== "string" || !nombre.trim()) {
     return res.status(400).json({ mensaje: "El nombre del rol es requerido" });
   }
+
   nombre = nombre.trim().toUpperCase();
   descripcion = (descripcion ?? "").toString().trim();
 
-  const q = "UPDATE tbl_rol SET nombre = ?, descripcion = ? WHERE id_rol = ?";
-  conexion.query(q, [nombre, descripcion, id], (err, result) => {
-    if (err) {
-      if (err.code === "ER_DUP_ENTRY") {
-        return res.status(409).json({ mensaje: "Ya existe un rol con ese nombre" });
-      }
-      return handleDatabaseError(err, res, "Error al actualizar rol:");
-    }
+  try {
+    const [result] = await conexion.promise().query(
+      "UPDATE tbl_rol SET nombre = ?, descripcion = ? WHERE id_rol = ?",
+      [nombre, descripcion, id]
+    );
+
     if (result.affectedRows === 0) {
       return res.status(404).json({ mensaje: "Rol no encontrado" });
     }
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 4, "UPDATE", `Se actualizó el rol ${nombre} (ID ${id})`]
+      );
+    }
+
     res.json({ mensaje: "Rol actualizado correctamente" });
-  });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ mensaje: "Ya existe un rol con ese nombre" });
+    }
+    handleDatabaseError(err, res, "Error al actualizar rol:");
+  }
 });
 
 // Eliminar rol
-app.delete("/api/roles/:id", (req, res) => {
+app.delete("/api/roles/:id", async (req, res) => {
   const id = parseInt(req.params.id);
+  const { id_usuario } = req.query;
+
   if (!id) return res.status(400).json({ mensaje: "ID inválido" });
 
-  const q = "DELETE FROM tbl_rol WHERE id_rol = ?";
-  conexion.query(q, [id], (err, result) => {
-    if (err) {
-      // Si el rol está asignado a usuarios y la FK es RESTRICT, devolver 409
-      if (err.code === "ER_ROW_IS_REFERENCED_2" || err.code === "ER_ROW_IS_REFERENCED") {
-        return res.status(409).json({
-          mensaje: "No se puede eliminar: el rol está asignado a uno o más usuarios"
-        });
-      }
-      return handleDatabaseError(err, res, "Error al eliminar rol:");
-    }
+  try {
+    const [result] = await conexion.promise().query(
+      "DELETE FROM tbl_rol WHERE id_rol = ?",
+      [id]
+    );
+
     if (result.affectedRows === 0) {
       return res.status(404).json({ mensaje: "Rol no encontrado" });
     }
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 4, "DELETE", `Se eliminó el rol con ID ${id}`]
+      );
+    }
+
     res.json({ mensaje: "Rol eliminado correctamente" });
-  });
+  } catch (err) {
+    if (err.code === "ER_ROW_IS_REFERENCED_2" || err.code === "ER_ROW_IS_REFERENCED") {
+      return res.status(409).json({
+        mensaje: "No se puede eliminar: el rol está asignado a uno o más usuarios"
+      });
+    }
+    handleDatabaseError(err, res, "Error al eliminar rol:");
+  }
 });
 
-// ===== LOGIN (permitir a todo usuario con rol asignado distinto de "SIN ROL") =====
+// ===== LOGIN =====
 app.post("/api/login", (req, res) => {
   console.log("Ruta /api/login llamada");
+
   const { nombre_usuario, contraseña } = req.body;
 
+  // Validar campos
   if (!nombre_usuario || !contraseña) {
-    return res.status(400).json({ mensaje: "Faltan campos obligatorios." });
+    return res.status(400).json({ mensaje: "Faltan campos obligatorios." }); 
   }
 
-  const query = `
+  const q = `
     SELECT 
       u.id_usuario, 
       u.nombre_usuario, 
-      u.contraseña,
-      u.id_rol,
+      u.contraseña, 
+      u.is_verified, 
+      u.id_rol, 
       r.nombre AS rol_nombre
     FROM tbl_usuario u
-    LEFT JOIN tbl_rol r ON r.id_rol = u.id_rol
-    WHERE UPPER(u.nombre_usuario) = UPPER(?) AND u.contraseña = ?
+    LEFT JOIN tbl_rol r ON u.id_rol = r.id_rol
+    WHERE u.nombre_usuario = ? AND u.contraseña = ?
     LIMIT 1
   `;
 
-  conexion.query(query, [nombre_usuario, contraseña], (err, rows) => {
-    if (err) return handleDatabaseError(err, res, "Error en inicio de sesión:");
-    if (rows.length === 0) {
+  // Ejecutar consulta
+  conexion.query(q, [nombre_usuario, contraseña], (err, rows) => {
+    if (err) {
+      console.error("Error en consulta de login:", err);
+      return res.status(500).json({ mensaje: "Error interno en la base de datos." });
+    }
+
+    if (!rows || rows.length === 0) {
       return res.status(401).json({ mensaje: "Credenciales inválidas." });
     }
 
     const usuario = rows[0];
     const rolNombre = (usuario.rol_nombre || "").trim().toUpperCase();
 
-    // Sin rol asignado o rol "SIN ROL" => bloquear
+    // Verificar rol
     if (!usuario.id_rol || !usuario.rol_nombre || rolNombre === "SIN ROL") {
       return res.status(403).json({
-        mensaje:
-          "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
+        mensaje: "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
       });
     }
 
-    // Si tiene cualquier rol válido => permitir
+    // Verificar correo (asegúrate de que is_verified sea 1)
+    if (Number(usuario.is_verified) !== 1) {
+      return res.status(403).json({
+        mensaje: "Debes verificar tu correo antes de iniciar sesión.",
+      });
+    }
+
+    // Generar token JWT
     const token = jwt.sign(
       {
         id_usuario: usuario.id_usuario,
@@ -257,120 +428,435 @@ app.post("/api/login", (req, res) => {
       { expiresIn: "1h" }
     );
 
+    // Guardar token en cookie
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false, // true en producción con HTTPS
+      secure: false, // Cambiar a true en producción (HTTPS)
       sameSite: "lax",
-      maxAge: 3600000,
+      maxAge: 3600000, // 1h
     });
 
-    res.json({
-      mensaje: "Inicio de sesión exitoso",
-      token,
-      usuario: {
+    // Registrar inicio en bitácora
+    const ID_OBJETO_LOGIN = 1; 
+
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_LOGIN,
         id_usuario: usuario.id_usuario,
-        nombre_usuario: usuario.nombre_usuario,
-        id_rol: usuario.id_rol,
-        rol_nombre: usuario.rol_nombre,
+        accion: "LOGIN",
+        descripcion: `El usuario ${usuario.nombre_usuario} inició sesión.`,
+        usuario: usuario.nombre_usuario,
       },
-    });
+      (bitErr) => {
+        if (bitErr) {
+          console.error("No se pudo registrar LOGIN en bitácora:", bitErr.message);
+        }
+        // Responder al cliente (no bloqueamos por bitácora)
+        return res.json({
+          mensaje: "Inicio de sesión exitoso",
+          token,
+          usuario: {
+            id_usuario: usuario.id_usuario,
+            nombre_usuario: usuario.nombre_usuario,
+            id_rol: usuario.id_rol,
+            rol_nombre: usuario.rol_nombre,
+          },
+        });
+      }
+    );
   });
 });
-
 
 // ===== LOGOUT =====
 app.get("/api/logout", (req, res) => {
+  console.log("Ruta /api/logout llamada");
+  const token = req.cookies.token;
+  const ID_OBJETO_LOGIN = 1; 
+
+  if (token) {
+    try {
+      // Verificar y decodificar token
+      const decoded = jwt.verify(token, SECRET_KEY);
+
+      // Registrar acción en bitácora
+      logBitacora(
+        conexion,
+        {
+          id_objeto: ID_OBJETO_LOGIN,
+          id_usuario: decoded.id_usuario,
+          accion: "LOGOUT",
+          descripcion: `El usuario ${decoded.nombre_usuario} cerró sesión.`,
+          usuario: decoded.nombre_usuario,
+        },
+        (err) => {
+          if (err) {
+            console.error(" Error al registrar LOGOUT en bitácora:", err.message);
+          } else {
+            console.log(" LOGOUT registrado correctamente en bitácora");
+          }
+        }
+      );
+    } catch (tokenError) {
+      console.warn(" Token inválido o expirado al registrar LOGOUT:", tokenError.message);
+    }
+  } else {
+    console.warn(" No se encontró token en cookie durante LOGOUT.");
+  }
+
+  // Eliminar cookie de sesión 
   res.clearCookie("token", { httpOnly: true, sameSite: "lax" });
-  res.json({ mensaje: "Sesión cerrada" });
+  res.json({ mensaje: "Sesión cerrada correctamente." });
 });
 
-// ===== Recuperar contraseña (verifica TOTP) =====
-app.post("/api/recuperar-contrasena", async (req, res) => {
-  const { nombre_usuario, codigo } = req.body;
+// ===== Recuperación de contraseña =====
+// === 1. Iniciar recuperación ===
+app.post("/api/recuperar-iniciar", (req, res) => { 
+  console.log("▶ /api/recuperar-iniciar llamado con:", req.body); 
+  const { nombre_usuario, correo } = req.body;
 
-  if (!nombre_usuario || !codigo) {
+  // Validación básica
+  if (!nombre_usuario && !correo) {
+    return res.status(400).json({ mensaje: "Proporciona nombre de usuario o correo." }); 
+  }
+
+  const where = nombre_usuario ? "nombre_usuario = ?" : "correo = ?";
+  const value = nombre_usuario || correo;
+
+  const qSel = `
+    SELECT id_usuario, correo, nombre_usuario
+    FROM tbl_usuario
+    WHERE ${where}
+    LIMIT 1
+  `;
+
+  // Buscar usuario
+  conexion.query(qSel, [value], (err, rows) => {
+    if (err) {
+      console.error(" Error SQL (buscar usuario):", err);
+      return res.status(500).json({ mensaje: "Error al buscar usuario." });
+    }
+
+    if (!rows.length) {
+      return res.status(404).json({ mensaje: "Usuario no encontrado." });
+    }
+
+    const u = rows[0];
+    const code = Math.floor(100000 + Math.random() * 900000).toString(); // Código de 6 dígitos 
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Expira en 10 minutos 
+
+    const qUpd = `
+      UPDATE tbl_usuario
+      SET reset_code = ?, reset_expires = ?, reset_used = 0
+      WHERE id_usuario = ?
+    `;
+
+    // Guardar código en BD 
+    conexion.query(qUpd, [code, expiresAt, u.id_usuario], (err2) => { 
+      if (err2) {
+        console.error(" Error al guardar código:", err2);
+        return res.status(500).json({ mensaje: "Error al guardar código de recuperación." });
+      }
+
+      // Responder de inmediato al cliente
+      res.json({ mensaje: "Código generado y enviado (si el correo es válido)." });
+
+      // Enviar el correo sin bloquear respuesta
+      transporter.sendMail(
+        {
+          from: process.env.MAIL_FROM || `"Soporte Marina Mercante" <${process.env.SMTP_USER}>`,
+          to: u.correo,
+          subject: "Código para recuperar tu contraseña",
+          text: `Hola ${u.nombre_usuario}, tu código es: ${code}. Vence en 10 minutos.`,
+          html: `
+            <p>Hola <b>${u.nombre_usuario}</b>,</p>
+            <p>Tu código de recuperación es: <b>${code}</b></p>
+            <p>Vence en <b>10 minutos</b>.</p>
+            <p>Si no solicitaste esto, ignora este mensaje.</p>
+          `,
+        },
+        (mailErr, info) => {
+          if (mailErr) {
+            console.error(" Error enviando correo:", mailErr);
+          } else {
+            console.log(" EMAIL ENVIADO:", info.response);
+          }
+        }
+      );
+    });
+  });
+});
+
+// === 2. Verificar el código ===
+app.post("/api/recuperar-verificar", (req, res) => {
+  const { correo, nombre_usuario, codigo } = req.body;
+
+  if ((!correo && !nombre_usuario) || !codigo) {
     return res.status(400).json({ mensaje: "Faltan datos." });
   }
 
-  try {
-    // conflicto resuelto: usamos nombre_usuario correctamente
-    const query =
-      "SELECT secreto_google_auth FROM tbl_usuario WHERE nombre_usuario = ? LIMIT 1";
+  const where = nombre_usuario ? "nombre_usuario = ?" : "correo = ?";
+  const value = nombre_usuario || correo;
 
-    conexion.query(query, [nombre_usuario], async (err, rows) => {
-      if (err)
-        return handleDatabaseError(
-          err,
-          res,
-          "Error al obtener el secreto del usuario:"
-        );
-      if (rows.length === 0)
-        return res.status(404).json({ mensaje: "Usuario no encontrado" });
+  const qSel = `
+    SELECT id_usuario, reset_code, reset_expires, reset_used
+    FROM tbl_usuario
+    WHERE ${where}
+    LIMIT 1
+  `;
 
-      const secreto = rows[0].secreto_google_auth;
+  conexion.query(qSel, [value], (err, rows) => {
+    if (err) {
+      console.error(" Error al buscar código:", err);
+      return res.status(500).json({ mensaje: "Error al buscar código." });
+    }
 
-      const verificado = speakeasy.totp.verify({
-        secret: secreto,
-        encoding: "base32",
-        token: codigo,
-        window: 1, // tolerancia 30s
-      });
+    if (!rows.length) {
+      return res.status(404).json({ mensaje: "Usuario no encontrado." });
+    }
 
-      if (verificado) {
-        res.json({
-          mensaje:
-            "Código válido. Puedes proceder a restablecer la contraseña.",
-        });
-      } else {
-        res.status(400).json({ mensaje: "Código inválido" });
-      }
+    const u = rows[0];
+    const now = new Date();
+
+    if (!u.reset_code || !u.reset_expires) {
+      return res.status(400).json({ mensaje: "No hay solicitud activa de recuperación." });
+    }
+    if (u.reset_used) {
+      return res.status(400).json({ mensaje: "Este código ya fue usado." });
+    }
+    if (now > new Date(u.reset_expires)) {
+      return res.status(400).json({ mensaje: "El código ha expirado." });
+    }
+    if (u.reset_code !== codigo) {
+      return res.status(400).json({ mensaje: "Código incorrecto." });
+    }
+
+    // Marcar el código como usado
+    const qUpd = "UPDATE tbl_usuario SET reset_used = 1 WHERE id_usuario = ?";
+    conexion.query(qUpd, [u.id_usuario], (err2) => {
+      if (err2) console.error(" Error marcando código usado:", err2);
     });
-  } catch (error) {
-    console.error("Error en recuperación de contraseña:", error);
-    res.status(500).json({ mensaje: "Error del servidor" });
+
+    res.json({ mensaje: "Código verificado. Ahora puedes establecer una nueva contraseña." });
+  });
+});
+
+
+// === 3. Restablecer contraseña ===
+app.post("/api/recuperar-restablecer", (req, res) => {
+  const { correo, nombre_usuario, nueva_contraseña } = req.body;
+
+  if ((!correo && !nombre_usuario) || !nueva_contraseña) {
+    return res.status(400).json({ mensaje: "Faltan datos." });
+  }
+
+  const where = nombre_usuario ? "nombre_usuario = ?" : "correo = ?";
+  const value = nombre_usuario || correo;
+
+  const qSel = `
+    SELECT id_usuario
+    FROM tbl_usuario
+    WHERE ${where} AND reset_used = 1
+    LIMIT 1
+  `;
+
+  conexion.query(qSel, [value], (err, rows) => {
+    if (err) {
+      console.error(" Error al verificar usuario:", err);
+      return res.status(500).json({ mensaje: "Error al verificar usuario." });
+    }
+
+    if (!rows.length) {
+      return res.status(404).json({ mensaje: "Verificación inválida o expirada." });
+    }
+
+    const u = rows[0];
+
+    const qUpd = `
+      UPDATE tbl_usuario
+      SET contraseña = ?, reset_code = NULL, reset_expires = NULL, reset_used = 0
+      WHERE id_usuario = ?
+    `;
+
+    conexion.query(qUpd, [nueva_contraseña, u.id_usuario], (err2) => {
+      if (err2) {
+        console.error(" Error al actualizar contraseña:", err2); 
+        return res.status(500).json({ mensaje: "Error al actualizar contraseña." });
+      }
+
+      res.json({ mensaje: "Contraseña actualizada. Ya puedes iniciar sesión." });
+    });
+  });
+});
+
+// === Helper: generar código de 6 dígitos ===
+function gen6Code() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// ===== CRUD PARA tbl_usuario =====
+// Listar todos los usuarios
+app.get("/api/usuario", async (req, res) => {
+  const { id_usuario } = req.query; // o extrae del token en un futuro
+  try {
+    const [rows] = await conexion.promise().query(
+      "SELECT * FROM tbl_usuario ORDER BY id_usuario DESC"
+    );
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 3, "GET", "Se consultó la lista de usuarios"]
+      );
+    }
+
+    res.json(rows);
+  } catch (err) {
+    handleDatabaseError(err, res, "Error en listado de usuarios:");
   }
 });
 
-// ===== Verificar si un usuario existe =====
-app.post("/api/verificar-usuario", (req, res) => {
-  const { nombre_usuario } = req.body;
-
-  if (!nombre_usuario)
-    return res.status(400).json({ mensaje: "nombre_usuario es requerido" });
-
-  const query = "SELECT 1 FROM tbl_usuario WHERE nombre_usuario = ? LIMIT 1";
-  conexion.query(query, [nombre_usuario], (err, rows) => {
-    if (err)
-      return res
-        .status(500)
-        .json({ mensaje: "Error al verificar el usuario" });
-    res.json({ existe: rows.length > 0 });
-  });
-});
-
-// ===== Listar todos los usuarios =====
-app.get("/api/usuario", (req, res) => {
-  const query = "SELECT * FROM tbl_usuario ORDER BY id_usuario DESC";
-  conexion.query(query, (err, rows) => {
-    if (err) return handleDatabaseError(err, res, "Error en listado de usuario:");
-    res.json(rows);
-  });
-});
-
-// ===== Obtener usuario por ID =====
-app.get("/api/usuario/:id", (req, res) => {
+// Obtener usuario por ID
+app.get("/api/usuario/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const query = "SELECT * FROM tbl_usuario WHERE id_usuario = ? LIMIT 1";
-  conexion.query(query, [id], (err, rows) => {
-    if (err)
-      return handleDatabaseError(err, res, "Error al obtener usuario por ID:");
+  const { id_usuario } = req.query;
+
+  try {
+    const [rows] = await conexion.promise().query(
+      "SELECT * FROM tbl_usuario WHERE id_usuario = ? LIMIT 1",
+      [id]
+    );
+
     if (rows.length === 0)
       return res.status(404).json({ mensaje: "Usuario no encontrado" });
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 3, "GET", `Se consultó el usuario con ID ${id}`]
+      );
+    }
+
     res.json(rows[0]);
-  });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al obtener usuario por ID:");
+  }
 });
 
-// ===== Leer una cookie específica (debug) =====
+// Insertar nuevo usuario
+app.post("/api/usuario", async (req, res) => {
+  const {
+    id_rol,
+    nombre,
+    apellido,
+    correo,
+    nombre_usuario,
+    contraseña,
+    id_usuario: id_admin // usuario que realiza la acción (admin)
+  } = req.body;
+
+  if (!nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
+    return res.status(400).json({ error: "Faltan campos obligatorios." });
+  }
+
+  const query = `
+    INSERT INTO tbl_usuario (id_rol, nombre, apellido, correo, nombre_usuario, contraseña)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
+  const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, contraseña];
+
+  try {
+    const [result] = await conexion.promise().query(query, values);
+
+    // Registrar en bitácora
+    if (id_admin) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [
+          id_admin,
+          3,
+          "INSERT",
+          `Se agregó el usuario ${nombre_usuario} (${nombre} ${apellido})`
+        ]
+      );
+    }
+
+    res.json({ mensaje: "Usuario agregado correctamente", id: result.insertId });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al insertar usuario:");
+  }
+});
+
+// Actualizar usuario
+app.put("/api/usuario", async (req, res) => {
+  const { id_usuario, id_rol, nombre, apellido, correo, nombre_usuario, id_admin } = req.body;
+
+  if (!id_usuario)
+    return res.status(400).json({ error: "id_usuario es requerido" });
+
+  const query = `
+    UPDATE tbl_usuario
+    SET id_rol = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?
+    WHERE id_usuario = ?
+  `;
+  const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, id_usuario];
+
+  try {
+    const [result] = await conexion.promise().query(query, values);
+
+    if (result.affectedRows === 0)
+      return res.status(404).json({ mensaje: "Usuario no encontrado" });
+
+    // Registrar en bitácora
+    if (id_admin) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [
+          id_admin,
+          3,
+          "UPDATE",
+          `Se actualizó el usuario ${nombre_usuario} (ID ${id_usuario})`
+        ]
+      );
+    }
+
+    res.json({ mensaje: "Usuario actualizado correctamente" });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al actualizar usuario:");
+  }
+});
+
+// Eliminar usuario
+app.delete("/api/usuario/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { id_admin } = req.query; // el usuario que ejecuta el borrado
+
+  try {
+    const [result] = await conexion.promise().query(
+      "DELETE FROM tbl_usuario WHERE id_usuario = ?",
+      [id]
+    );
+
+    if (result.affectedRows === 0)
+      return res.status(404).json({ mensaje: "Usuario no encontrado" });
+
+    // Registrar en bitácora
+    if (id_admin) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_admin, 3, "DELETE", `Se eliminó el usuario con ID ${id}`]
+      );
+    }
+
+    res.json({ mensaje: "Usuario eliminado correctamente" });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al eliminar usuario:");
+  }
+});
+
+// ===== Leer cookie (sin bitácora, es solo debug) =====
 app.get("/api/cookie", (req, res) => {
   if (!req.cookies) {
     return res.status(400).json({
@@ -388,75 +874,165 @@ app.get("/api/cookie", (req, res) => {
   }
 });
 
-// ===== Insertar nuevo usuario (rol opcional; por defecto sin rol) =====
-app.post("/api/usuario", (req, res) => {
-  const {
-    id_rol,          // opcional: admin puede pasarlo; si no, NULL
-    nombre,
-    apellido,
-    correo,
-    nombre_usuario,
-    contraseña,
-  } = req.body;
+function gen6Code() {
+  return Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
+}
+
+function hashCode(code) {
+  return crypto.createHash('sha256').update(String(code)).digest('hex');
+}
+
+// === REGISTRO con envío de CÓDIGO ===
+app.post('/api/auth/register', (req, res) => {
+  const { nombre, apellido, correo, nombre_usuario, contraseña } = req.body;
 
   if (!nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
-    return res.status(400).json({ error: "Faltan campos obligatorios." });
+    return res.status(400).json({ mensaje: 'Rellena todos los campos.' });
   }
 
-  const query = `
-    INSERT INTO tbl_usuario (id_rol, nombre, apellido, correo, nombre_usuario, contraseña)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `;
-  const values = [
-    id_rol ?? null,
-    nombre,
-    apellido,
-    correo,
-    nombre_usuario,
-    contraseña,
-  ];
+  const qTok = `
+  INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, used, created_at)
+  VALUES (?, ?, ?, 0, NOW())
+`;
 
-  conexion.query(query, values, (err) => {
-    if (err) return handleDatabaseError(err, res, "Error al insertar usuario:");
-    res.json({ mensaje: "Usuario agregado correctamente" });
+
+  conexion.query(qUser, [nombre, apellido, correo, nombre_usuario, contraseña], (err, result) => {
+    if (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ mensaje: 'Correo o nombre de usuario ya existe.' });
+      }
+      return handleDatabaseError(err, res, 'Error al registrar usuario:');
+    }
+
+    const id_usuario = result.insertId;
+
+    // 1) Generar y hashear código
+    const code = gen6Code();
+    const code_hash = hashCode(code);
+    const expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+    // 2) Guardar token
+    const qTok = `
+  INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, used, created_at)
+  VALUES (?, ?, ?, 0, NOW())
+`;
+    conexion.query(qTok, [id_usuario, code_hash, expires_at], async (err2) => {
+      if (err2) return handleDatabaseError(err2, res, 'Error al crear token:');
+
+      // 3) Enviar correo
+      try {
+        await SendVerifyMail({ to: correo, name: nombre, code });
+        return res.status(201).json({
+          mensaje: 'Usuario creado. Revisa tu correo para verificar la cuenta con el código enviado.'
+        });
+      } catch (e) {
+        console.error('Email error:', e);
+        return res.status(500).json({
+          mensaje: 'Usuario creado, pero falló el envío del correo. Intenta “reenviar código”.'
+        });
+      }
+    });
   });
 });
 
+// REENVIAR CÓDIGO
+app.post('/api/reenviar', (req, res) => {
+  const { correo } = req.body;
+  if (!correo) return res.status(400).json({ mensaje: 'correo es requerido' });
 
-// ===== Actualizar usuario =====
-app.put("/api/usuario", (req, res) => {
-  const { id_usuario, id_rol, nombre, apellido, correo, nombre_usuario } = req.body;
+  const qUser = `SELECT id_usuario, nombre, is_verified FROM tbl_usuario WHERE correo = ? LIMIT 1`;
+  conexion.query(qUser, [correo], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, 'Error al buscar usuario:');
+    if (rows.length === 0) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
 
-  if (!id_usuario)
-    return res.status(400).json({ error: "id_usuario es requerido" });
+    const u = rows[0];
+    if (u.is_verified) return res.json({ mensaje: 'El correo ya está verificado.' });
 
-  const query = `
-    UPDATE tbl_usuario
-    SET id_rol = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?
-    WHERE id_usuario = ?
-  `;
-  const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, id_usuario];
+    // Generar nuevo código
+    const code = gen6Code();
+    const code_hash = hashCode(code);
+    const expires_at = new Date(Date.now() + 15 * 60 * 1000);
 
-  conexion.query(query, values, (err) => {
-    if (err) return handleDatabaseError(err, res, "Error al actualizar usuario:");
-    res.json({ mensaje: "Usuario actualizado correctamente" });
+    // Guardar el nuevo token
+    const qTok = `
+      INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, created_at)
+      VALUES (?, ?, ?, NOW())
+    `;
+
+    conexion.query(qTok, [u.id_usuario, code_hash, expires_at], async (e3) => {
+      if (e3) return handleDatabaseError(e3, res, 'Error al crear nuevo token:');
+
+      try {
+        await SendVerifyMail({ to: correo, name: u.nombre, code });
+        return res.json({ mensaje: 'Se envió un nuevo código de verificación.' });
+      } catch (e) {
+        console.error('Email error:', e);
+        return res.status(500).json({ mensaje: 'No se pudo enviar el código.' });
+      }
+    });
   });
 });
 
+//Verificar código
+app.post('/api/auth/verify-code', (req, res) => {
+  const { correo, code } = req.body;
+  if (!correo || !code) {
+    return res.status(400).json({ mensaje: 'Faltan datos: correo o código.' });
+  }
 
-// ===== Eliminar usuario =====
-app.delete("/api/usuario/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const query = "DELETE FROM tbl_usuario WHERE id_usuario = ?";
-  conexion.query(query, [id], (err) => {
-    if (err)
-      return handleDatabaseError(err, res, "Error al eliminar usuario:");
-    res.json({ mensaje: "Usuario eliminado correctamente" });
+  // Buscar usuario
+  const qUser = `SELECT id_usuario FROM tbl_usuario WHERE correo = ? LIMIT 1`;
+  conexion.query(qUser, [correo], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, 'Error al buscar usuario:');
+    if (rows.length === 0) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+
+    const id_usuario = rows[0].id_usuario;
+
+    // Generar hash del código recibido
+    const code_hash = crypto.createHash('sha256').update(String(code)).digest('hex');
+
+    // Buscar token válido
+    const qTok = `
+      SELECT id_verificar_email, expires_at, used
+      FROM verificar_email_tokens
+      WHERE id_usuario = ? AND token_hash = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    conexion.query(qTok, [id_usuario, code_hash], (err2, tokRows) => {
+      if (err2) return handleDatabaseError(err2, res, 'Error al verificar token:');
+      if (tokRows.length === 0) {
+        return res.status(400).json({ mensaje: 'Código inválido o incorrecto.' });
+      }
+
+      const token = tokRows[0];
+      if (token.used) {
+        return res.status(400).json({ mensaje: 'Este código ya fue utilizado.' });
+      }
+
+      const now = new Date();
+      if (new Date(token.expires_at) < now) {
+        return res.status(400).json({ mensaje: 'El código ha expirado. Solicita uno nuevo.' });
+      }
+
+      // Marcar token como usado y usuario como verificado
+      const qUpdTok = `UPDATE verificar_email_tokens SET used = 1 WHERE id_verificar_email = ?`;
+      const qUpdUser = `UPDATE tbl_usuario SET is_verified = 1 WHERE id_usuario = ?`;
+
+      conexion.query(qUpdTok, [token.id_verificar_email], (err3) => {
+        if (err3) return handleDatabaseError(err3, res, 'Error al actualizar token:');
+        conexion.query(qUpdUser, [id_usuario], (err4) => {
+          if (err4) return handleDatabaseError(err4, res, 'Error al actualizar usuario:');
+
+          res.json({ mensaje: 'Cuenta verificada correctamente.' });
+        });
+      });
+    });
   });
 });
+
 
 //GET cliente 
-
 app.get('/api/cliente', (request, response) => {
     var query = "SELECT * FROM tbl_cliente";
     
@@ -580,9 +1156,9 @@ app.get('/api/estado_ticket/:id',(request, response)=>{
 });
 
 
-//Post insert de productos
+//Post insert de estado ticket
 app.post('/api/estado_ticket', (request, response) => {
-    var query = "INSERT INTO marina_mercante.tl_estado_ticket (estado) VALUES (?)";
+    var query = "INSERT INTO marina_mercante.tbl_estado_ticket (estado) VALUES (?)"; 
     var values = [
         request.body["estado"],
         
@@ -627,7 +1203,7 @@ app.delete('/api/estado_ticket/:id', (request, response) => {
     conexion.query(query, values, function(err, rows, fields) {
         if (err) {
             console.log(err.message);
-            return response.status(500).json({ error: err.message }); // Mejor manejo de errores
+            return response.status(500).json({ error: err.message }); 
         }
         registrarBitacora("productos", "DELETE", request.body);
         response.json("DELETE EXITOSO!");
@@ -635,72 +1211,177 @@ app.delete('/api/estado_ticket/:id', (request, response) => {
     });
 });
 
-// ====== CRUD PARA tl_proveedor ======  
-app.get('/api/proveedor', (req, res) => {  
-  const query = "SELECT * FROM tl_proveedor";  
-  conexion.query(query, (err, rows) => {  
-    if (err) {  
-      console.error("Error al listar proveedor:", err);  
-      res.status(500).json({ error: "Error al listar proveedor" });  
-      return;  
-    }  
-    res.json(rows);  
-  });  
-});  
-  
-app.get('/api/proveedor/:id', (req, res) => {  
-  const query = "SELECT * FROM tl_proveedor WHERE id_proveedor = ?";  
-  conexion.query(query, [req.params.id], (err, rows) => {  
-    if (err) {  
-      console.error("Error al obtener proveedor:", err);  
-      res.status(500).json({ error: "Error al obtener proveedor" });  
-      return;  
-    }  
-    res.json(rows[0]);  
-  });  
-});  
-  
-app.post('/api/proveedor', (req, res) => {  
-  const { nombre, telefono, direccion } = req.body;  
-  const query = "INSERT INTO tbl_proveedor (nombre, telefono, direccion) VALUES (?, ?, ?)";  
-  conexion.query(query, [nombre, telefono, direccion], (err, result) => {  
-    if (err) {  
-      console.error("Error al insertar proveedor:", err);  
-      res.status(500).json({ error: "Error al insertar proveedor" });  
-      return;  
-    }  
-    res.json({ message: "Proveedor insertado correctamente", id: result.insertId });  
-  });  
-});  
-  
-app.put('/api/proveedor/:id', (req, res) => {  
-  const { nombre, telefono, direccion } = req.body;  
-  const query = "UPDATE tbl_proveedor SET nombre = ?, telefono = ?, direccion = ? WHERE id_proveedor = ?";  
-  conexion.query(query, [nombre, telefono, direccion, req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al actualizar proveedor:", err);  
-      res.status(500).json({ error: "Error al actualizar proveedor" });  
-      return;  
-    }  
-    res.json({ message: "Proveedor actualizado correctamente" });  
-  });  
-});  
-  
-app.delete('/api/proveedor/:id', (req, res) => {  
-  const query = "DELETE FROM tl_proveedor WHERE id_proveedor = ?";  
-  conexion.query(query, [req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al eliminar proveedor:", err);  
-      res.status(500).json({ error: "Error al eliminar proveedor" });  
-      return;  
-    }  
-    res.json({ message: "Proveedor eliminado correctamente" });  
-  });  
-});  
+
+//CRUD PROVEEDORES
+
+app.get('/api/proveedores', (req, res) => { 
+  const { id_usuario, usuario } = req.query;
+  const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
+
+  const ID_OBJETO_PROVEEDOR = 2;
+
+  conexion.query('SELECT * FROM tbl_proveedor', (err, rows) => {
+    if (err) {
+      console.error('Error al listar proveedores:', err);
+      return res.status(500).json({ mensaje: 'Error al listar proveedores' });
+    }
+
+    if (id_usuario) {
+      console.log("🔎 Ejecutando logBitacora(GET proveedores)");
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_PROVEEDOR,
+        id_usuario: Number(id_usuario),
+        accion: 'GET',
+        descripcion: 'Se consultó la lista de proveedores',
+        usuario: usuarioNombre
+      });
+    }
+
+    return res.json(rows);
+  });
+});
+
+app.get('/api/proveedores/:id', (req, res) => {
+  const { id } = req.params;
+  const { id_usuario, usuario } = req.query;
+  const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
+
+  const ID_OBJETO_PROVEEDOR = 2;
+
+  conexion.query(
+    'SELECT * FROM tbl_proveedor WHERE id_proveedor = ?',
+    [id],
+    (err, rows) => {
+      if (err) {
+        console.error('Error al obtener proveedor:', err);
+        return res.status(500).json({ error: 'Error al obtener proveedor' });
+      }
+      if (!rows.length) {
+        return res.status(404).json({ error: 'Proveedor no encontrado' });
+      }
+
+      if (id_usuario) {
+        logBitacora(conexion, {
+          id_objeto: ID_OBJETO_PROVEEDOR,
+          id_usuario: Number(id_usuario),
+          accion: 'GET',
+          descripcion: `Se consultó el proveedor id=${id}`,
+          usuario: usuarioNombre
+        });
+      }
+
+      return res.json(rows[0]);
+    }
+  );
+});
+
+app.post('/api/proveedores', (req, res) => {
+  const { nombre, telefono, direccion } = req.body;
+  const { id_usuario, usuario } = req.query;
+  const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
+
+  const ID_OBJETO_PROVEEDOR = 2;
+
+  if (!nombre || !telefono || !direccion) {
+    return res.status(400).json({ error: 'Faltan campos obligatorios' });
+  }
+
+  conexion.query(
+    'INSERT INTO tbl_proveedor (nombre, telefono, direccion) VALUES (?, ?, ?)',
+    [nombre, telefono, direccion],
+    (err, result) => {
+      if (err) {
+        console.error('Error al insertar proveedor:', err);
+        return res.status(500).json({ error: 'Error al insertar proveedor' });
+      }
+
+      if (id_usuario) {
+        logBitacora(conexion, {
+          id_objeto: ID_OBJETO_PROVEEDOR,
+          id_usuario: Number(id_usuario),
+          accion: 'POST',
+          descripcion: `Se creó proveedor (${nombre})`,
+          usuario: usuarioNombre
+        });
+      }
+
+      return res.status(201).json({
+        id_proveedor: result.insertId,
+        nombre,
+        telefono,
+        direccion
+      });
+    }
+  );
+});
+
+app.put('/api/proveedores/:id', (req, res) => {
+  const { id } = req.params;
+  const { nombre, telefono, direccion } = req.body;
+  const { id_usuario, usuario } = req.query;
+  const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
+
+  const ID_OBJETO_PROVEEDOR = 2;
+
+  conexion.query(
+    'UPDATE tbl_proveedor SET nombre=?, telefono=?, direccion=? WHERE id_proveedor=?',
+    [nombre, telefono, direccion, id],
+    (err, result) => {
+      if (err) {
+        console.error('Error al actualizar proveedor:', err);
+        return res.status(500).json({ error: 'Error al actualizar proveedor' });
+      }
+
+      if (id_usuario) {
+        logBitacora(conexion,{
+          id_objeto: ID_OBJETO_PROVEEDOR,
+          id_usuario: Number(id_usuario),
+          accion: 'PUT',
+          descripcion: `Se actualizó proveedor (${nombre})`,
+          usuario: usuarioNombre
+        });
+      }
+
+      return res.json({ message: 'Proveedor actualizado correctamente' });
+    }
+  );
+});
+
+app.delete('/api/proveedores/:id', (req, res) => {
+  const { id } = req.params;
+  const { id_usuario, usuario } = req.query;
+  const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
+
+  const ID_OBJETO_PROVEEDOR = 2;
+
+  conexion.query(
+    'DELETE FROM tbl_proveedor WHERE id_proveedor = ?',
+    [id],
+    (err, result) => {
+      if (err) {
+        console.error('Error al eliminar proveedor:', err);
+        return res.status(500).json({ error: 'Error al eliminar proveedor' });
+      }
+
+      if (id_usuario) {
+        logBitacora(conexion,{
+          id_objeto: ID_OBJETO_PROVEEDOR,
+          id_usuario: Number(id_usuario),
+          accion: 'DELETE',
+          descripcion: `Se eliminó proveedor (${nombre})`,
+          usuario: usuarioNombre
+        });
+      }
+
+      return res.json({ message: 'Proveedor eliminado correctamente' });
+    }
+  );
+});
 
 // ====== CRUD PARA tl_compra ======  
 app.get('/api/compra', (req, res) => {  
-  const query = "SELECT * FROM tl_compra";  
+  const query = "SELECT * FROM tbl_compra";  
   conexion.query(query, (err, rows) => {  
     if (err) {  
       console.error("Error al listar compras:", err);  
@@ -1064,156 +1745,220 @@ app.delete('/api/visualizaciones/:id', (req, res) => {
   });
 });
 
-// ====== CRUD PARA tl_bitacora ======
+// GET /api/bitacora
+app.get('/api/bitacora', (req, res) => {
+  const { id_usuario } = req.query;
 
-// Listar todas las bitácoras
-app.get('/api/bitacoras', (req, res) => {
-  const query = "SELECT * FROM tbl_bitacora";
-  conexion.query(query, (err, rows) => {
-    if (err) {
-      console.error("Error al listar bitácoras:", err);
-      res.status(500).json({ error: "Error al listar bitácoras" });
-      return;
+  conexion.query(
+    'SELECT * FROM tbl_bitacora ORDER BY fecha ASC',
+    (err, rows) => {
+      if (err) {
+        console.error('Error al listar la bitácora:', err);
+        return res.status(500).json({ mensaje: 'Error al listar bitácora' });
+      }
+      // Registrar en bitácora
+      if (id_usuario) {
+        conexion.query(
+          'CALL event_bitacora(?, ?, ?, ?)',
+          [id_usuario, 14, 'CONSULTA', 'Se consultó la lista completa de la bitácora del sistema'],
+          (e) => {
+            if (e) console.error('Error bitácora (GET bitácoras):', e);
+            return res.json(rows);
+          }
+        );
+      } else {
+        return res.json(rows);
+      }
     }
-    res.json(rows);
-  });
+  );
 });
 
-// Obtener una bitácora por ID
-app.get('/api/bitacoras/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_bitacora WHERE id_bitacora = ?";
-  conexion.query(query, [req.params.id], (err, rows) => {
-    if (err) {
-      console.error("Error al obtener bitácora:", err);
-      res.status(500).json({ error: "Error al obtener bitácora" });
-      return;
+// GET /api/bitacora/:id
+app.get('/api/bitacora/:id', (req, res) => {
+  const { id_usuario } = req.query;
+  const { id } = req.params;
+
+  conexion.query(
+    'SELECT * FROM tbl_bitacora WHERE id_bitacora = ?',
+    [id],
+    (err, rows) => {
+      if (err) {
+        console.error('Error al obtener bitácora:', err);
+        return res.status(500).json({ error: 'Error al obtener bitácora' });
+      }
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({ error: 'Registro de bitácora no encontrado' });
+      }
+      if (id_usuario) {
+        conexion.query(
+          'CALL event_bitacora(?, ?, ?, ?)',
+          [id_usuario, 14, 'CONSULTA', `Se consultó la bitácora con ID ${id}`],
+          (e) => {
+            if (e) console.error('Error bitácora (GET bitácora por id):', e);
+            return res.json(rows[0]);
+          }
+        );
+      } else {
+        return res.json(rows[0]);
+      }
     }
-    res.json(rows[0]);
-  });
+  );
 });
 
-// Insertar una nueva bitácora (fecha se genera automáticamente)
-app.post('/api/bitacoras', (req, res) => {
-  const { id_usuario, accion } = req.body;
-  const query = `
-    INSERT INTO tbl_bitacora (id_usuario, accion, fecha)
-    VALUES (?, ?, NOW())
-  `;
-  conexion.query(query, [id_usuario, accion], (err, result) => {
-    if (err) {
-      console.error("Error al insertar bitácora:", err);
-      res.status(500).json({ error: "Error al insertar bitácora" });
-      return;
-    }
-    res.json({ message: "Bitácora insertada correctamente", id: result.insertId });
-  });
-});
-
-// Actualizar una bitácora
-app.put('/api/bitacoras/:id', (req, res) => {
-  const { id_usuario, accion } = req.body;
-  const query = `
-    UPDATE tbl_bitacora
-    SET id_usuario = ?, accion = ?, fecha = NOW()
-    WHERE id_bitacora = ?
-  `;
-  conexion.query(query, [id_usuario, accion, req.params.id], (err) => {
-    if (err) {
-      console.error("Error al actualizar bitácora:", err);
-      res.status(500).json({ error: "Error al actualizar bitácora" });
-      return;
-    }
-    res.json({ message: "Bitácora actualizada correctamente" });
-  });
-});
-
-// Eliminar una bitácora
-app.delete('/api/bitacoras/:id', (req, res) => {
-  const query = "DELETE FROM tbl_bitacora WHERE id_bitacora = ?";
-  conexion.query(query, [req.params.id], (err) => {
-    if (err) {
-      console.error("Error al eliminar bitácora:", err);
-      res.status(500).json({ error: "Error al eliminar bitácora" });
-      return;
-    }
-    res.json({ message: "Bitácora eliminada correctamente" });
-  });
-});
-
-// ====== CRUD PARA tl_productos ======
-
+// ====== CRUD PARA tbl_productos ======
 // Listar todos los productos
-app.get('/api/productos', (req, res) => {
-  const query = "SELECT * FROM tbl_productos";
-  conexion.query(query, (err, rows) => {
-    if (err) {
-      console.error("Error al listar productos:", err);
-      res.status(500).json({ error: "Error al listar productos" });
-      return;
+app.get('/api/productos', async (req, res) => {
+  const { id_usuario } = req.query; // usuario que realiza la consulta
+
+  try {
+    const [rows] = await conexion.promise().query("SELECT * FROM tbl_productos");
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 6, "GET", "Se consultó la lista completa de productos"]
+      );
     }
+
     res.json(rows);
-  });
+  } catch (err) {
+    console.error("Error al listar productos:", err);
+    res.status(500).json({ error: "Error al listar productos" });
+  }
 });
+
 
 // Obtener un producto por ID
-app.get('/api/productos/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_productos WHERE id_producto = ?";
-  conexion.query(query, [req.params.id], (err, rows) => {
-    if (err) {
-      console.error("Error al obtener producto:", err);
-      res.status(500).json({ error: "Error al obtener producto" });
-      return;
+app.get('/api/productos/:id', async (req, res) => {
+  const { id_usuario } = req.query;
+  const id = req.params.id;
+
+  try {
+    const [rows] = await conexion.promise().query(
+      "SELECT * FROM tbl_productos WHERE id_producto = ?",
+      [id]
+    );
+
+    if (!rows.length)
+      return res.status(404).json({ error: "Producto no encontrado" });
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 6, "GET", `Se consultó el producto con ID ${id}`]
+      );
     }
+
     res.json(rows[0]);
-  });
+  } catch (err) {
+    console.error("Error al obtener producto:", err);
+    res.status(500).json({ error: "Error al obtener producto" });
+  }
 });
+
 
 // Insertar un nuevo producto
-app.post('/api/productos', (req, res) => {
-  const { cantidad_minima, cantidad_maxima } = req.body;
-  const query = `
-    INSERT INTO tbl_productos (cantidad_minima, cantidad_maxima)
-    VALUES (?, ?)
-  `;
-  conexion.query(query, [cantidad_minima, cantidad_maxima], (err, result) => {
-    if (err) {
-      console.error("Error al insertar producto:", err);
-      res.status(500).json({ error: "Error al insertar producto" });
-      return;
+app.post('/api/productos', async (req, res) => {
+  const { cantidad_minima, cantidad_maxima, id_usuario } = req.body;
+
+  try {
+    const [result] = await conexion.promise().query(
+      `
+      INSERT INTO tbl_productos (cantidad_minima, cantidad_maxima)
+      VALUES (?, ?)
+      `,
+      [cantidad_minima, cantidad_maxima]
+    );
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [
+          id_usuario,
+          6,
+          "INSERT",
+          `Se agregó un nuevo producto (ID ${result.insertId}) con límites ${cantidad_minima}-${cantidad_maxima}`
+        ]
+      );
     }
+
     res.json({ message: "Producto insertado correctamente", id: result.insertId });
-  });
+  } catch (err) {
+    console.error("Error al insertar producto:", err);
+    res.status(500).json({ error: "Error al insertar producto" });
+  }
 });
+
 
 // Actualizar un producto
-app.put('/api/productos/:id', (req, res) => {
-  const { cantidad_minima, cantidad_maxima } = req.body;
-  const query = `
-    UPDATE tbl_productos
-    SET cantidad_minima = ?, cantidad_maxima = ?
-    WHERE id_producto = ?
-  `;
-  conexion.query(query, [cantidad_minima, cantidad_maxima, req.params.id], (err) => {
-    if (err) {
-      console.error("Error al actualizar producto:", err);
-      res.status(500).json({ error: "Error al actualizar producto" });
-      return;
+app.put('/api/productos/:id', async (req, res) => {
+  const id = req.params.id;
+  const { cantidad_minima, cantidad_maxima, id_usuario } = req.body;
+
+  try {
+    const [result] = await conexion.promise().query(
+      `
+      UPDATE tbl_productos
+      SET cantidad_minima = ?, cantidad_maxima = ?
+      WHERE id_producto = ?
+      `,
+      [cantidad_minima, cantidad_maxima, id]
+    );
+
+    if (result.affectedRows === 0)
+      return res.status(404).json({ error: "Producto no encontrado" });
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [
+          id_usuario,
+          6,
+          "UPDATE",
+          `Se actualizó el producto con ID ${id}: min=${cantidad_minima}, max=${cantidad_maxima}`
+        ]
+      );
     }
+
     res.json({ message: "Producto actualizado correctamente" });
-  });
+  } catch (err) {
+    console.error("Error al actualizar producto:", err);
+    res.status(500).json({ error: "Error al actualizar producto" });
+  }
 });
 
+
 // Eliminar un producto
-app.delete('/api/productos/:id', (req, res) => {
-  const query = "DELETE FROM tbl_productos WHERE id_producto = ?";
-  conexion.query(query, [req.params.id], (err) => {
-    if (err) {
-      console.error("Error al eliminar producto:", err);
-      res.status(500).json({ error: "Error al eliminar producto" });
-      return;
+app.delete('/api/productos/:id', async (req, res) => {
+  const id = req.params.id;
+  const { id_usuario } = req.query;
+
+  try {
+    const [result] = await conexion.promise().query(
+      "DELETE FROM tbl_productos WHERE id_producto = ?",
+      [id]
+    );
+
+    if (result.affectedRows === 0)
+      return res.status(404).json({ error: "Producto no encontrado" });
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 6, "DELETE", `Se eliminó el producto con ID ${id}`]
+      );
     }
+
     res.json({ message: "Producto eliminado correctamente" });
-  });
+  } catch (err) {
+    console.error("Error al eliminar producto:", err);
+    res.status(500).json({ error: "Error al eliminar producto" });
+  }
 });
 
 //tabla kardex 
