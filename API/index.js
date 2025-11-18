@@ -92,6 +92,17 @@ async function SendVerifyMail({ to, name, code }) {
   }
 }
 
+// ===== Middlewares de auth (IMPORTAR SOLO UNA VEZ) =====
+const {
+  verificarToken,
+  autorizarRoles,
+  autorizarSelfOrAdmin,
+  bloquearCambioRolSiNoAdmin,
+} = require("./middlewares/auth");
+
+const registrarBitacora = (..._args) => {}; // TODO: implementar de verdad
+const meRoutes = require("./routes/me");
+
 // Logger opcional
 let logger;
 try {
@@ -106,16 +117,7 @@ const conexion = mysql.createPool({
   host: "localhost",
   port: 3306,
   user: "root",
-<<<<<<< Updated upstream
-<<<<<<< HEAD
-  password: "",
-=======
-  password: "MysqlRoot47!",
->>>>>>> 7866162b611d04ced93b18738e19e2fd95c0686f
-=======
-  password: "H0nduras",
-  password: "",
->>>>>>> Stashed changes
+  password: "1984",
   database: "marina_mercante",
   waitForConnections: true,
   connectionLimit: 10,
@@ -152,9 +154,10 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ===== Verificar conexión a la BD y levantar servidor =====
-const PORT = process.env.PORT || 49146; 
-const SECRET_KEY = process.env.SECRET_KEY || "1984"; 
+app.use("/api", meRoutes(conexion, { verificarToken, bloquearCambioRolSiNoAdmin }));
+// ===== Listener y conexión a MySQL =====
+const PORT = 49146;
+const SECRET_KEY = process.env.JWT_SECRET || "1984";
 
 app.listen(PORT, () => {
   conexion.query("SELECT 1", (err, results) => {
@@ -174,21 +177,6 @@ function handleDatabaseError(err, res, message) {
   res.status(500).json({ error: err.message || "Error de servidor" });
 }
 
-// JWT middleware
-const verificarToken = (req, res, next) => {
-  const token =
-    req.cookies.token || req.headers.authorization?.replace(/^Bearer\s+/i, "");
-  if (!token) return res.status(401).json({ mensaje: "Acceso denegado" });
-
-  try {
-    const verificado = jwt.verify(token, SECRET_KEY);
-    req.usuario = verificado;
-    next();
-  } catch (error) {
-    res.status(401).json({ mensaje: "Token inválido" });
-  }
-};
-
 // ===== Rutas base =====
 app.get("/api/json", (req, res) => {
   res.json({ text: "HOLA ESTE ES UN JSON" });
@@ -202,14 +190,14 @@ app.get("/", (req, res) => {
 app.get("/api/seguro", verificarToken, (req, res) => {
   res.json({
     mensaje: "Acceso concedido a la ruta segura",
-    usuario: req.usuario,
+    usuario: req.user,
   });
 });
 
 // ====== CRUD PARA tbl_rol ======
 
 // Listar roles
-app.get("/api/roles", async (req, res) => {
+app.get("/api/roles", verificarToken, autorizarRoles("Administrador"),async (req, res) => {
   const { id_usuario } = req.query; 
   try {
     const [rows] = await conexion.promise().query(
@@ -223,7 +211,6 @@ app.get("/api/roles", async (req, res) => {
         [id_usuario, 4, "GET", "Se consultó la lista de roles"]
       );
     }
-
     res.json(rows);
   } catch (err) {
     handleDatabaseError(err, res, "Error al listar roles:");
@@ -258,9 +245,8 @@ app.get("/api/roles/:id", async (req, res) => {
 });
 
 // Crear rol
-app.post("/api/roles", async (req, res) => {
+app.post("/api/roles", verificarToken, autorizarRoles("Administrador"), async (req, res) => {
   let { nombre, descripcion, id_usuario } = req.body;
-
   if (!nombre || typeof nombre !== "string" || !nombre.trim()) {
     return res.status(400).json({ mensaje: "El nombre del rol es requerido" });
   }
@@ -297,7 +283,7 @@ app.post("/api/roles", async (req, res) => {
 });
 
 // Actualizar rol
-app.put("/api/roles/:id", async (req, res) => {
+app.put("/api/roles/:id", verificarToken, autorizarRoles("Administrador"),async (req, res) => {
   const id = parseInt(req.params.id);
   let { nombre, descripcion, id_usuario } = req.body;
 
@@ -337,7 +323,7 @@ app.put("/api/roles/:id", async (req, res) => {
 });
 
 // Eliminar rol
-app.delete("/api/roles/:id", async (req, res) => {
+app.delete("/api/roles/:id", verificarToken, autorizarRoles("Administrador"), async (req, res) => {
   const id = parseInt(req.params.id);
   const { id_usuario } = req.query;
 
@@ -396,7 +382,6 @@ app.post("/api/login", (req, res) => {
     WHERE u.nombre_usuario = ? AND u.contraseña = ?
     LIMIT 1
   `;
-
   // Ejecutar consulta
   conexion.query(q, [nombre_usuario, contraseña], (err, rows) => {
     if (err) {
@@ -433,7 +418,7 @@ app.post("/api/login", (req, res) => {
         id_rol: usuario.id_rol,
         rol_nombre: usuario.rol_nombre,
       },
-      SECRET_KEY,
+         process.env.JWT_SECRET || "1984",
       { expiresIn: "1h" }
     );
 
@@ -883,6 +868,7 @@ app.get("/api/cookie", (req, res) => {
   }
 });
 
+<<<<<<< Updated upstream
 function gen6Code() {
   return Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
 }
@@ -894,6 +880,18 @@ function hashCode(code) {
 // === REGISTRO con envío de CÓDIGO ===
 app.post('/api/auth/register', (req, res) => {
   const { nombre, apellido, correo, nombre_usuario, contraseña } = req.body;
+=======
+// ===== Insertar nuevo usuario (rol opcional; por defecto sin rol) =====
+app.post("/api/usuario", verificarToken, autorizarRoles("Administrador"),  (req, res) => {
+  const {
+    id_rol,          // opcional: admin puede pasarlo; si no, NULL
+    nombre,
+    apellido,
+    correo,
+    nombre_usuario,
+    contraseña,
+  } = req.body;
+>>>>>>> Stashed changes
 
   if (!nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
     return res.status(400).json({ mensaje: 'Rellena todos los campos.' });
@@ -949,6 +947,7 @@ app.post('/api/reenviar', (req, res) => {
   const { correo } = req.body;
   if (!correo) return res.status(400).json({ mensaje: 'correo es requerido' });
 
+<<<<<<< Updated upstream
   const qUser = `SELECT id_usuario, nombre, is_verified FROM tbl_usuario WHERE correo = ? LIMIT 1`;
   conexion.query(qUser, [correo], (err, rows) => {
     if (err) return handleDatabaseError(err, res, 'Error al buscar usuario:');
@@ -981,6 +980,34 @@ app.post('/api/reenviar', (req, res) => {
     });
   });
 });
+=======
+// ===== Actualizar usuario =====
+// ACTUALIZAR usuario -> él mismo o Administrador
+app.put(
+  "/api/usuario/:id",
+  verificarToken,
+  autorizarSelfOrAdmin("id"),
+  bloquearCambioRolSiNoAdmin, // impide que no-admin cambie su rol
+  (req, res) => {
+    const id = Number(req.params.id);
+
+    // solo campos permitidos para no-admin:
+    const campos = [ "nombre", "apellido", "correo", "nombre_usuario", "contraseña"];
+    // si es admin, puede incluir id_rol:
+    if (req.user.rol_nombre === "Administrador") campos.push("id_rol");
+
+    const update = {};
+    for (const c of campos) if (req.body[c] !== undefined) update[c] = req.body[c];
+    if (!Object.keys(update).length) return res.status(400).json({ mensaje: "Nada para actualizar" });
+
+    conexion.query("UPDATE tbl_usuario SET ? WHERE id_usuario = ?", [update, id], (err, result) => {
+      if (err) return res.status(500).json({ mensaje: "Error al actualizar" });
+      if (result.affectedRows === 0) return res.status(404).json({ mensaje: "Usuario no encontrado" });
+      res.json({ mensaje: "Usuario actualizado correctamente" });
+    });
+  }
+);
+>>>>>>> Stashed changes
 
 //Verificar código
 app.post('/api/auth/verify-code', (req, res) => {
@@ -1813,7 +1840,6 @@ app.get('/api/bitacora/:id', (req, res) => {
     }
   );
 });
-
 // ====== CRUD PARA tbl_productos ======
 // Listar todos los productos
 app.get('/api/productos', async (req, res) => {
@@ -1828,6 +1854,67 @@ app.get('/api/productos', async (req, res) => {
         "CALL event_bitacora(?, ?, ?, ?)",
         [id_usuario, 6, "GET", "Se consultó la lista completa de productos"]
       );
+// Insertar una nueva bitácora (fecha se genera automáticamente)
+app.post('/api/bitacoras', (req, res) => {
+  const { id_usuario, accion } = req.body;
+  const query = `
+    INSERT INTO tbl_bitacora (id_usuario, accion, fecha)
+    VALUES (?, ?, NOW())
+  `;
+  conexion.query(query, [id_usuario, accion], (err, result) => {
+    if (err) {
+      console.error("Error al insertar bitácora:", err);
+      res.status(500).json({ error: "Error al insertar bitácora" });
+      return;
+    }
+    res.json({ message: "Bitácora insertada correctamente", id: result.insertId });
+  });
+});
+
+// Actualizar una bitácora
+app.put('/api/bitacoras/:id', (req, res) => {
+  const { id_usuario, accion } = req.body;
+  const query = `
+    UPDATE tbl_bitacora
+    SET id_usuario = ?, accion = ?, fecha = NOW()
+    WHERE id_bitacora = ?
+  `;
+  conexion.query(query, [id_usuario, accion, req.params.id], (err) => {
+    if (err) {
+      console.error("Error al actualizar bitácora:", err);
+      res.status(500).json({ error: "Error al actualizar bitácora" });
+      return;
+    }
+    res.json({ message: "Bitácora actualizada correctamente" });
+  });
+});
+
+// Eliminar una bitácora
+app.delete('/api/bitacoras/:id', (req, res) => {
+  const query = "DELETE FROM tbl_bitacora WHERE id_bitacora = ?";
+  conexion.query(query, [req.params.id], (err) => {
+    if (err) {
+      console.error("Error al eliminar bitácora:", err);
+      res.status(500).json({ error: "Error al eliminar bitácora" });
+      return;
+    }
+    res.json({ message: "Bitácora eliminada correctamente" });
+  });
+});
+
+// ====== CRUD PARA tl_productos ======
+
+const SOLO_ALMACEN_O_ADMIN = autorizarRoles("Administrador", "Guarda Almacen", "Auxiliar de almacen");
+
+// Listar todos los productos
+app.get('/api/productos', verificarToken,
+  autorizarRoles("Administrador", "Guarda almacen", "Auxiliar de almacen"), (req, res) => {
+  const query = "SELECT * FROM tbl_productos";
+  conexion.query(query, (err, rows) => {
+    if (err) {
+      console.error("Error al listar productos:", err);
+      res.status(500).json({ error: "Error al listar productos" });
+      return;
     }
 
     res.json(rows);
@@ -1838,21 +1925,18 @@ app.get('/api/productos', async (req, res) => {
 });
 
 
-// Obtener un producto por ID
-app.get('/api/productos/:id', async (req, res) => {
+app.get('/api/productos/:id',verificarToken,
+  autorizarRoles("Administrador", "Guarda almacen", "Auxiliar de almacen"), async(req, res) => {
+  const query = "SELECT * FROM tbl_productos WHERE id_producto = ?";
   const { id_usuario } = req.query;
-  const id = req.params.id;
+  conexion.query(query, [req.params.id], (err, rows) => {
+    if (err) {
+      console.error("Error al obtener producto:", err);
+      res.status(500).json({ error: "Error al obtener producto" });
+      return;
+    }
 
-  try {
-    const [rows] = await conexion.promise().query(
-      "SELECT * FROM tbl_productos WHERE id_producto = ?",
-      [id]
-    );
-
-    if (!rows.length)
-      return res.status(404).json({ error: "Producto no encontrado" });
-
-    // Registrar en bitácora
+     // Registrar en bitácora
     if (id_usuario) {
       await conexion.promise().query(
         "CALL event_bitacora(?, ?, ?, ?)",
@@ -1861,10 +1945,6 @@ app.get('/api/productos/:id', async (req, res) => {
     }
 
     res.json(rows[0]);
-  } catch (err) {
-    console.error("Error al obtener producto:", err);
-    res.status(500).json({ error: "Error al obtener producto" });
-  }
 });
 
 
@@ -1931,6 +2011,50 @@ app.put('/api/productos/:id', async (req, res) => {
           `Se actualizó el producto con ID ${id}: min=${cantidad_minima}, max=${cantidad_maxima}`
         ]
       );
+
+app.post('/api/productos', verificarToken,
+  autorizarRoles("Administrador", "Guarda almacen", "Auxiliar de almacen"),(req, res) => {
+  const { nombre_producto, cantidad_minima, cantidad_maxima } = req.body;
+
+  if (!nombre_producto || cantidad_minima == null || cantidad_maxima == null) {
+    return res.status(400).json({ error: "nombre_producto, cantidad_minima y cantidad_maxima son obligatorios" });
+  }
+
+  const sql = `
+    INSERT INTO tbl_productos (nombre_producto, cantidad_minima, cantidad_maxima)
+    VALUES (?, ?, ?)
+  `;
+  conexion.query(sql, [nombre_producto.trim(), Number(cantidad_minima), Number(cantidad_maxima)], (err, result) => {
+    if (err) {
+      console.error("Error al insertar producto:", err);
+      return res.status(500).json({ error: "Error al insertar producto" });
+    }
+    res.status(201).json({ message: "Producto insertado correctamente", id: result.insertId });
+  });
+});
+
+
+app.put('/api/productos/:id', verificarToken,
+  autorizarRoles("Administrador", "Guarda almacen", "Auxiliar de almacen"), (req, res) => {
+  const { nombre_producto, cantidad_minima, cantidad_maxima } = req.body;
+
+  // Armar SET dinámico según lo que venga
+  const campos = [];
+  const valores = [];
+
+  if (nombre_producto !== undefined) { campos.push("nombre_producto = ?"); valores.push(nombre_producto.trim()); }
+  if (cantidad_minima !== undefined) { campos.push("cantidad_minima = ?"); valores.push(Number(cantidad_minima)); }
+  if (cantidad_maxima !== undefined) { campos.push("cantidad_maxima = ?"); valores.push(Number(cantidad_maxima)); }
+
+  if (!campos.length) return res.status(400).json({ error: "Nada para actualizar" });
+
+  const sql = `UPDATE tbl_productos SET ${campos.join(", ")} WHERE id_producto = ?`;
+  valores.push(req.params.id);
+
+  conexion.query(sql, valores, (err, result) => {
+    if (err) {
+      console.error("Error al actualizar producto:", err);
+      return res.status(500).json({ error: "Error al actualizar producto" });
     }
 
     res.json({ message: "Producto actualizado correctamente" });
@@ -1939,6 +2063,7 @@ app.put('/api/productos/:id', async (req, res) => {
     res.status(500).json({ error: "Error al actualizar producto" });
   }
 });
+
 
 
 // Eliminar un producto
@@ -1961,6 +2086,17 @@ app.delete('/api/productos/:id', async (req, res) => {
         "CALL event_bitacora(?, ?, ?, ?)",
         [id_usuario, 6, "DELETE", `Se eliminó el producto con ID ${id}`]
       );
+
+
+// Eliminar un producto
+app.delete('/api/productos/:id', verificarToken,
+  autorizarRoles("Administrador", "Guarda almacen", "Auxiliar de almacen"), (req, res) => {
+  const query = "DELETE FROM tbl_productos WHERE id_producto = ?";
+  conexion.query(query, [req.params.id], (err) => {
+    if (err) {
+      console.error("Error al eliminar producto:", err);
+      res.status(500).json({ error: "Error al eliminar producto" });
+      return;
     }
 
     res.json({ message: "Producto eliminado correctamente" });
