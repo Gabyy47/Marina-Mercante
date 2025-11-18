@@ -1362,7 +1362,7 @@ app.delete('/api/proveedores/:id', (req, res) => {
       if (err) {
         console.error('Error al eliminar proveedor:', err);
         return res.status(500).json({ error: 'Error al eliminar proveedor' });
-      }
+      }P
 
       if (id_usuario) {
         logBitacora(conexion,{
