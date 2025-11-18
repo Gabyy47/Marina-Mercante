@@ -1,0 +1,256 @@
+:root {
+  --dgmm-cyan: #00BCE4;
+  --dgmm-cyan-600: #00A5CB;
+  --dgmm-navy: #0E2A3B;
+  --dgmm-gray-100: #F2F5F7;
+  --dgmm-gray-300: #D7DEE3;
+  --dgmm-gray-600: #6B7280;
+  --dgmm-danger: #DC3545;
+  --white: #fff;
+}
+
+.bitacora-page {
+  min-height: 100vh;
+  background: var(--dgmm-gray-100);
+  padding: 32px 18px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.bitacora-page h1 {
+  color: var(--dgmm-navy);
+  font-weight: 700;
+  margin: 0;
+}
+
+.bitacora-card {
+  background: var(--white);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  border: 1px solid #eef2f5;
+  width: min(1000px, 100%);
+  padding: 22px 24px 28px;
+}
+
+
+.bitacora-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.bitacora-header h2 {
+  color: var(--dgmm-navy);
+  margin: 0;
+  font-size: 22px;
+}
+
+.bitacora-filtros {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.bitacora-filtros input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--dgmm-gray-300);
+  border-radius: 10px;
+  outline: none;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.bitacora-filtros input:focus {
+  border-color: var(--dgmm-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 188, 228, 0.18);
+}
+
+.bitacora-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border: 1px solid var(--dgmm-gray-300);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.bitacora-table th,
+.bitacora-table td {
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 14px;
+  border-bottom: 1px solid var(--dgmm-gray-300);
+  border-right: 1px solid var(--dgmm-gray-300); 
+}
+.bitacora-table th:last-child,
+.bitacora-table td:last-child {
+  border-right: 0.8px solid #e2e8f0;
+}
+
+.bitacora-table th {
+  background: var(--dgmm-navy);
+  color: var(--white);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.bitacora-table tr:hover td {
+  background: #f8fbfd;
+}
+
+.bitacora-table td {
+  color: #1e293b;
+}
+
+.action-tag {
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 12px;
+  display: inline-block;
+}
+
+.action-GET {
+  background: #e3f6fc;
+  color: #007b9c;
+}
+
+.action-INSERT {
+  background: #d1f8e3;
+  color: #0c784a;
+}
+
+.action-UPDATE {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.action-DELETE {
+  background: #fde2e2;
+  color: #b91c1c;
+}
+
+.action-CONSULTA {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.loading {
+  text-align: center;
+  color: var(--dgmm-gray-600);
+  margin-top: 20px;
+}
+
+.no-data {
+  text-align: center;
+  color: var(--dgmm-gray-600);
+  margin-top: 20px;
+  font-style: italic;
+}
+
+.bitacora-header {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 12px; /* ← separa los textos */
+  margin-bottom: 18px;
+}
+
+.bitacora-header h2 {
+  margin: 0;
+  font-size: 24px;
+  color: var(--dgmm-navy);
+}
+
+/* === Botón Generar Reporte === */
+.bitacora-actions {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.btn-pdf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--dgmm-danger);
+  color: var(--white);
+  border: none;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(220, 53, 69, 0.3);
+  transition: all 0.25s ease;
+}
+
+.btn-pdf:hover {
+  background: #b0212f;
+  transform: translateY(-1px);
+}
+
+/* ===== Barra superior azul (como usuarios) ===== */
+.bitacora-topbar{
+  width: min(1000px, 100%);
+  background: var(--dgmm-navy);
+  color: var(--white);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.08);
+  border:1px solid #0b2230;
+  padding: 10px 14px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom: 16px;
+}
+
+.topbar-title{
+  font-weight:700;
+  font-size:18px;
+  letter-spacing:.3px;
+}
+
+.topbar-actions{
+  display:flex;
+  gap:10px;
+}
+
+.btn{ height:36px; padding:0 14px; border-radius:10px; border:1px solid transparent; cursor:pointer; font-weight:700; font-size:14px; transition:all .2s ease; }
+.btn:disabled{ opacity:.6; cursor:not-allowed; }
+
+.btn-topbar-outline{
+  color:#e6f7fc;
+  background: rgba(255,255,255,.08);
+  border-color: rgba(255,255,255,.18);
+  text-decoration:none;
+  display:inline-flex; align-items:center; gap:8px;
+}
+.btn-topbar-outline:hover{ background: rgba(255,255,255,.14); }
+
+.btn-topbar-primary{
+  background: var(--dgmm-danger);
+  color: var(--white);
+  display:inline-flex; align-items:center; gap:8px;
+  box-shadow: 0 4px 10px rgba(220,53,69,.3);
+}
+.btn-topbar-primary:hover{ filter: brightness(.95); }
+
+/* ===== Logo arriba de la tabla ===== */
+.bitacora-logo-wrap{
+  width: min(1000px, 100%);
+  display:flex;
+  justify-content:center;
+  margin-bottom: 10px;
+}
+.bitacora-logo-wrap img{
+  height: 90px; /* ajusta si lo quieres más grande */
+  width: auto;
+}

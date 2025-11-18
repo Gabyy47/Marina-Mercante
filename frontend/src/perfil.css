@@ -1,0 +1,120 @@
+/* Overlay oscuro */
+.mm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.65);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+}
+
+/* Caja modal */
+.mm-modal {
+  width: min(600px, 92vw);
+  background: #1f2427;            /* gris muy oscuro */
+  color: #eaf9fb;                  /* casi blanco azulado */
+  border: 2px solid #69d2e7;       /* celeste */
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  padding: 22px 24px 18px;
+}
+
+/* Título */
+.mm-title {
+  text-align: center;
+  font-size: 22px;
+  margin: 2px 0 16px;
+  color: #b9f3ff;
+}
+
+/* Formulario */
+.mm-form { display: flex; flex-direction: column; gap: 10px; }
+
+.mm-label {
+  font-size: 14px;
+  color: #a7c8cf;
+  margin-top: 6px;
+}
+
+.mm-input-wrap {
+  position: relative;
+}
+
+.mm-input {
+  width: 100%;
+  padding: 10px 40px 10px 12px;
+  background: #242a2e;
+  color: #eaf9fb;
+  border: 1.5px solid #69d2e7;
+  border-radius: 8px;
+  outline: none;
+  transition: box-shadow .2s ease, border-color .2s ease;
+}
+.mm-input:focus {
+  border-color: #8ee7f7;
+  box-shadow: 0 0 0 3px rgba(105,210,231,.25);
+}
+
+.mm-pen {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: .75;
+  pointer-events: none;
+}
+
+/* Botones */
+.mm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.mm-btn {
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.mm-btn-outline {
+  background: transparent;
+  color: #eaf9fb;
+  border-color: #69d2e7;
+}
+.mm-btn-outline:hover {
+  background: rgba(105,210,231,.1);
+}
+
+.mm-btn-primary {
+  background: #69d2e7;  /* celeste */
+  color: #12333a;
+}
+.mm-btn-primary:hover { filter: brightness(1.05); }
+.mm-btn-primary:disabled { opacity: .7; cursor: wait; }
+
+/* Link cambiar contraseña */
+.mm-link {
+  margin: 8px auto 0;
+  display: inline-block;
+  background: none;
+  border: 0;
+  color: #8ee7f7;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.grid--stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.stat-card { display:flex; gap:10px; padding:12px; border:1px solid #2aa9c9; border-radius:10px; background:#1f2427; color:#eaf9fb; }
+.stat-icon { font-size:22px; display:grid; place-items:center; }
+.stat-label { font-size:12px; color:#a7c8cf; }
+.stat-value { font-size:18px; font-weight:700; }
+
+/* Loader simple */
+.mm-loading { text-align: center; padding: 28px 0; }

@@ -38,7 +38,6 @@ const Login = () => {
   const handleSubmit = async (e) => {
   e.preventDefault(); // ✅ Evita recarga
 
-  // Validar campos vacíos
   if (!formData.nombre_usuario || !formData.contraseña) {
     showToast("Completa usuario y contraseña.", "error");
     return;
@@ -51,10 +50,31 @@ const Login = () => {
       contraseña: formData.contraseña,
     });
 
-    if (data?.token) localStorage.setItem("token", data.token);
+    if (data?.token) {
+      localStorage.setItem("token", data.token);
+    }
+
+    if (data?.usuario) {
+      localStorage.setItem("mm_user", JSON.stringify(data.usuario));
+    }
+
     showToast("¡Inicio de sesión exitoso!", "success");
 
-    setTimeout(() => navigate(from === "/login" ? "/" : from, { replace: true }), 1000);
+    const rol = data?.usuario?.rol_nombre|| "";
+    const rolNorm = rol.toLowerCase();
+
+    // Guarda almacén O Auxiliar de almacén → dashboard de almacén
+if (
+  (rolNorm.includes("guarda") && rolNorm.includes("almacen")) ||
+  (rolNorm.includes("auxiliar") && rolNorm.includes("almacen"))
+) {
+  navigate("/guarda/dashboard", { replace: true });
+
+// Administrador → dashboard admin
+} else if (rolNorm.includes("admin")) {
+  navigate("/dashboard", { replace: true });
+      navigate(from === "/login" ? "/" : from, { replace: true });
+    }
   } catch (error) {
     const status = error.response?.status;
     const msg = error.response?.data?.mensaje || "Error al iniciar sesión.";
