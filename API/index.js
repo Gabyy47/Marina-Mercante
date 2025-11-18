@@ -106,11 +106,16 @@ const conexion = mysql.createPool({
   host: "localhost",
   port: 3306,
   user: "root",
+<<<<<<< Updated upstream
 <<<<<<< HEAD
   password: "",
 =======
   password: "MysqlRoot47!",
 >>>>>>> 7866162b611d04ced93b18738e19e2fd95c0686f
+=======
+  password: "H0nduras",
+  password: "",
+>>>>>>> Stashed changes
   database: "marina_mercante",
   waitForConnections: true,
   connectionLimit: 10,
