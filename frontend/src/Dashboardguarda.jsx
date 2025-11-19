@@ -9,6 +9,11 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,} fro
 import "./mainpage.css"; // el mismo que usa tu dashboard admin
 import "./Dashboardguarda.css";
 import PerfilModal from "./perfilmodal";
+import Proveedores from "./proveedores.jsx";
+import Inventario from "./inventario.jsx";
+import Inventariostatus from "./inventariostatus.jsx";
+import HistorialKardex from "./HistorialKardex.jsx";
+import DetalleCompra from "./DetalleCompra.jsx";
 
 
 export default function DashboardGuarda() {
@@ -94,6 +99,52 @@ export default function DashboardGuarda() {
           >
             <MdInventory2 />
             <span>Mantenimiento de Productos</span>
+          </button>
+        
+
+        <button
+            className="mm-menu-item"
+            onClick={() => navigate("/guarda/productos")}
+          >
+            <MdInventory2 />
+            <span>Mantenimiento proveedores</span>
+          </button>
+        <button
+            className="mm-menu-item"
+            onClick={() => navigate("/guarda/productos")}
+          >
+            <MdInventory2 />
+            <span>Mantenimiento inventario</span>
+          </button>
+
+          <button
+            className="mm-menu-item"
+            onClick={() => navigate("/guarda/productos")}
+          >
+            <MdInventory2 />
+            <span>Mantenimiento Inventariostatus</span>
+          </button>
+          <button
+            className="mm-menu-item"
+            onClick={() => navigate("/guarda/productos")}
+          >
+            <MdInventory2 />
+            <span>Mantenimiento HistorialKardex</span>
+          </button>
+          <button
+            className="mm-menu-item"
+            onClick={() => navigate("/guarda/productos")}
+          >
+            <MdInventory2 />
+            <span>Mantenimiento DetalleCompra</span>
+          </button>
+
+          <button
+            className="mm-menu-item"
+            onClick={() => navigate("/guarda/productos")}
+          >
+            <MdInventory2 />
+            <span>Mantenimiento cliente</span>
           </button>
         </nav>
 

@@ -11,6 +11,17 @@ import MantenimientoTickets from"./mantenimientotickets";
 import Bitacora from "./bitacora";
 import PerfilModal from "./perfilmodal";
 import Tramites from "./MantTramites.jsx";
+import Proveedores from "./proveedores.jsx";
+import Inventario from "./inventario.jsx";
+import Inventariostatus from "./inventariostatus.jsx";
+import HistorialKardex from "./HistorialKardex.jsx";
+import DetalleCompra from "./DetalleCompra.jsx";
+import Mantenimientocliente from "./mantenimientocliente.jsx";
+
+
+
+
+
 
 import { FiHome, FiUsers, FiSettings, FiLogOut } from "react-icons/fi";
 
@@ -72,6 +83,49 @@ const Sidebar = ({ activeView, onSelect, onLogout }) => (
       >
         <FiUsers /> <span>Bitácora</span>
       </button>
+
+      <button
+        className={`sb__link ${activeView === "proveedores" ? "sb__link--active" : ""}`}
+        onClick={() => onSelect("proveedores")}
+      >
+        <FiUsers /> <span>Proveedores</span>
+      </button>
+
+      <button
+        className={`sb__link ${activeView === "inventario" ? "sb__link--active" : ""}`}
+        onClick={() => onSelect("inventario")}
+      >
+        <FiUsers /> <span>Inventario</span>
+      </button>
+
+      <button
+        className={`sb__link ${activeView === "inventariostatus" ? "sb__link--active" : ""}`}
+        onClick={() => onSelect("inventariostatus")}
+      >
+        <FiUsers /> <span>InventarioStatus</span>
+      </button>
+
+      <button
+        className={`sb__link ${activeView === "HistorialKardex" ? "sb__link--active" : ""}`}
+        onClick={() => onSelect("HistorialKardex")}
+      >
+        <FiUsers /> <span>HistorialKardex</span>
+      </button>
+
+      <button
+        className={`sb__link ${activeView === "DetalleCompra" ? "sb__link--active" : ""}`}
+        onClick={() => onSelect("DetalleCompra")}
+      >
+        <FiUsers /> <span>DetalleCompra</span>
+      </button>
+
+      <button
+        className={`sb__link ${activeView === "mantenimientocliente" ? "sb__link--active" : ""}`}
+        onClick={() => onSelect("mantenimientocliente")}
+      >
+        <FiUsers /> <span>MantenimientoCliente</span>
+      </button>
+      
 
       <button
         className={`sb__link ${activeView === "settings" ? "sb__link--active" : ""}`}
@@ -243,12 +297,31 @@ const MainPage = () => {
       case "bitacora":
         return <Bitacora />;
 
+      case "proveedores":
+        return <Proveedores />;
+
+      case "inventario":
+        return <Inventario />;
+      
+      case "inventariostatus":
+        return <Inventariostatus />;
+      
+      case "HistorialKardex":
+        return <HistorialKardex />;
+
+      case "DetalleCompra":
+        return <DetalleCompra />;
+      
+      case "mantenimientocliente":
+        return <Mantenimientocliente />;
+
       case "settings":
         return <div className="card p-4">Configuración del sistema</div>;
 
       default:
         return <h2>Error: Vista no encontrada</h2>;
     }
+
   };
 
   return (
