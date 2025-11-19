@@ -145,7 +145,7 @@ const conexion = mysql.createPool({
   host: "localhost",
   port: 3306,
   user: "root",
-  password: "MysqlRoot47!",
+  password: "123456",
   database: "marina_mercante",
   waitForConnections: true,
   connectionLimit: 10,
@@ -171,7 +171,7 @@ app.use(
         callback(new Error("Not allowed by CORS"));
       }
     },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
@@ -897,6 +897,9 @@ app.get("/api/cookie", (req, res) => {
     res.status(404).json({ mensaje: "No se encontró la cookie" });
   }
 });
+
+
+// === helpers 
 
 function gen6Code() {
   return Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
@@ -1810,199 +1813,32 @@ app.delete('/api/detalle_compra/:id', (req, res) => {
   });  
 });
 
-// Get listado de tipo ticket
-app.get('/api/tipo_ticket', (request, response) => {
-    const query = "SELECT * FROM marina_mercante.tipo_ticket";
-    conexion.query(query, (err, rows) => {
-        if (err) {
-            return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
-        }
-        registrarBitacora("tipo ticket", "GET");
-        logger.info("Listado de tipo de ticket - OK");
-        response.json(rows);
-    });
-});
 
-// Get tipo ticket con where (por id)
-app.get('/api/tipo_ticket/:id', (request, response) => {
-    const query = "SELECT * FROM marina_mercante.tipo_ticket WHERE id_tipo_ticket= ?";
-    const values = [parseInt(request.params.id)];
-    conexion.query(query, values, (err, rows) => {
-        if (err) {
-            return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
-        }
-        registrarBitacora("Tipo Ticket", "GET");
-        logger.info("Listado de tipo ticket - OK");
-        response.json(rows);
-    });
-});
-
-// Post insert de tipo ticket
-app.post('/api/tipo_ticket', (request, response) => {
-    try {
-        const { tipo_ticket , estado, prefijo } = request.body;
-        const query = `
-            INSERT INTO marina_mercante.tipo_ticket (tipo_ticket , estado, prefijo) 
-            VALUES (?, ?, ?)
-        `;
-        const values = [tipo_ticket , estado, prefijo];
-        conexion.query(query, values, (err) => {
-            if (err) {
-                return handleDatabaseError(err, response, "Error en inserción de tipo ticket:");
-            }
-            registrarBitacora("Tipo ticket", "POST");
-            logger.info("INSERT de tipo ticket - OK");
-            response.json("INSERT EXITOSO!");
-        });
-    } catch (error) {
-        console.error(error);
-        response.status(400).json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
-    }
-});
-
-// Put update de tipo ticket
-app.put('/api/tipo_ticket', (request, response) => {
-    try {
-        const {  tipo_ticket , estado, prefijo, id_tipo_ticket  } = request.body;
-        const query = `
-            UPDATE imple.tipo_ticket 
-            SET tipo_ticket = ? , estado = ? , prefijo = ? WHERE id_tipo_ticket = ?
-        `;
-        const values = [nombre, modelo, marca, id_proveedor, fecha_adquisicion, estado, costo, ubicacion, id_maquinaria];
-        conexion.query(query, values, (err) => {
-            if (err) {
-                return handleDatabaseError(err, response, "Error en actualización de tipo ticket:");
-            }
-            registrarBitacora("Tipo ticket", "PUT");
-            logger.info("ACTUALIZACIÓN de tipo ticket - OK");
-            response.json("UPDATE EXITOSO!");
-        });
-    } catch (error) {
-        console.error(error);
-        response.status(400).json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
-    }
-});
-
-// Delete de tipo ticket
-app.delete('/api/tipo_ticket/:id', (request, response) => {
-    const query = "DELETE FROM marina_mercante.tipo_ticket WHERE id_tipo_ticket = ?";
-    const values = [parseInt(request.params.id)];
-    conexion.query(query, values, (err) => {
-        if (err) {
-            return handleDatabaseError(err, response, "Error en eliminación de tipo ticket:");
-        }
-        registrarBitacora("tipo ticket", "DELETE");
-        logger.info("DELETE de tipo ticket - OK");
-        response.json("DELETE EXITOSO!");
-    });
-});
-
-app.get('/api/ticket', (req, res) => {
-    const query = "SELECT * FROM marina_mercante.ticket";
-    conexion.query(query, (err, rows) => {
-        if (err) return res.status(500).json({ error: "Error al obtener ticket" });
-        registrarBitacora("Ticket", "GET");
-        res.json({ status: "success", data: rows });
-    });
-});
-
-app.get('/api/ticket/:id', (req, res) => {
-    const query = "SELECT * FROM marina_mercante.tl_ticket WHERE id_ticket = ?";
-    const values = [parseInt(req.params.id)];
-    conexion.query(query, values, (err, rows) => {
-        if (err) return res.status(500).json({ error: "Error al obtener el ticket" });
-        if (rows.length === 0) return res.status(404).json({ error: "Ticket no encontrado" });
-        registrarBitacora("ticket", "GET");
-        res.json({ status: "success", data: rows[0] });
-    });
-});
-
-app.post('/api/ticket', (req, res) => {
-    const { id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket } = req.body;
-    if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket ) {
-        return res.status(400).json({ error: "Todos los campos son obligatorios" });
-    }
-    const query = "INSERT INTO marina_mercante.tb_ticket (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket) VALUES (?, ?, ?, ?)";
-    const values = [id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket];
-    conexion.query(query, values, (err, result) => {
-        if (err) {
-            console.error("Error al insertar ticket:", err.message);
-            if (err.code === 'ER_DUP_ENTRY') {
-                return res.status(409).json({ error: "El correo ya está registrado." });
-            }
-            return res.status(500).json({ error: err.message });
-        }
-        registrarBitacora("Ticket", "INSERT");
-        res.status(201).json({ status: "success", message: "Ticket agregado con éxito", proveedor_id: result.insertId });
-    });
-});
-
-app.put('/api/ticket/:id', (req, res) => {
-    const { id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket } = req.body;
-    const id_ticket = parseInt(req.params.id);
-    if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket) {
-        return res.status(400).json({ error: "Todos los campos son obligatorios" });
-    }
-    const query = "UPDATE proveedores SET  id_cliente= ?, id_estado_ticket = ?, id_tipo_ticket = ?, NO_ticket = ? WHERE id_ticket = ?";
-    const values = [id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket];
-    conexion.query(query, values, (err, result) => {
-        if (err) {
-            console.error("Error al actualizar ticket:", err.message);
-            return res.status(500).json({ error: err.message });
-        }
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: "Ticket no encontrado" });
-        }
-        registrarBitacora("Ticket", "PUT");
-        res.json({ status: "success", message: "Ticket actualizado con éxito" });
-    });
-});
-
-app.delete('/api/ticket/:id', (req, res) => {
-    const query = "DELETE FROM marina_mercante.tl_ticket WHERE id_ticket = ?";
-    const values = [parseInt(req.params.id)];
-    conexion.query(query, values, (err, result) => {
-        if (err) {
-            console.error("Error al eliminar ticket:", err.message);
-            return res.status(500).json({ error: err.message });
-        }
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: "ticket no encontrado" });
-        }
-        registrarBitacora("Ticket", "DELETE");
-        res.json({ status: "success", message: "Ticket eliminado con éxito" });
-    });
-});
-
-// ====== CRUD PARA tl_visualizacion ======
-
-// Listar todas las visualizaciones
+// =======================================================
+// =================== Visualización =====================
+// =======================================================
 app.get('/api/visualizaciones', (req, res) => {
   const query = "SELECT * FROM tbl_visualizacion";
   conexion.query(query, (err, rows) => {
     if (err) {
       console.error("Error al listar visualizaciones:", err);
-      res.status(500).json({ error: "Error al listar visualizaciones" });
-      return;
+      return res.status(500).json({ error: "Error al listar visualizaciones" });
     }
     res.json(rows);
   });
 });
 
-// Obtener una visualización por ID
 app.get('/api/visualizaciones/:id', (req, res) => {
   const query = "SELECT * FROM tbl_visualizacion WHERE id_visualizacion = ?";
   conexion.query(query, [req.params.id], (err, rows) => {
     if (err) {
       console.error("Error al obtener visualización:", err);
-      res.status(500).json({ error: "Error al obtener visualización" });
-      return;
+      return res.status(500).json({ error: "Error al obtener visualización" });
     }
-    res.json(rows[0]);
+    res.json(rows[0] || null);
   });
 });
 
-// Insertar una nueva visualización
 app.post('/api/visualizaciones', (req, res) => {
   const { id_usuario, id_ticket, ventanilla } = req.body;
   const query = `
@@ -2012,14 +1848,12 @@ app.post('/api/visualizaciones', (req, res) => {
   conexion.query(query, [id_usuario, id_ticket, ventanilla], (err, result) => {
     if (err) {
       console.error("Error al insertar visualización:", err);
-      res.status(500).json({ error: "Error al insertar visualización" });
-      return;
+      return res.status(500).json({ error: "Error al insertar visualización" });
     }
     res.json({ message: "Visualización insertada correctamente", id: result.insertId });
   });
 });
 
-// Actualizar una visualización
 app.put('/api/visualizaciones/:id', (req, res) => {
   const { id_usuario, id_ticket, ventanilla } = req.body;
   const query = `
@@ -2030,25 +1864,23 @@ app.put('/api/visualizaciones/:id', (req, res) => {
   conexion.query(query, [id_usuario, id_ticket, ventanilla, req.params.id], (err) => {
     if (err) {
       console.error("Error al actualizar visualización:", err);
-      res.status(500).json({ error: "Error al actualizar visualización" });
-      return;
+      return res.status(500).json({ error: "Error al actualizar visualización" });
     }
     res.json({ message: "Visualización actualizada correctamente" });
   });
 });
 
-// Eliminar una visualización
 app.delete('/api/visualizaciones/:id', (req, res) => {
   const query = "DELETE FROM tbl_visualizacion WHERE id_visualizacion = ?";
   conexion.query(query, [req.params.id], (err) => {
     if (err) {
       console.error("Error al eliminar visualización:", err);
-      res.status(500).json({ error: "Error al eliminar visualización" });
-      return;
+      return res.status(500).json({ error: "Error al eliminar visualización" });
     }
     res.json({ message: "Visualización eliminada correctamente" });
   });
 });
+
 
 // GET /api/bitacora
 app.get('/api/bitacora', (req, res) => {
@@ -3145,6 +2977,1165 @@ app.get('/api/detalle_compra', verificarToken, (req, res) => {
     });
 
     res.json(results[0]);
+  });
+});
+
+
+
+// =======================================================
+// ============ Estados de Ticket (CRUD) =================
+// =======================================================
+app.get('/api/estado_ticket', (req, res) => {
+  const query = "SELECT * FROM tbl_estado_ticket";
+  conexion.query(query, (err, rows) => {
+    if (err) return res.status(500).json({ error: "ERROR EN LISTADO DE ESTADOS DE TICKET" });
+    res.json(rows);
+  });
+});
+
+app.get('/api/estado_ticket/:id', (req, res) => {
+  const query = "SELECT * FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
+  conexion.query(query, [Number(req.params.id)], (err, rows) => {
+    if (err) return res.status(500).json({ error: "ERROR EN LISTADO DE ESTADO DE TICKET" });
+    res.json(rows[0] || null);
+  });
+});
+
+app.post('/api/estado_ticket', (req, res) => {
+  const query = "INSERT INTO tbl_estado_ticket (estado) VALUES (?)";
+  conexion.query(query, [req.body.estado], (err, r) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: "INSERT EXITOSO!", id: r.insertId });
+  });
+});
+
+app.put('/api/estado_ticket/:id', (req, res) => {
+  const query = "UPDATE tbl_estado_ticket SET estado = ? WHERE id_estado_ticket = ?";
+  conexion.query(query, [req.body.estado, Number(req.params.id)], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: "UPDATE EXITOSO!" });
+  });
+});
+
+app.delete('/api/estado_ticket/:id', (req, res) => {
+  const query = "DELETE FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
+  conexion.query(query, [Number(req.params.id)], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: "DELETE EXITOSO!" });
+  });
+});
+
+// =======================================================
+// ============== Tipo Ticket (CRUD) =====================
+// =======================================================
+app.get("/api/tipo_ticket", (req, res) => {
+  const sql = "SELECT id_tipo_ticket, tipo_ticket, prefijo FROM tbl_tipo_ticket WHERE estado='ACTIVO'";
+  conexion.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error al obtener tipos de ticket" });
+    res.json(rows);
+  });
+});
+
+app.get('/api/tipo_ticket/:id', (request, response) => {
+  const query = "SELECT * FROM tbl_tipo_ticket WHERE id_tipo_ticket= ?";
+  const values = [parseInt(request.params.id)];
+  conexion.query(query, values, (err, rows) => {
+    if (err) return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
+    registrarBitacora("Tipo Ticket", "GET");
+    logger.info("Listado de tipo ticket - OK");
+    response.json(rows);
+  });
+});
+
+app.post('/api/tipo_ticket', (request, response) => {
+  try {
+    const { tipo_ticket , estado, prefijo } = request.body;
+    const query = `
+      INSERT INTO tbl_tipo_ticket (tipo_ticket , estado, prefijo) 
+      VALUES (?, ?, ?)
+    `;
+    const values = [tipo_ticket , estado, prefijo];
+    conexion.query(query, values, (err) => {
+      if (err) return handleDatabaseError(err, response, "Error en inserción de tipo ticket:");
+      registrarBitacora("Tipo ticket", "POST");
+      logger.info("INSERT de tipo ticket - OK");
+      response.json("INSERT EXITOSO!");
+    });
+  } catch (error) {
+    console.error(error);
+    response.status(400).json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
+  }
+});
+
+app.put('/api/tipo_ticket', (request, response) => {
+  try {
+    const { id_tipo_ticket, tipo_ticket, estado, prefijo } = request.body;
+    if (!id_tipo_ticket) {
+      return response.status(400).json({ error: "id_tipo_ticket es requerido" });
+    }
+    const query = `
+      UPDATE tbl_tipo_ticket 
+      SET tipo_ticket = ?, estado = ?, prefijo = ?
+      WHERE id_tipo_ticket = ?
+    `;
+    const values = [tipo_ticket, estado, prefijo, id_tipo_ticket];
+    conexion.query(query, values, (err) => {
+      if (err) return handleDatabaseError(err, response, "Error en actualización de tipo ticket:");
+      registrarBitacora("Tipo ticket", "PUT");
+      logger.info("ACTUALIZACIÓN de tipo ticket - OK");
+      response.json("UPDATE EXITOSO!");
+    });
+  } catch (error) {
+    console.error(error);
+    response.status(400).json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
+  }
+});
+
+app.delete('/api/tipo_ticket/:id', (request, response) => {
+  const query = "DELETE FROM tbl_tipo_ticket WHERE id_tipo_ticket = ?";
+  const values = [parseInt(request.params.id)];
+  conexion.query(query, values, (err) => {
+    if (err) return handleDatabaseError(err, response, "Error en eliminación de tipo ticket:");
+    registrarBitacora("tipo ticket", "DELETE");
+    logger.info("DELETE de tipo ticket - OK");
+    response.json("DELETE EXITOSO!");
+  });
+});
+
+// =======================================================
+// ===== Helpers de Tickets: estados y secuencias ========
+// =======================================================
+// Busca id_estado_ticket por su nombre (EN_COLA, EN_ATENCION, ATENDIDO, CANCELADO)
+function getEstadoIdByName(nombre, cb) {
+  const sql = "SELECT id_estado_ticket FROM tbl_estado_ticket WHERE UPPER(estado)=UPPER(?) LIMIT 1";
+  conexion.query(sql, [nombre], (err, rows) => {
+    if (err) return cb(err);
+    if (!rows.length) return cb(new Error("Estado no encontrado: " + nombre));
+    cb(null, rows[0].id_estado_ticket);
+  });
+}
+
+// Genera NO_ticket usando el prefijo del tipo de ticket + consecutivo diario
+function generarNoTicket(id_tipo_ticket, cb) {
+  // 1) obtener prefijo
+  const qPref = "SELECT prefijo FROM tbl_tipo_ticket WHERE id_tipo_ticket=? LIMIT 1";
+  conexion.query(qPref, [id_tipo_ticket], (e1, r1) => {
+    if (e1) return cb(e1);
+    if (!r1.length) return cb(new Error("Tipo ticket no encontrado"));
+
+    const prefijo = (r1[0].prefijo || "").toString().trim() || "N";
+    // 2) calcular consecutivo del día
+    const qCons = `
+      SELECT COUNT(*) AS cnt
+      FROM tbl_ticket
+      WHERE id_tipo_ticket=? AND DATE(creado_en)=CURDATE()
+    `;
+    conexion.query(qCons, [id_tipo_ticket], (e2, r2) => {
+      if (e2) return cb(e2);
+      const consecutivo = (r2[0].cnt || 0) + 1;
+      const numero = String(consecutivo).padStart(3, "0");  // N001, P007, etc.
+      cb(null, `${prefijo}${numero}`);
+    });
+  });
+}
+
+// ========= NUEVO: obtener/crear id_tramite a partir del texto =========
+function obtenerIdTramite(nombreTramite, cb) {
+  if (!nombreTramite) return cb(null, null);
+  const limpio = nombreTramite.toString().trim();
+  if (!limpio) return cb(null, null);
+
+  const qSel = "SELECT id_tramite FROM tbl_tramite WHERE nombre_tramite = ? LIMIT 1";
+  conexion.query(qSel, [limpio], (err, rows) => {
+    if (err) return cb(err);
+    if (rows.length) return cb(null, rows[0].id_tramite);
+
+    const qIns = "INSERT INTO tbl_tramite (nombre_tramite) VALUES (?)";
+    conexion.query(qIns, [limpio], (err2, r2) => {
+      if (err2) return cb(err2);
+      cb(null, r2.insertId);
+    });
+  });
+}
+
+// Valida y parsea :id en rutas con parámetro
+function requireIdParam(req, res, next) {
+  const raw = req.params.id;
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ mensaje: "ID inválido" });
+  }
+  req.id = id;
+  next();
+}
+
+// =======================================================
+// ============== Trámites (CRUD catálogo) ===============
+// =======================================================
+// Tabla: tbl_tramite (id_tramite, nombre_tramite, descripcion, activo, creado_en)
+
+app.get("/api/tramites", (req, res) => {
+  const { from, to } = req.query;
+  const params = [];
+  let filtroFecha = "";
+
+  if (from && to) {
+    filtroFecha = "AND DATE(t.creado_en) BETWEEN ? AND ?";
+    params.push(from, to);
+  }
+
+  const sql = `
+    SELECT 
+      tr.id_tramite,
+      tr.nombre_tramite,
+      tr.descripcion,
+      tr.activo,
+      tr.creado_en,
+      COUNT(t.id_ticket) AS total_personas
+    FROM tbl_tramite tr
+    LEFT JOIN tbl_ticket t 
+      ON t.id_tramite = tr.id_tramite
+      ${filtroFecha}
+    GROUP BY 
+      tr.id_tramite,
+      tr.nombre_tramite,
+      tr.descripcion,
+      tr.activo,
+      tr.creado_en
+    ORDER BY tr.nombre_tramite ASC
+  `;
+
+  conexion.query(sql, params, (err, rows) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ mensaje: "Error al obtener trámites" });
+    }
+    res.json(rows);
+  });
+});
+
+
+
+
+app.get("/api/tramites/:id", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ mensaje: "ID inválido" });
+  }
+  const sql = `
+    SELECT id_tramite, nombre_tramite, descripcion, activo, creado_en
+    FROM tbl_tramite
+    WHERE id_tramite = ?
+    LIMIT 1
+  `;
+  conexion.query(sql, [id], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, "Error al obtener trámite");
+    if (!rows.length) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json(rows[0]);
+  });
+});
+
+app.post("/api/tramites", (req, res) => {
+  let { nombre_tramite, descripcion } = req.body;
+  if (!nombre_tramite || !nombre_tramite.toString().trim()) {
+    return res.status(400).json({ mensaje: "El nombre del trámite es requerido" });
+  }
+  nombre_tramite = nombre_tramite.toString().trim();
+  descripcion = (descripcion ?? "").toString().trim() || null;
+
+  const sql = `
+    INSERT INTO tbl_tramite (nombre_tramite, descripcion, activo)
+    VALUES (?, ?, 1)
+  `;
+  conexion.query(sql, [nombre_tramite, descripcion], (err, r) => {
+    if (err) return handleDatabaseError(err, res, "Error al crear trámite");
+    res.status(201).json({
+      mensaje: "Trámite creado correctamente",
+      id_tramite: r.insertId,
+      nombre_tramite,
+      descripcion,
+    });
+  });
+});
+
+app.put("/api/tramites/:id", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ mensaje: "ID inválido" });
+  }
+
+  let { nombre_tramite, descripcion, activo } = req.body;
+  if (!nombre_tramite || !nombre_tramite.toString().trim()) {
+    return res.status(400).json({ mensaje: "El nombre del trámite es requerido" });
+  }
+  nombre_tramite = nombre_tramite.toString().trim();
+  descripcion = (descripcion ?? "").toString().trim() || null;
+  activo = activo ? 1 : 0;
+
+  const sql = `
+    UPDATE tbl_tramite
+    SET nombre_tramite = ?, descripcion = ?, activo = ?
+    WHERE id_tramite = ?
+  `;
+  conexion.query(sql, [nombre_tramite, descripcion, activo, id], (err, r) => {
+    if (err) return handleDatabaseError(err, res, "Error al actualizar trámite");
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite actualizado correctamente" });
+  });
+});
+
+app.delete("/api/tramites/:id", (req, res) => {
+  const { id } = req.params;
+
+  const sql = "DELETE FROM tbl_tramite WHERE id_tramite = ?";
+
+  conexion.query(sql, [id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al eliminar trámite", error: err });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite eliminado correctamente" });
+  });
+});
+
+
+app.patch("/api/tramites/:id/desactivar", (req, res) => {
+  const { id } = req.params;
+
+  const sql = `
+    UPDATE tbl_tramite
+    SET activo = 0
+    WHERE id_tramite = ?
+  `;
+
+  conexion.query(sql, [id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al desactivar trámite" });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite desactivado" });
+  });
+});
+
+app.patch("/api/tramites/:id/activar", (req, res) => {
+  const { id } = req.params;
+
+  const sql = `
+    UPDATE tbl_tramite
+    SET activo = 1
+    WHERE id_tramite = ?
+  `;
+
+  conexion.query(sql, [id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al activar trámite" });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite activado" });
+  });
+});
+
+
+// =======================================================
+// ============ SISTEMA DE LLAMADO DE TICKETS ============
+// (Orden correcto evita colisiones con :id)             //
+// =======================================================
+
+// ---------- (1) RUTAS FIJAS (van primero) --------------
+app.get("/api/tickets/cola", (req, res) => {
+  const sql = `
+    SELECT 
+      t.id_ticket,
+      t.NO_ticket,
+      tr.nombre_tramite AS tramite,
+      t.creado_en,
+      tt.tipo_ticket AS tipo
+    FROM tbl_ticket t
+    JOIN tbl_estado_ticket et ON et.id_estado_ticket = t.id_estado_ticket
+    JOIN tbl_tipo_ticket tt   ON tt.id_tipo_ticket   = t.id_tipo_ticket
+    LEFT JOIN tbl_tramite tr  ON tr.id_tramite       = t.id_tramite
+    WHERE et.estado = 'EN_COLA'
+      ORDER BY 
+    TIMESTAMPDIFF(MINUTE, t.creado_en, NOW()) DESC,
+    CASE 
+      WHEN tt.tipo_ticket = 'PREFERENCIAL' THEN 0
+      ELSE 1
+    END,
+    t.creado_en ASC
+
+  `;
+  conexion.query(sql, (err, rows) => {
+    if (err) {
+      console.error("[/tickets/cola] SQL error:", err);
+      return res.status(500).json({ mensaje: "Error al listar cola" });
+    }
+    res.json(rows);
+  });
+});
+
+app.get("/api/tickets/en-atencion", (req, res) => {
+  const sql = `
+    SELECT 
+      t.id_ticket,
+      t.NO_ticket,
+      tr.nombre_tramite AS tramite,
+      t.creado_en,
+      v.ventanilla,
+      t.llamado_en,
+      tt.tipo_ticket AS tipo
+    FROM tbl_ticket t
+    JOIN tbl_estado_ticket et ON et.id_estado_ticket = t.id_estado_ticket
+    LEFT JOIN tbl_visualizacion v ON v.id_ticket = t.id_ticket
+    JOIN tbl_tipo_ticket tt ON tt.id_tipo_ticket = t.id_tipo_ticket
+    LEFT JOIN tbl_tramite tr ON tr.id_tramite = t.id_tramite
+    WHERE et.estado = 'EN_ATENCION'
+    ORDER BY t.llamado_en DESC, t.llamado_veces DESC, t.id_ticket DESC
+    LIMIT 1
+  `;
+
+  conexion.query(sql, (err, rows) => {
+    if (err) {
+      console.error("[/tickets/en-atencion] SQL error:", err);
+      return res.status(500).json({ mensaje: "Error al leer en atención" });
+    }
+    res.json(rows[0] || null);
+  });
+});
+
+
+// Llamar siguiente
+// Llamar siguiente (protegid@ y asigna operador)
+app.post("/api/tickets/siguiente", verificarToken, (req, res) => {
+  const { ventanilla = "A1" } = req.body;
+  const idOperador = req.user?.id_usuario || null;
+
+  const qEstados = `
+    SELECT estado, id_estado_ticket
+    FROM tbl_estado_ticket
+    WHERE estado IN ('EN_COLA','EN_ATENCION')
+  `;
+  conexion.query(qEstados, (e0, est) => {
+    if (e0) return res.status(500).json({ mensaje: "Error leyendo estados" });
+    const idEnCola = est.find(r => r.estado === 'EN_COLA')?.id_estado_ticket;
+    const idEnAtencion = est.find(r => r.estado === 'EN_ATENCION')?.id_estado_ticket;
+    if (!idEnCola || !idEnAtencion) {
+      return res.status(500).json({ mensaje: "Faltan estados EN_COLA / EN_ATENCION" });
+    }
+
+        const qFind = `
+      SELECT 
+        t.id_ticket, 
+        t.NO_ticket, 
+        tr.nombre_tramite AS tramite, 
+        t.creado_en, 
+        t.id_tipo_ticket,
+        tt.tipo_ticket AS tipo
+      FROM tbl_ticket t
+      JOIN tbl_tipo_ticket tt ON tt.id_tipo_ticket = t.id_tipo_ticket
+      LEFT JOIN tbl_tramite tr ON tr.id_tramite = t.id_tramite
+      WHERE t.id_estado_ticket = ?
+      ORDER BY 
+        TIMESTAMPDIFF(MINUTE, t.creado_en, NOW()) DESC,  -- más tiempo esperando primero
+        CASE                                             -- si empatan, preferencial primero
+          WHEN tt.tipo_ticket = 'PREFERENCIAL' THEN 0
+          ELSE 1
+        END,
+        t.creado_en ASC
+      LIMIT 1
+    `;
+
+    conexion.query(qFind, [idEnCola], (e1, r1) => {
+      if (e1) return res.status(500).json({ mensaje: "Error buscando siguiente ticket" });
+      if (!r1.length) return res.status(404).json({ mensaje: "No hay tickets en cola" });
+
+      const tk = r1[0];
+      const qUpd = `
+        UPDATE tbl_ticket
+        SET llamado_veces = COALESCE(llamado_veces,0) + 1,
+            llamado_en     = NOW(),
+            id_estado_ticket = ?,
+            id_usuario     = IFNULL(id_usuario, ?)  -- <--- asigna operador
+        WHERE id_ticket = ?
+      `;
+      conexion.query(qUpd, [idEnAtencion, idOperador, tk.id_ticket], (e2) => {
+        if (e2) return res.status(500).json({ mensaje: "Error al actualizar ticket" });
+
+        // Registrar/actualizar visualización
+        const qVis = `
+          INSERT INTO tbl_visualizacion (id_ticket, ventanilla)
+          VALUES (?, ?)
+          ON DUPLICATE KEY UPDATE ventanilla = VALUES(ventanilla)
+        `;
+        conexion.query(qVis, [tk.id_ticket, ventanilla], (e3) => {
+          if (e3) {
+            console.error("[visualizacion] error:", e3);
+            return res.status(500).json({ mensaje: "Error registrando visualización" });
+          }
+          res.json({ mensaje: "Ticket llamado", ticket: { ...tk, ventanilla } });
+        });
+      });
+    });
+  });
+});
+
+
+// Saltar (cancela el actual y llama el siguiente)
+app.post("/api/tickets/saltar", (req, res) => {
+  const { ventanilla = "A1" } = req.body;
+
+  const qEstadoCancel = `
+    SELECT id_estado_ticket 
+    FROM tbl_estado_ticket 
+    WHERE estado='CANCELADO' 
+    LIMIT 1
+  `;
+  conexion.query(qEstadoCancel, (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error obteniendo estado CANCELADO" });
+    const id_estado_cancelado = rows[0]?.id_estado_ticket;
+    if (!id_estado_cancelado) return res.status(500).json({ mensaje: "Falta estado CANCELADO" });
+
+    const qUpd = `
+      UPDATE tbl_ticket
+      SET id_estado_ticket = ?
+      WHERE id_estado_ticket = (SELECT id_estado_ticket FROM tbl_estado_ticket WHERE estado='EN_ATENCION' LIMIT 1)
+      ORDER BY creado_en DESC
+      LIMIT 1
+    `;
+    conexion.query(qUpd, [id_estado_cancelado], (e2) => {
+      if (e2) return res.status(500).json({ mensaje: "Error al cancelar ticket actual" });
+
+      const qFind = `
+  SELECT 
+    t.id_ticket, 
+    t.NO_ticket, 
+    tr.nombre_tramite AS tramite, 
+    t.creado_en,
+    tt.tipo_ticket AS tipo
+  FROM tbl_ticket t
+  JOIN tbl_estado_ticket et ON et.id_estado_ticket = t.id_estado_ticket
+  JOIN tbl_tipo_ticket tt   ON tt.id_tipo_ticket   = t.id_tipo_ticket
+  LEFT JOIN tbl_tramite tr  ON tr.id_tramite       = t.id_tramite
+  WHERE et.estado = 'EN_COLA'
+  ORDER BY (tt.tipo_ticket = 'PREFERENCIAL') DESC, t.creado_en ASC
+  LIMIT 1
+`;
+
+      conexion.query(qFind, (e3, rowsNext) => {
+        if (e3) return res.status(500).json({ mensaje: "Error buscando siguiente ticket" });
+        if (rowsNext.length === 0) return res.status(404).json({ mensaje: "No hay más tickets en cola" });
+
+        const tk = rowsNext[0];
+        const qEstadoAt = `
+          SELECT id_estado_ticket 
+          FROM tbl_estado_ticket 
+          WHERE estado='EN_ATENCION' 
+          LIMIT 1
+        `;
+        conexion.query(qEstadoAt, (e4, est2) => {
+          if (e4) return res.status(500).json({ mensaje: "Error leyendo estado EN_ATENCION" });
+          const id_estado_atencion = est2[0]?.id_estado_ticket;
+          if (!id_estado_atencion) return res.status(500).json({ mensaje: "Falta estado EN_ATENCION" });
+
+          const qUpd2 = `
+            UPDATE tbl_ticket
+            SET llamado_veces = llamado_veces + 1,
+                llamado_en = NOW(),
+                id_estado_ticket = ?
+            WHERE id_ticket = ?
+          `;
+          conexion.query(qUpd2, [id_estado_atencion, tk.id_ticket], (e5) => {
+            if (e5) return res.status(500).json({ mensaje: "Error al actualizar ticket siguiente" });
+
+            const qVis = `
+              INSERT INTO tbl_visualizacion (id_ticket, ventanilla)
+              VALUES (?, ?)
+              ON DUPLICATE KEY UPDATE 
+                ventanilla = VALUES(ventanilla)
+            `;
+            conexion.query(qVis, [tk.id_ticket, ventanilla], (e6) => {
+              if (e6) {
+                console.error("[visualizacion] error:", e6);
+                return res.status(500).json({ mensaje: "Error registrando visualización" });
+              }
+
+              res.json({
+                mensaje: "Ticket actual cancelado, siguiente llamado",
+                ticket: {
+                  id_ticket: tk.id_ticket,
+                  no_ticket: tk.NO_ticket,
+                  tramite: tk.tramite,
+                  tipo: tk.tipo,
+                  ventanilla,
+                },
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
+// ---------- (2) CRUD sin ID ---------------------------
+app.post("/api/tickets", (req, res) => {
+  const { id_tipo_ticket, id_tramite, nota = null, tramite = null } = req.body;
+  if (!id_tipo_ticket) {
+    return res.status(400).json({ mensaje: "id_tipo_ticket es requerido" });
+  }
+
+  // Prioridad: si viene id_tramite lo usamos; si no, intentamos con texto "tramite"
+  const usarTextoTramite = !id_tramite && tramite;
+
+  const continuarConInsert = (idTramiteFinal) => {
+    getEstadoIdByName("EN_COLA", (e0, idEnCola) => {
+      if (e0) return handleDatabaseError(e0, res, "Estado EN_COLA no encontrado");
+
+      generarNoTicket(id_tipo_ticket, (e1, NO_ticket) => {
+        if (e1) return handleDatabaseError(e1, res, "Error generando NO_ticket");
+
+        const q = `
+          INSERT INTO tbl_ticket
+            (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket, id_tramite, creado_en, llamado_veces, nota)
+          VALUES
+            (NULL, ?, ?, ?, ?, NOW(), 0, ?)
+        `;
+        conexion.query(
+          q,
+          [idEnCola, id_tipo_ticket, NO_ticket, idTramiteFinal, nota],
+          (e2, r2) => {
+            if (e2) {
+              if (e2.code === "ER_DUP_ENTRY") {
+                return res.status(409).json({ mensaje: "Colisión de número, intente de nuevo" });
+              }
+              return handleDatabaseError(e2, res, "Error al crear ticket");
+            }
+            res.status(201).json({ id_ticket: r2.insertId, NO_ticket });
+          }
+        );
+      });
+    });
+  };
+
+  if (id_tramite) {
+    // viene el id_tramite directo del frontend
+    return continuarConInsert(Number(id_tramite));
+  }
+
+  if (usarTextoTramite) {
+    // kiosko o algún cliente que mande texto
+    return obtenerIdTramite(tramite, (err, idT) => {
+      if (err) return handleDatabaseError(err, res, "Error resolviendo trámite");
+      continuarConInsert(idT);
+    });
+  }
+
+  // sin trámite (opcional)
+  continuarConInsert(null);
+});
+
+// Listado con filtros/paginación
+app.get("/api/tickets", (req, res) => {
+  const { from, to, empleado_id, estado, q, page = 1, pageSize = 20 } = req.query;
+  const off = (Number(page) - 1) * Number(pageSize);
+
+  const params = [];
+  let where = "1=1";
+  if (from && to) { where += " AND DATE(t.creado_en) BETWEEN ? AND ?"; params.push(from, to); }
+  if (empleado_id) { where += " AND t.id_usuario = ?"; params.push(Number(empleado_id)); }
+  if (estado) { where += " AND UPPER(es.estado)=UPPER(?)"; params.push(estado); }
+  if (q) { where += " AND (t.NO_ticket LIKE CONCAT('%', ?, '%'))"; params.push(q); }
+
+  const sel = `
+    SELECT
+      t.id_ticket,
+      t.NO_ticket,
+      t.creado_en,
+      t.llamado_en,
+      t.llamado_veces,
+      t.iniciado_en,
+      t.finalizado_en,
+      t.nota,
+      t.id_tramite,
+      tr.nombre_tramite,
+      es.estado,
+      tt.tipo_ticket,
+      tt.prefijo,
+      t.id_usuario,
+      CONCAT(u.nombre, ' ', u.apellido) AS empleado
+    FROM tbl_ticket t
+    JOIN tbl_estado_ticket es ON es.id_estado_ticket = t.id_estado_ticket
+    JOIN tbl_tipo_ticket   tt ON tt.id_tipo_ticket   = t.id_tipo_ticket
+    LEFT JOIN tbl_tramite  tr ON tr.id_tramite      = t.id_tramite
+    LEFT JOIN tbl_usuario   u ON u.id_usuario        = t.id_usuario
+    WHERE ${where}
+    ORDER BY t.creado_en DESC
+    LIMIT ? OFFSET ?
+  `;
+  const cnt = `
+    SELECT COUNT(*) AS total
+    FROM tbl_ticket t
+    JOIN tbl_estado_ticket es ON es.id_estado_ticket = t.id_estado_ticket
+    JOIN tbl_tipo_ticket   tt ON tt.id_tipo_ticket   = t.id_tipo_ticket
+    LEFT JOIN tbl_tramite  tr ON tr.id_tramite      = t.id_tramite
+    LEFT JOIN tbl_usuario   u ON u.id_usuario        = t.id_usuario
+    WHERE ${where}
+  `;
+
+  conexion.query(sel, [...params, Number(pageSize), off], (e1, rows) => {
+    if (e1) return handleDatabaseError(e1, res, "Error listando tickets");
+    conexion.query(cnt, params, (e2, r2) => {
+      if (e2) return handleDatabaseError(e2, res, "Error contando tickets");
+      res.json({ data: rows, page: Number(page), pageSize: Number(pageSize), total: r2[0].total });
+    });
+  });
+});
+
+
+// ---------- (3) RUTAS con ID (regex numérica) ----------
+// ---------- (3) RUTAS con ID (regex numérica) ----------
+app.get("/api/tickets/:id", requireIdParam, (req, res) => {
+  const id = req.id;
+  const sql = `
+    SELECT
+      t.*,
+      es.estado,
+      tt.tipo_ticket,
+      tt.prefijo,
+      tr.nombre_tramite,
+      u.nombre_usuario AS usuario
+    FROM tbl_ticket t
+    JOIN tbl_estado_ticket es ON es.id_estado_ticket = t.id_estado_ticket
+    JOIN tbl_tipo_ticket tt    ON tt.id_tipo_ticket = t.id_tipo_ticket
+    LEFT JOIN tbl_tramite tr   ON tr.id_tramite     = t.id_tramite
+    LEFT JOIN tbl_usuario u    ON u.id_usuario      = t.id_usuario
+    WHERE t.id_ticket = ? LIMIT 1
+  `;
+  conexion.query(sql, [id], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, "Error al obtener ticket");
+    if (!rows.length) {
+      return res.status(404).json({ mensaje: "No encontrado" });
+    }
+    res.json(rows[0]);
+  });
+});
+
+// Actualizar (nota / reasignar)
+app.put("/api/tickets/:id", requireIdParam, (req, res) => {
+  const id = req.id;
+  const { nota = null, id_usuario = null } = req.body;
+  conexion.query(
+    "UPDATE tbl_ticket SET nota = ?, id_usuario = ? WHERE id_ticket = ?",
+    [nota, id_usuario, id],
+    (err, r) => {
+      if (err) return handleDatabaseError(err, res, "Error al actualizar ticket");
+      if (!r.affectedRows) {
+        return res.status(404).json({ mensaje: "No encontrado" });
+      }
+      res.json({ ok: true });
+    }
+  );
+});
+
+
+// LLAMAR → EN_ATENCION + asigna operador
+app.patch("/api/tickets/:id/llamar", requireIdParam, verificarToken, (req, res) => {
+  const id = req.id;
+  const idOperador = req.user?.id_usuario || null; // ← del JWT
+
+  getEstadoIdByName("EN_ATENCION", (e0, idAt) => {
+    if (e0) return handleDatabaseError(e0, res, "Falta estado EN_ATENCION");
+
+    const q = `
+      UPDATE tbl_ticket
+      SET id_estado_ticket=?,
+          id_usuario=IFNULL(id_usuario, ?),
+          llamado_en=IFNULL(llamado_en, NOW()),
+          llamado_veces = COALESCE(llamado_veces,0)+1
+      WHERE id_ticket=?
+    `;
+    conexion.query(q, [idAt, idOperador, id], (err, r) => {
+      if (err) return handleDatabaseError(err, res, "Error al llamar");
+      if (!r.affectedRows) return res.status(404).json({ mensaje: "No encontrado" });
+      res.json({ ok: true });
+    });
+  });
+});
+
+
+// INICIAR
+app.patch("/api/tickets/:id/iniciar", requireIdParam, verificarToken, (req, res) => {
+  const id = req.id;
+  const idOperador = req.user?.id_usuario || null;
+
+  const sql = `
+    UPDATE tbl_ticket
+    SET iniciado_en = IFNULL(iniciado_en, NOW()),
+        id_usuario  = IFNULL(id_usuario, ?)
+    WHERE id_ticket = ?
+  `;
+  conexion.query(sql, [idOperador, id], (err, r) => {
+    if (err) return handleDatabaseError(err, res, "Error al iniciar");
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "No encontrado" });
+    res.json({ ok: true });
+  });
+});
+
+
+// FINALIZAR (PATCH canónico)
+app.patch("/api/tickets/:id/finalizar", requireIdParam, verificarToken, (req, res) => {
+  const id = req.id;
+  const sql = `
+    UPDATE tbl_ticket
+    SET id_estado_ticket = (SELECT id_estado_ticket FROM tbl_estado_ticket WHERE estado='ATENDIDO' LIMIT 1),
+        finalizado_en    = IFNULL(finalizado_en, NOW()),
+        iniciado_en      = IFNULL(iniciado_en, llamado_en)
+    WHERE id_ticket = ?
+  `;
+  conexion.query(sql, [id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al finalizar ticket" });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Ticket no encontrado" });
+    res.json({ mensaje: "Ticket finalizado" });
+  });
+});
+
+// ========== CANCELAR TICKET (reutilizable) ==========
+function cancelarTicketSQL(id_ticket, done) {
+  // 1) marcar CANCELADO y congelar tiempos
+  const sql1 = `
+    UPDATE tbl_ticket
+    SET 
+      id_estado_ticket = (
+        SELECT id_estado_ticket 
+        FROM tbl_estado_ticket 
+        WHERE estado='CANCELADO' 
+        LIMIT 1
+      ),
+      -- si nunca se inició, usa el llamado_en como mejor estimación;
+      -- si tampoco hay llamado_en, usa NOW()
+      iniciado_en = COALESCE(iniciado_en, llamado_en, NOW()),
+      finalizado_en = COALESCE(finalizado_en, NOW())
+    WHERE id_ticket = ?
+  `;
+  conexion.query(sql1, [id_ticket], (err1, r1) => {
+    if (err1) return done(err1);
+    if (!r1.affectedRows) return done({ notFound: true });
+
+    // 2) limpiar cualquier visualización activa para ese ticket
+    const sql2 = `DELETE FROM tbl_visualizacion WHERE id_ticket = ?`;
+    conexion.query(sql2, [id_ticket], (err2) => {
+      if (err2) return done(err2);
+      return done(null, { ok: true });
+    });
+  });
+}
+
+// PATCH canónico
+app.patch("/api/tickets/:id/cancelar", requireIdParam, (req, res) => {
+  const id = req.id;
+  cancelarTicketSQL(id, (err, result) => {
+    if (err && err.notFound) return res.status(404).json({ mensaje: "Ticket no encontrado" });
+    if (err) {
+      console.error("Error al cancelar ticket:", err);
+      return res.status(500).json({ mensaje: "Error al cancelar ticket" });
+    }
+    res.json({ mensaje: "Ticket cancelado correctamente" });
+  });
+});
+
+// POST alias (por compatibilidad con tu panel)
+app.post("/api/tickets/:id/cancelar", requireIdParam, (req, res) => {
+  const id = req.id;
+  cancelarTicketSQL(id, (err, result) => {
+    if (err && err.notFound) return res.status(404).json({ mensaje: "Ticket no encontrado" });
+    if (err) {
+      console.error("Error al cancelar ticket (POST):", err);
+      return res.status(500).json({ mensaje: "Error al cancelar ticket" });
+    }
+    res.json({ mensaje: "Ticket cancelado correctamente" });
+  });
+});
+
+// REPETIR LLAMADO
+app.post("/api/tickets/:id/repetir", requireIdParam, (req, res) => {
+  const id = req.id;
+  const { ventanilla = "A1" } = req.body;
+  const sql = `
+    UPDATE tbl_ticket
+    SET llamado_veces = llamado_veces + 1, llamado_en = NOW()
+    WHERE id_ticket = ?
+  `;
+  conexion.query(sql, [id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al marcar repetición" });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Ticket no encontrado" });
+
+    const qVis = `
+      INSERT INTO tbl_visualizacion (id_ticket, ventanilla)
+      VALUES (?, ?)
+      ON DUPLICATE KEY UPDATE ventanilla = VALUES(ventanilla)
+    `;
+    conexion.query(qVis, [id, ventanilla], (e2) => {
+      if (e2) {
+        console.error("[visualizacion] error:", e2);
+        return res.status(500).json({ mensaje: "Error registrando visualización" });
+      }
+      res.json({ mensaje: "Repetido", ventanilla });
+    });
+  });
+});
+
+// DELETE lógico → CANCELADO
+// DELETE físico → elimina fila del ticket
+app.delete("/api/tickets/:id", requireIdParam, (req, res) => {
+  const id = req.id;
+
+  const sql = "DELETE FROM tbl_ticket WHERE id_ticket = ?";
+  conexion.query(sql, [id], (err, r) => {
+    if (err) {
+      console.error("Error al eliminar ticket:", err);
+      return res.status(500).json({ mensaje: "Error al eliminar ticket" });
+    }
+    if (!r.affectedRows) {
+      return res.status(404).json({ mensaje: "Ticket no encontrado" });
+    }
+    res.json({ mensaje: "Ticket eliminado correctamente" });
+  });
+});
+
+// Obtener trámites activos
+app.get("/api/tramites", (req, res) => {
+  conexion.query(
+    "SELECT id_tramite, nombre_tramite FROM tbl_tramite WHERE activo = 1 ORDER BY nombre_tramite",
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "Error al cargar trámites" });
+      res.json(rows);
+    }
+  );
+});
+
+app.get("/api/tramites/:id", (req, res) => {
+  const sql = `
+    SELECT id_tramite, nombre_tramite, descripcion, activo, creado_en
+    FROM tbl_tramite
+    WHERE id_tramite = ?
+    LIMIT 1
+  `;
+  conexion.query(sql, [req.params.id], (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error al obtener trámite", error: err });
+    if (!rows.length) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json(rows[0]);
+  });
+});
+
+// Crear un nuevo trámite
+app.post("/api/tramites", (req, res) => {
+  const { nombre_tramite, descripcion } = req.body;
+
+  if (!nombre_tramite)
+    return res.status(400).json({ mensaje: "El nombre del trámite es obligatorio" });
+
+  const sql = `
+    INSERT INTO tbl_tramite (nombre_tramite, descripcion, activo, creado_en)
+    VALUES (?, ?, 1, NOW())
+  `;
+  conexion.query(sql, [nombre_tramite, descripcion], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al crear trámite", error: err });
+
+    res.status(201).json({
+      mensaje: "Trámite creado correctamente",
+      id_tramite: r.insertId,
+    });
+  });
+});
+
+// Actualizar un trámite
+app.put("/api/tramites/:id", (req, res) => {
+  const { nombre_tramite, descripcion, activo } = req.body;
+
+  if (!nombre_tramite)
+    return res.status(400).json({ mensaje: "El nombre del trámite es obligatorio" });
+
+  const sql = `
+    UPDATE tbl_tramite
+    SET nombre_tramite = ?, descripcion = ?, activo = ?
+    WHERE id_tramite = ?
+  `;
+  conexion.query(sql, [nombre_tramite, descripcion, activo ? 1 : 0, req.params.id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al actualizar trámite", error: err });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite actualizado correctamente" });
+  });
+});
+
+// Desactivar trámite (DELETE lógico)
+app.delete("/api/tramites/:id", (req, res) => {
+  const sql = `
+    UPDATE tbl_tramite
+    SET activo = 0
+    WHERE id_tramite = ?
+  `;
+  conexion.query(sql, [req.params.id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al eliminar trámite", error: err });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite eliminado (desactivado)" });
+  });
+});
+
+// =======================================================
+// ================= MONITOR DEL PANEL ===================
+// =======================================================
+app.get("/api/monitor/estado", (req, res) => {
+  const qActual = `
+  SELECT 
+    v.id_visualizacion,
+    t.NO_ticket AS no_ticket,
+    tr.nombre_tramite AS tramite,
+    tt.tipo_ticket AS tipo,
+    v.ventanilla,
+    t.llamado_en
+  FROM tbl_visualizacion v
+  JOIN tbl_ticket t       ON t.id_ticket = v.id_ticket
+  JOIN tbl_tipo_ticket tt ON tt.id_tipo_ticket = t.id_tipo_ticket
+  LEFT JOIN tbl_tramite tr ON tr.id_tramite = t.id_tramite
+  ORDER BY 
+    t.llamado_en DESC,
+    v.id_visualizacion DESC
+  LIMIT 1
+`;
+  conexion.query(qActual, (e1, rAct) => {
+    if (e1) {
+      console.error("[/monitor/estado] actual:", e1);
+      return res.status(500).json({ mensaje: "Error actual" });
+    }
+    const actual = rAct[0] || null;
+
+    const qHist = `
+  SELECT 
+    v.id_visualizacion,
+    t.NO_ticket AS no_ticket,
+    tr.nombre_tramite AS tramite,
+    tt.tipo_ticket AS tipo,
+    v.ventanilla,
+    t.llamado_en
+  FROM tbl_visualizacion v
+  JOIN tbl_ticket t       ON t.id_ticket = v.id_ticket
+  JOIN tbl_tipo_ticket tt ON tt.id_tipo_ticket = t.id_tipo_ticket
+  LEFT JOIN tbl_tramite tr ON tr.id_tramite = t.id_tramite
+  ORDER BY 
+    t.llamado_en DESC,
+    v.id_visualizacion DESC
+  LIMIT 10 OFFSET 1
+`;
+    conexion.query(qHist, (e2, rHist) => {
+      if (e2) {
+        console.error("[/monitor/estado] historial:", e2);
+        return res.status(500).json({ mensaje: "Error historial" });
+      }
+      res.json({ actual, historial: rHist });
+    });
+  });
+});
+
+// =======================================================
+// ================== KIOSKO: TOMAR ======================
+// =======================================================
+function pad3(n) { return String(n).padStart(3, "0"); }
+
+app.post("/api/kiosko/tomar", (req, res) => {
+  const { id_tipo_ticket, id_tramite, tramite } = req.body;
+
+  if (!id_tipo_ticket) {
+    return res.status(400).json({ mensaje: "Faltan datos: id_tipo_ticket" });
+  }
+
+  // Ahora la prioridad es usar id_tramite que viene del kiosko;
+  // si no viene, opcionalmente puede resolver por texto "tramite"
+  const resolverIdTramite = (cb) => {
+    if (id_tramite) return cb(null, Number(id_tramite));
+    if (tramite) return obtenerIdTramite(tramite, cb);
+    return cb(null, null); // sin trámite
+  };
+
+  const qTipo = `
+    SELECT prefijo
+    FROM tbl_tipo_ticket
+    WHERE id_tipo_ticket = ? AND estado = 'ACTIVO'
+    LIMIT 1
+  `;
+  conexion.query(qTipo, [id_tipo_ticket], (eTipo, rTipo) => {
+    if (eTipo) return handleDatabaseError(eTipo, res, "Error leyendo tipo de ticket");
+    if (!rTipo.length)
+      return res.status(404).json({ mensaje: "Tipo de ticket inexistente o INACTIVO" });
+
+    const prefijo = (rTipo[0].prefijo || "GN").trim().toUpperCase();
+
+    const qSeq = `
+      INSERT INTO tbl_ticket_seq (prefijo, fecha, consecutivo)
+      VALUES (?, CURDATE(), 1)
+      ON DUPLICATE KEY UPDATE consecutivo = consecutivo + 1
+    `;
+    conexion.query(qSeq, [prefijo], (eSeq) => {
+      if (eSeq) return handleDatabaseError(eSeq, res, "Error actualizando secuencia");
+
+      const qGet = `
+        SELECT consecutivo
+        FROM tbl_ticket_seq
+        WHERE prefijo = ? AND fecha = CURDATE()
+        LIMIT 1
+      `;
+      conexion.query(qGet, [prefijo], (eGet, rGet) => {
+        if (eGet) return handleDatabaseError(eGet, res, "Error leyendo secuencia");
+        const consecutivo = rGet[0]?.consecutivo || 1;
+        const NO_ticket = `${prefijo}${pad3(consecutivo)}`;
+
+        const qEstado = `
+          SELECT id_estado_ticket
+          FROM tbl_estado_ticket
+          WHERE estado = 'EN_COLA'
+          LIMIT 1
+        `;
+        conexion.query(qEstado, (eEst, rEst) => {
+          if (eEst) return handleDatabaseError(eEst, res, "Error leyendo estado EN_COLA");
+          const id_estado_ticket = rEst[0]?.id_estado_ticket;
+          if (!id_estado_ticket)
+            return res.status(500).json({ mensaje: "No existe estado EN_COLA" });
+
+          resolverIdTramite((errT, idTramiteFinal) => {
+            if (errT) return handleDatabaseError(errT, res, "Error resolviendo trámite");
+
+            const qIns = `
+              INSERT INTO tbl_ticket
+                (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket, id_tramite, creado_en, llamado_veces)
+              VALUES
+                (NULL, ?, ?, ?, ?, NOW(), 0)
+            `;
+            const vals = [id_estado_ticket, id_tipo_ticket, NO_ticket, idTramiteFinal];
+
+            conexion.query(qIns, vals, (eIns, rIns) => {
+              if (eIns) {
+                if (eIns.code === "ER_DUP_ENTRY") {
+                  return res
+                    .status(409)
+                    .json({ mensaje: "Colisión de número, intente de nuevo" });
+                }
+                return handleDatabaseError(eIns, res, "Error al crear ticket");
+              }
+
+              // Generar fecha/hora para mandarla al kiosko
+              const ahora = new Date();
+              const pad = (n) => String(n).padStart(2, "0");
+              const fecha = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(
+                ahora.getDate()
+              )}`;
+              const hora = `${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(
+                ahora.getSeconds()
+              )}`;
+
+              res.status(201).json({
+                mensaje: "Ticket generado",
+                id_ticket: rIns.insertId,
+                no_ticket: NO_ticket,
+                fecha,
+                hora,
+              });
+            });
+          });
+        });
+      });
+    });
   });
 });
 

@@ -1,0 +1,354 @@
+/* ================================
+   PANEL LLAMADO — DGMM
+   Archivo: panel-llamado.css
+   Paleta: Navy + Turquesa + Dorado
+   ================================ */
+
+:root {
+  --bg: #eef6f8;                 /* fondo suave (azulado) */
+  --surface: #ffffff;            /* tarjetas */
+  --surface-2: #f2f7fb;          /* cabeceras tablas/chips */
+  --text: #0f2741;               /* navy primario texto */
+  --muted: #6b7685;              /* texto secundario */
+  --brand: #183a66;              /* azul institucional para títulos/botones */
+  --brand-700: #102f53;
+  --teal: #0fb3b0;               /* turquesa DGMM para números/acentos */
+  --teal-700: #0a8f8d;
+  --gold: #c49c2f;               /* línea decorativa */
+  --success: #62b48f;
+  --warn: #f0a76e;
+  --danger: #d15656;
+
+  --radius-xl: 18px;
+  --radius-lg: 14px;
+  --radius-md: 10px;
+  --shadow-1: 0 8px 24px rgba(19, 41, 69, .08);
+  --shadow-2: 0 12px 32px rgba(19, 41, 69, .12);
+}
+
+/* ---------- Contenedor principal ---------- */
+.pl-wrap {
+  background: var(--bg);
+  padding: 18px;
+  border-radius: 16px;
+  position: relative;
+}
+
+/* Spinner overlay (cuando loading=true) */
+.pl-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 22, 38, 0.12);
+  display: grid;
+  place-items: center;
+  z-index: 999;
+}
+.pl-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #dfe7f1;
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin .9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Banner de nueva jornada ---------- */
+.pl-banner {
+  background: #e6fbfa;
+  border: 1px solid #b9eeec;
+  color: var(--teal-700);
+  padding: 10px 14px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-1);
+}
+
+/* ---------- Header (título + ventanillas) ---------- */
+.pl-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.pl-title h1 {
+  margin: 0 0 6px 0;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--brand);
+}
+.pl-title h1 .thin { font-weight: 500; }
+.pl-sub {
+  margin: 0;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.pl-controls { display: flex; align-items: center; }
+
+.pl-vent-group {
+  display: flex;
+  gap: 10px;
+  background: #eef3fb;
+  padding: 10px;
+  border-radius: 999px;
+  border: 1px solid #dfe7f2;
+  box-shadow: var(--shadow-1);
+}
+.pl-vent-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--brand);
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform .1s ease, box-shadow .2s ease, background .2s ease;
+  box-shadow: inset 0 0 0 1px #dfe7f2;
+}
+.pl-vent-btn svg { opacity: .85; }
+.pl-vent-btn:hover { transform: translateY(-1px); }
+.pl-vent-btn.is-active {
+  background: #ffffff;
+  color: var(--brand);
+  box-shadow: 0 10px 24px rgba(24, 58, 102, .15), inset 0 0 0 2px var(--brand);
+}
+
+/* ---------- Layout GRID (2 columnas) ---------- */
+.pl-grid {
+  display: grid;
+  grid-template-columns: 1.7fr 1.2fr;
+  grid-auto-rows: minmax(120px, auto);
+  gap: 0px 20px; /* ↑ antes era 22px, ahora más separación vertical */
+}
+
+/* Asignación de posiciones:
+   1) En atención  → izquierda
+   2) Siguiente    → derecha arriba
+   3) Cola         → derecha abajo
+*/
+.pl-grid > .pl-card:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; }
+.pl-grid > .pl-card:nth-child(2) { grid-column: 2; grid-row: 1; }
+.pl-grid > .pl-card:nth-child(3) { grid-column: 2; grid-row: 2; }
+
+/* ---------- Card base ---------- */
+.pl-card {
+  background: var(--surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-2);
+  border: 1px solid #e8eef6;
+  padding: 18px 20px 20px;
+  height: auto !important;                 /* 🔧 evita alturas forzadas */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.pl-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  border-bottom: 3px solid var(--gold);
+}
+.pl-card-head h2 {
+  margin: 0;
+  font-size: 24px;
+  color: var(--text);
+}
+
+/* ---------- “En atención” (detalle) ---------- */
+.pl-card:has(.pl-empty) {
+  min-height: auto !important;             /* 🔧 compacta cuando no hay ticket */
+  padding-bottom: 16px;
+}
+.pl-actual {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  margin-bottom: 8px;
+}
+.pl-ticket {
+  font-size: 56px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--teal);
+}
+.pl-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+.pl-meta .dot {
+  opacity: .35;
+}
+.pl-row {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+.pl-kv .k {
+  display: block;
+  font-size: 13px;
+  letter-spacing: .3px;
+  color: var(--muted);
+}
+.pl-kv .v {
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--text);
+}
+
+/* Badge del tipo (NORMAL/PREFERENCIAL) */
+.pl-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: .3px;
+  box-shadow: inset 0 0 0 1px #dfe7f2;
+  background: var(--surface-2);
+  color: var(--brand);
+}
+.pl-badge.sm { padding: 4px 10px; font-size: 13px; }
+.pl-badge.md { font-size: 14px; }
+.pl-badge.is-pref {
+  background: #e8fbfb;
+  color: var(--teal-700);
+  box-shadow: inset 0 0 0 1px #bfeff0;
+}
+.pl-badge.is-norm {
+  background: #eef3fb;
+  color: var(--brand);
+}
+
+/* ---------- Acciones (botones) ---------- */
+.pl-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 10px;       /* 🔧 compactar */
+  margin-bottom: 0;       /* 🔧 sin hueco extra */
+}
+
+.btn {
+  border: 1px solid #dfe7f1;
+  background: #f7fbff;
+  color: var(--brand);
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  cursor: pointer;
+  transition: transform .1s ease, box-shadow .2s ease, background .2s ease;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-1); }
+.btn:active { transform: translateY(0); }
+
+.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.btn-success {
+  background: var(--success);
+  border-color: var(--success);
+  color: #083b2e;
+}
+.btn-warn {
+  background: #fff;
+  color: #8a3d32;
+  border-color: #f0c7b4;
+  box-shadow: inset 0 0 0 1px #f2d6c8;
+}
+.btn:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Estilo para kbd (atajos) */
+kbd {
+  margin-left: 8px;
+  background: #edf2f7;
+  color: #2a3b56;
+  border-radius: 10px;
+  padding: 2px 7px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: inset 0 0 0 1px #d6e0ec;
+}
+
+/* ---------- Estados vacíos ---------- */
+.pl-empty {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  color: var(--muted);
+  text-align: center;
+}
+.pl-empty p { margin: 0; }
+
+/* ---------- Siguiente en cola (preview) ---------- */
+.pl-preview {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+.pl-ticket-mini {
+  font-weight: 900;
+  font-size: 28px;
+  color: var(--teal);
+  letter-spacing: .6px;
+}
+.pl-preview-meta { color: var(--muted); }
+.pl-preview-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--brand);
+  font-weight: 800;
+}
+
+/* ---------- Tabla de cola ---------- */
+.pl-table-wrap {
+  border: 1px solid #e6edf5;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.pl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.pl-table thead th {
+  background: var(--surface-2);
+  color: var(--brand);
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 2px solid #dfe7f2;
+}
+.pl-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #eff3f8;
+}
+.pl-table tbody tr:hover {
+  background: #fbfeff;
+}
+.pl-empty-row {
+  text-align: center;
+  color: var(--muted);
+}
+
+/* Celdas utilitarias */
+.pl-strong { font-weight: 900; color: var(--text); }
+.mono { font-variant-numeric: tabular-nums; }

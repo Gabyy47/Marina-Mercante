@@ -45,11 +45,7 @@ export default function Bitacora() {
 
   const cargarBitacora = async () => {
     setLoading(true);
-<<<<<<< HEAD
-    try { const { data } = await api.get("/bitacoras"); setBitacoras(data); }
-=======
     try { const { data } = await api.get("/bitacora"); setBitacoras(data); }
->>>>>>> Gaby
     catch (e) { console.error(e); } finally { setLoading(false); }
   };
   useEffect(() => { cargarBitacora(); }, []);
@@ -122,8 +118,5 @@ export default function Bitacora() {
       </div>
     </div>
   );
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> Gaby
+
