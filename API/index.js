@@ -2095,25 +2095,39 @@ const SOLO_ALMACEN_O_ADMIN = autorizarRoles(
 //  GET /api/productos
 // ============================
 app.get('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
-  const query = "SELECT * FROM tbl_productos";
+  const user = req.user; 
 
-  conexion.query(query, (err, rows) => {
+  conexion.query("SELECT * FROM tbl_productos", (err, rows) => {
     if (err) {
       console.error("Error al listar productos:", err);
       return res.status(500).json({ error: "Error al listar productos" });
     }
 
+    // Registrar en bitácora
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_PRODUCTOS,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: "Se consultó la lista de productos",
+        usuario: user.nombre_usuario,
+      }
+    );
+
     return res.json(rows);
   });
 });
+
 
 // ============================
 //  GET /api/productos/:id
 // ============================
 app.get('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
-  const query = "SELECT * FROM tbl_productos WHERE id_producto = ?";
+  const user = req.user;
+  const id = req.params.id;
 
-  conexion.query(query, [req.params.id], (err, rows) => {
+  conexion.query("SELECT * FROM tbl_productos WHERE id_producto = ?", [id], (err, rows) => {
     if (err) {
       console.error("Error al obtener producto:", err);
       return res.status(500).json({ error: "Error al obtener producto" });
@@ -2123,15 +2137,29 @@ app.get('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) =
       return res.status(404).json({ error: "Producto no encontrado" });
     }
 
+    // Registrar en bitácora
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_PRODUCTOS,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: `Se consultó el producto id=${id}`,
+        usuario: user.nombre_usuario,
+      }
+    );
+
     return res.json(rows[0]);
   });
 });
+
 
 // ============================
 //  POST /api/productos
 // ============================
 app.post('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { nombre_producto, cantidad_minima, cantidad_maxima } = req.body;
+  const user = req.user;
 
   if (!nombre_producto || cantidad_minima == null || cantidad_maxima == null) {
     return res.status(400).json({
@@ -2153,6 +2181,18 @@ app.post('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
         return res.status(500).json({ error: "Error al insertar producto" });
       }
 
+      // Registrar en bitácora
+      logBitacora(
+        conexion,
+        {
+          id_objeto: ID_OBJETO_PRODUCTOS,
+          id_usuario: user.id_usuario,
+          accion: "POST",
+          descripcion: `Se creó el producto id=${result.insertId} (${nombre_producto})`,
+          usuario: user.nombre_usuario,
+        }
+      );
+
       return res.status(201).json({
         message: "Producto insertado correctamente",
         id: result.insertId
@@ -2161,11 +2201,14 @@ app.post('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   );
 });
 
+
 // ============================
 //  PUT /api/productos/:id
 // ============================
 app.put('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { nombre_producto, cantidad_minima, cantidad_maxima } = req.body;
+  const id = req.params.id;
+  const user = req.user;
 
   const campos = [];
   const valores = [];
@@ -2188,7 +2231,7 @@ app.put('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) =
   }
 
   const sql = `UPDATE tbl_productos SET ${campos.join(", ")} WHERE id_producto = ?`;
-  valores.push(req.params.id);
+  valores.push(id);
 
   conexion.query(sql, valores, (err, result) => {
     if (err) {
@@ -2200,21 +2243,47 @@ app.put('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) =
       return res.status(404).json({ error: "Producto no encontrado" });
     }
 
+    // Registrar en bitácora
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_PRODUCTOS,
+        id_usuario: user.id_usuario,
+        accion: "PUT",
+        descripcion: `Se actualizó producto id=${id}`,
+        usuario: user.nombre_usuario,
+      }
+    );
+
     return res.json({ message: "Producto actualizado correctamente" });
   });
 });
+
 
 // ============================
 //  DELETE /api/productos/:id
 // ============================
 app.delete('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
-  const query = "DELETE FROM tbl_productos WHERE id_producto = ?";
+  const id = req.params.id;
+  const user = req.user;
 
-  conexion.query(query, [req.params.id], (err) => {
+  conexion.query("DELETE FROM tbl_productos WHERE id_producto = ?", [id], (err, result) => {
     if (err) {
       console.error("Error al eliminar producto:", err);
       return res.status(500).json({ error: "Error al eliminar producto" });
     }
+
+    // Registrar en bitácora
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_PRODUCTOS,
+        id_usuario: user.id_usuario,
+        accion: "DELETE",
+        descripcion: `Se eliminó producto id=${id}`,
+        usuario: user.nombre_usuario,
+      }
+    );
 
     return res.json({ message: "Producto eliminado correctamente" });
   });
@@ -2290,7 +2359,6 @@ app.delete('/api/kardex/:id', (req, res) => {
 });
 
 // ====== CRUD PARA tl_salida_productos ======
-
 // Listar todas las salidas de productos
 app.get('/api/salidas_productos', (req, res) => {
   const query = "SELECT * FROM tbl_salida_productos";
@@ -2431,12 +2499,15 @@ app.delete('/api/inventario/:id', (req, res) => {
   });
 });
 
-// ====== PROCEDIMIENTOS ALMACENADOS - PRODUCTOS ======
+// =============== CONFIGURACIÓN BITÁCORA ===============
+const ID_OBJETO_PRODUCTOS = 6;
 
-// Insertar producto usando SP
-app.post('/api/productos', (req, res) => {
+
+// =============== INSERTAR PRODUCTO (SP_InsertarProducto) ===============
+app.post('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { nombre_producto, cantidad_minima, cantidad_maxima, descripcion } = req.body;
-  
+  const user = req.user;
+
   if (!nombre_producto) {
     return res.status(400).json({ error: "El nombre del producto es obligatorio" });
   }
@@ -2449,16 +2520,26 @@ app.post('/api/productos', (req, res) => {
       console.error("Error al insertar producto con SP:", err);
       return res.status(500).json({ error: err.message || "Error al insertar producto" });
     }
-    registrarBitacora("productos", "INSERT (SP)");
-    logger.info("INSERT de producto con SP - OK");
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarProducto: Se creó el producto "${nombre_producto}"`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Producto insertado correctamente mediante SP" });
   });
 });
 
-// Actualizar producto usando SP
-app.put('/api/productos/:id', (req, res) => {
+
+// =============== ACTUALIZAR PRODUCTO (SP_ActualizarProducto) ===============
+app.put('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { nombre_producto, cantidad_minima, cantidad_maxima, descripcion } = req.body;
   const id_producto = parseInt(req.params.id);
+  const user = req.user;
 
   const query = "CALL SP_ActualizarProducto(?, ?, ?, ?, ?)";
   const values = [id_producto, nombre_producto, cantidad_minima, cantidad_maxima, descripcion];
@@ -2468,15 +2549,26 @@ app.put('/api/productos/:id', (req, res) => {
       console.error("Error al actualizar producto con SP:", err);
       return res.status(500).json({ error: err.message || "Error al actualizar producto" });
     }
-    registrarBitacora("productos", "UPDATE (SP)");
-    logger.info("UPDATE de producto con SP - OK");
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `SP_ActualizarProducto: Se actualizó producto ID=${id_producto}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Producto actualizado correctamente mediante SP" });
   });
 });
 
-// Eliminar producto usando SP
-app.delete('/api/productos/:id', (req, res) => {
+
+// =============== ELIMINAR PRODUCTO (SP_EliminarProducto) ===============
+app.delete('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const id_producto = parseInt(req.params.id);
+  const user = req.user;
+
   const query = "CALL SP_EliminarProducto(?)";
 
   conexion.query(query, [id_producto], (err) => {
@@ -2484,14 +2576,24 @@ app.delete('/api/productos/:id', (req, res) => {
       console.error("Error al eliminar producto con SP:", err);
       return res.status(500).json({ error: err.message || "Error al eliminar producto" });
     }
-    registrarBitacora("productos", "DELETE (SP)");
-    logger.info("DELETE de producto con SP - OK");
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `SP_EliminarProducto: Se eliminó producto ID=${id_producto}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Producto eliminado correctamente mediante SP" });
   });
 });
 
-// Mostrar todos los productos usando SP
-app.get('/api/productos', (req, res) => {
+
+// =============== MOSTRAR PRODUCTOS (SP_MostrarProductos) ===============
+app.get('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+  const user = req.user;
   const query = "CALL SP_MostrarProductos()";
 
   conexion.query(query, (err, results) => {
@@ -2499,17 +2601,33 @@ app.get('/api/productos', (req, res) => {
       console.error("Error al listar productos con SP:", err);
       return res.status(500).json({ error: "Error al listar productos" });
     }
-    registrarBitacora("productos", "GET (SP)");
-    logger.info("Listado de productos con SP - OK");
-    res.json(results[0]); // Los SP devuelven un array de arrays
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `SP_MostrarProductos: Se consultó listado de productos`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);  // SP retorna arrays internos
   });
 });
 
-// ====== PROCEDIMIENTOS ALMACENADOS - PROVEEDORES ======
 
-// Insertar proveedor usando SP
-app.post('/api/proveedor', (req, res) => {
+// ==========================
+//  CONFIGURACIÓN BITÁCORA
+// ==========================
+const ID_OBJETO_PROVEEDOR = 2;
+
+
+// ==========================
+//  INSERTAR PROVEEDOR (SP)
+// ==========================
+app.post('/api/proveedor', verificarToken, (req, res) => {
   const { nombre, telefono, direccion } = req.body;
+  const user = req.user;
 
   if (!nombre) {
     return res.status(400).json({ error: "El nombre del proveedor es obligatorio" });
@@ -2518,72 +2636,120 @@ app.post('/api/proveedor', (req, res) => {
   const query = "CALL SP_InsertarProveedor(?, ?, ?)";
   const values = [nombre, telefono, direccion];
 
-  conexion.query(query, values, (err, result) => {
+  conexion.query(query, values, (err) => {
     if (err) {
-      console.error("Error al insertar proveedor con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al insertar proveedor" });
+      console.error("Error al insertar proveedor:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("proveedor", "INSERT (SP)");
-    logger.info("INSERT de proveedor con SP - OK");
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PROVEEDOR,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarProveedor: Se creó proveedor "${nombre}"`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Proveedor insertado correctamente mediante SP" });
   });
 });
 
-// Actualizar proveedor usando SP
-app.put('/api/proveedor/:id', (req, res) => {
+
+// ==========================
+//  ACTUALIZAR PROVEEDOR (SP)
+// ==========================
+app.put('/api/proveedor/:id', verificarToken, (req, res) => {
   const { nombre, telefono, direccion } = req.body;
   const id_proveedor = parseInt(req.params.id);
+  const user = req.user;
 
   const query = "CALL SP_ActualizarProveedor(?, ?, ?, ?)";
   const values = [id_proveedor, nombre, telefono, direccion];
 
   conexion.query(query, values, (err) => {
     if (err) {
-      console.error("Error al actualizar proveedor con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al actualizar proveedor" });
+      console.error("Error al actualizar proveedor:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("proveedor", "UPDATE (SP)");
-    logger.info("UPDATE de proveedor con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PROVEEDOR,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `SP_ActualizarProveedor: Se actualizó proveedor ID=${id_proveedor}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Proveedor actualizado correctamente mediante SP" });
   });
 });
 
-// Eliminar proveedor usando SP
-app.delete('/api/proveedor/:id', (req, res) => {
+
+// ==========================
+//  ELIMINAR PROVEEDOR (SP)
+// ==========================
+app.delete('/api/proveedor/:id', verificarToken, (req, res) => {
   const id_proveedor = parseInt(req.params.id);
+  const user = req.user;
+
   const query = "CALL SP_EliminarProveedor(?)";
 
   conexion.query(query, [id_proveedor], (err) => {
     if (err) {
-      console.error("Error al eliminar proveedor con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al eliminar proveedor" });
+      console.error("Error al eliminar proveedor:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("proveedor", "DELETE (SP)");
-    logger.info("DELETE de proveedor con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PROVEEDOR,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `SP_EliminarProveedor: Se eliminó proveedor ID=${id_proveedor}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Proveedor eliminado correctamente mediante SP" });
   });
 });
 
-// Mostrar todos los proveedores usando SP
-app.get('/api/proveedor', (req, res) => {
+
+// ==========================
+//  MOSTRAR PROVEEDORES (SP)
+// ==========================
+app.get('/api/proveedor', verificarToken, (req, res) => {
+  const user = req.user;
   const query = "CALL SP_MostrarProveedores()";
 
   conexion.query(query, (err, results) => {
     if (err) {
-      console.error("Error al listar proveedores con SP:", err);
+      console.error("Error al listar proveedores:", err);
       return res.status(500).json({ error: "Error al listar proveedores" });
     }
-    registrarBitacora("proveedor", "GET (SP)");
-    logger.info("Listado de proveedores con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PROVEEDOR,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `SP_MostrarProveedores: Se consultó listado de proveedores`,
+      usuario: user.nombre_usuario
+    });
+
     res.json(results[0]);
   });
 });
 
-// ====== PROCEDIMIENTOS ALMACENADOS - INVENTARIO ======
+// ==========================
+//  CONFIGURACIÓN BITÁCORA
+// ==========================
+const ID_OBJETO_INVENTARIO = 5;
 
-// Insertar inventario usando SP
-app.post('/api/inventario', (req, res) => {
+// ==========================
+//  INSERTAR INVENTARIO (SP)
+// ==========================
+app.post('/api/inventario', verificarToken, (req, res) => {
   const { id_producto, cantidad } = req.body;
+  const user = req.user;
 
   if (!id_producto) {
     return res.status(400).json({ error: "El producto es obligatorio" });
@@ -2592,113 +2758,169 @@ app.post('/api/inventario', (req, res) => {
   const query = "CALL SP_InsertarInventario(?, ?)";
   const values = [id_producto, cantidad];
 
-  conexion.query(query, values, (err, result) => {
+  conexion.query(query, values, (err) => {
     if (err) {
-      console.error("Error al insertar inventario con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al insertar inventario" });
+      console.error("Error al insertar inventario:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("inventario", "INSERT (SP)");
-    logger.info("INSERT de inventario con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarInventario: Se agregó inventario del producto ID=${id_producto}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Inventario insertado correctamente mediante SP" });
   });
 });
 
-// Actualizar inventario usando SP
-app.put('/api/inventario/:id', (req, res) => {
+
+// ==========================
+//  ACTUALIZAR INVENTARIO (SP)
+// ==========================
+app.put('/api/inventario/:id', verificarToken, (req, res) => {
   const { cantidad } = req.body;
   const id_inventario = parseInt(req.params.id);
+  const user = req.user;
 
   const query = "CALL SP_ActualizarInventario(?, ?)";
   const values = [id_inventario, cantidad];
 
   conexion.query(query, values, (err) => {
     if (err) {
-      console.error("Error al actualizar inventario con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al actualizar inventario" });
+      console.error("Error al actualizar inventario:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("inventario", "UPDATE (SP)");
-    logger.info("UPDATE de inventario con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `SP_ActualizarInventario: Se actualizó inventario ID=${id_inventario}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Inventario actualizado correctamente mediante SP" });
   });
 });
 
-// Eliminar inventario usando SP
-app.delete('/api/inventario/:id', (req, res) => {
+
+// ==========================
+//  ELIMINAR INVENTARIO (SP)
+// ==========================
+app.delete('/api/inventario/:id', verificarToken, (req, res) => {
   const id_inventario = parseInt(req.params.id);
+  const user = req.user;
+
   const query = "CALL SP_EliminarInventario(?)";
 
   conexion.query(query, [id_inventario], (err) => {
     if (err) {
-      console.error("Error al eliminar inventario con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al eliminar inventario" });
+      console.error("Error al eliminar inventario:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("inventario", "DELETE (SP)");
-    logger.info("DELETE de inventario con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `SP_EliminarInventario: Se eliminó inventario ID=${id_inventario}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Inventario eliminado correctamente mediante SP" });
   });
 });
 
-// Mostrar inventario usando SP (con JOIN)
-app.get('/api/inventario', (req, res) => {
+
+// ==========================
+//  MOSTRAR INVENTARIO (SP)
+// ==========================
+app.get('/api/inventario', verificarToken, (req, res) => {
+  const user = req.user;
   const query = "CALL SP_MostrarInventario()";
 
   conexion.query(query, (err, results) => {
     if (err) {
-      console.error("Error al listar inventario con SP:", err);
+      console.error("Error al listar inventario:", err);
       return res.status(500).json({ error: "Error al listar inventario" });
     }
-    registrarBitacora("inventario", "GET (SP)");
-    logger.info("Listado de inventario con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `SP_MostrarInventario: Se consultó inventario`,
+      usuario: user.nombre_usuario
+    });
+
     res.json(results[0]);
   });
 });
 
-// ====== PROCEDIMIENTOS ALMACENADOS - KARDEX ======
 
-// Insertar kardex usando SP (con validaciones y detalle de compra)
-app.post('/api/kardex', (req, res) => {
+// =============================
+//  BITÁCORA - CONFIG
+// =============================
+const ID_OBJETO_KARDEX = 7;
+const ID_OBJETO_DETALLE_COMPRA = 8;
+
+
+// =============================
+//  INSERTAR KARDEX (SP)
+// =============================
+app.post('/api/kardex', verificarToken, (req, res) => {
   const { 
-    id_usuario, 
-    id_producto, 
-    cantidad, 
-    tipo_movimiento, 
-    estado, 
-    descripcion,
-    id_proveedor,
-    monto_total
+    id_producto, cantidad, tipo_movimiento, estado, descripcion, id_proveedor, monto_total
   } = req.body;
 
-  if (!id_usuario || !id_producto || !cantidad || !tipo_movimiento) {
+  const user = req.user;
+
+  if (!id_producto || !cantidad || !tipo_movimiento) {
     return res.status(400).json({ error: "Faltan campos obligatorios" });
   }
 
   const query = "CALL SP_InsertarKardex(?, ?, ?, ?, ?, ?, ?, ?)";
   const values = [
-    id_usuario, 
-    id_producto, 
-    cantidad, 
-    tipo_movimiento, 
-    estado || 'Pendiente', 
+    user.id_usuario,
+    id_producto,
+    cantidad,
+    tipo_movimiento,
+    estado || 'Pendiente',
     descripcion,
     id_proveedor || null,
     monto_total || null
   ];
 
-  conexion.query(query, values, (err, result) => {
+  conexion.query(query, values, (err) => {
     if (err) {
-      console.error("Error al insertar kardex con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al insertar kardex" });
+      console.error("Error al insertar kardex:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("kardex", "INSERT (SP)");
-    logger.info("INSERT de kardex con SP - OK");
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_KARDEX,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarKardex: Movimiento de ${tipo_movimiento} para producto ID=${id_producto}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Kardex insertado correctamente mediante SP" });
   });
 });
 
-// Actualizar kardex usando SP
-app.put('/api/kardex/:id', (req, res) => {
+
+// =============================
+//  ACTUALIZAR KARDEX (SP)
+// =============================
+app.put('/api/kardex/:id', verificarToken, (req, res) => {
   const { estado } = req.body;
   const id_kardex = parseInt(req.params.id);
+  const user = req.user;
 
   if (!estado) {
     return res.status(400).json({ error: "El estado es obligatorio" });
@@ -2709,51 +2931,83 @@ app.put('/api/kardex/:id', (req, res) => {
 
   conexion.query(query, values, (err) => {
     if (err) {
-      console.error("Error al actualizar kardex con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al actualizar kardex" });
+      console.error("Error al actualizar kardex:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("kardex", "UPDATE (SP)");
-    logger.info("UPDATE de kardex con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_KARDEX,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `SP_ActualizarKardex: Cambio de estado a "${estado}" del kardex ID=${id_kardex}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Kardex actualizado correctamente mediante SP" });
   });
 });
 
-// Eliminar kardex usando SP
-app.delete('/api/kardex/:id', (req, res) => {
+
+// =============================
+//  ELIMINAR KARDEX (SP)
+// =============================
+app.delete('/api/kardex/:id', verificarToken, (req, res) => {
   const id_kardex = parseInt(req.params.id);
+  const user = req.user;
+
   const query = "CALL SP_EliminarKardex(?)";
 
   conexion.query(query, [id_kardex], (err) => {
     if (err) {
-      console.error("Error al eliminar kardex con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al eliminar kardex" });
+      console.error("Error al eliminar kardex:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("kardex", "DELETE (SP)");
-    logger.info("DELETE de kardex con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_KARDEX,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `SP_EliminarKardex: Se eliminó kardex ID=${id_kardex}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Kardex eliminado correctamente mediante SP" });
   });
 });
 
-// Mostrar kardex usando SP
-app.get('/api/kardex', (req, res) => {
+
+// =============================
+//  MOSTRAR KARDEX (SP)
+// =============================
+app.get('/api/kardex', verificarToken, (req, res) => {
+  const user = req.user;
+
   const query = "CALL SP_MostrarKardex()";
 
   conexion.query(query, (err, results) => {
     if (err) {
-      console.error("Error al listar kardex con SP:", err);
+      console.error("Error al listar kardex:", err);
       return res.status(500).json({ error: "Error al listar kardex" });
     }
-    registrarBitacora("kardex", "GET (SP)");
-    logger.info("Listado de kardex con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_KARDEX,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarKardex: Consulta del kardex general",
+      usuario: user.nombre_usuario
+    });
+
     res.json(results[0]);
   });
 });
 
-// ====== PROCEDIMIENTOS ALMACENADOS - DETALLE COMPRA ======
-
-// Insertar detalle de compra usando SP
-app.post('/api/detalle_compra', (req, res) => {
+// =============================
+//  INSERTAR DETALLE DE COMPRA (SP)
+// =============================
+app.post('/api/detalle_compra', verificarToken, (req, res) => {
   const { id_kardex, id_proveedor, monto_total } = req.body;
+  const user = req.user;
 
   if (!id_kardex || !id_proveedor || !monto_total) {
     return res.status(400).json({ error: "Todos los campos son obligatorios" });
@@ -2762,67 +3016,109 @@ app.post('/api/detalle_compra', (req, res) => {
   const query = "CALL SP_InsertarDetalleCompra(?, ?, ?)";
   const values = [id_kardex, id_proveedor, monto_total];
 
-  conexion.query(query, values, (err, result) => {
+  conexion.query(query, values, (err) => {
     if (err) {
-      console.error("Error al insertar detalle de compra con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al insertar detalle de compra" });
+      console.error("Error al insertar detalle compra:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("detalle_compra", "INSERT (SP)");
-    logger.info("INSERT de detalle de compra con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_DETALLE_COMPRA,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarDetalleCompra: Kardex=${id_kardex}, Proveedor=${id_proveedor}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Detalle de compra insertado correctamente mediante SP" });
   });
 });
 
-// Actualizar detalle de compra usando SP
-app.put('/api/detalle_compra/:id', (req, res) => {
+
+// =============================
+//  ACTUALIZAR DETALLE DE COMPRA (SP)
+// =============================
+app.put('/api/detalle_compra/:id', verificarToken, (req, res) => {
   const { monto_total } = req.body;
-  const id_detalle_compra = parseInt(req.params.id);
+  const id_detalle = parseInt(req.params.id);
+  const user = req.user;
 
   if (!monto_total) {
     return res.status(400).json({ error: "El monto total es obligatorio" });
   }
 
   const query = "CALL SP_ActualizarDetalleCompra(?, ?)";
-  const values = [id_detalle_compra, monto_total];
+  const values = [id_detalle, monto_total];
 
   conexion.query(query, values, (err) => {
     if (err) {
-      console.error("Error al actualizar detalle de compra con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al actualizar detalle de compra" });
+      console.error("Error al actualizar detalle compra:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("detalle_compra", "UPDATE (SP)");
-    logger.info("UPDATE de detalle de compra con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_DETALLE_COMPRA,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `SP_ActualizarDetalleCompra: ID=${id_detalle}, nuevo monto=${monto_total}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Detalle de compra actualizado correctamente mediante SP" });
   });
 });
 
-// Eliminar detalle de compra usando SP
-app.delete('/api/detalle_compra/:id', (req, res) => {
-  const id_detalle_compra = parseInt(req.params.id);
-  const query = "CALL SP_EliminarDetalleCompra(?)";+
 
-  conexion.query(query, [id_detalle_compra], (err) => {
+// =============================
+//  ELIMINAR DETALLE DE COMPRA (SP)
+// =============================
+app.delete('/api/detalle_compra/:id', verificarToken, (req, res) => {
+  const id_detalle = parseInt(req.params.id);
+  const user = req.user;
+
+  const query = "CALL SP_EliminarDetalleCompra(?)";
+
+  conexion.query(query, [id_detalle], (err) => {
     if (err) {
-      console.error("Error al eliminar detalle de compra con SP:", err);
-      return res.status(500).json({ error: err.message || "Error al eliminar detalle de compra" });
+      console.error("Error al eliminar detalle compra:", err);
+      return res.status(500).json({ error: err.message });
     }
-    registrarBitacora("detalle_compra", "DELETE (SP)");
-    logger.info("DELETE de detalle de compra con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_DETALLE_COMPRA,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `SP_EliminarDetalleCompra: Se eliminó detalle_compra ID=${id_detalle}`,
+      usuario: user.nombre_usuario
+    });
+
     res.json({ mensaje: "Detalle de compra eliminado correctamente mediante SP" });
   });
 });
 
-// Mostrar detalle de compra usando SP (con JOINs)
-app.get('/api/detalle_compra', (req, res) => {
+
+// =============================
+//  MOSTRAR DETALLE DE COMPRA (SP)
+// =============================
+app.get('/api/detalle_compra', verificarToken, (req, res) => {
+  const user = req.user;
+
   const query = "CALL SP_MostrarDetalleCompra()";
 
   conexion.query(query, (err, results) => {
     if (err) {
-      console.error("Error al listar detalle de compra con SP:", err);
-      return res.status(500).json({ error: "Error al listar detalle de compra" });
+      console.error("Error al listar detalle compra:", err);
+      return res.status(500).json({ error: "Error al listar detalle compra" });
     }
-    registrarBitacora("detalle_compra", "GET (SP)");
-    logger.info("Listado de detalle de compra con SP - OK");
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_DETALLE_COMPRA,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarDetalleCompra: Consulta de detalle de compra",
+      usuario: user.nombre_usuario
+    });
+
     res.json(results[0]);
   });
 });
