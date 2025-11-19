@@ -7,8 +7,10 @@ import "./mainpage.css";
 import MantenimientoUsuarios from "./mantenimientousuarios";
 import MantenimientoProductos from "./mantenimientoproductos";
 import MantenimientoRol from "./mantenimientorol";
+import MantenimientoTickets from"./mantenimientotickets";
 import Bitacora from "./bitacora";
 import PerfilModal from "./perfilmodal";
+import Tramites from "./MantTramites.jsx";
 
 import { FiHome, FiUsers, FiSettings, FiLogOut } from "react-icons/fi";
 
@@ -48,6 +50,20 @@ const Sidebar = ({ activeView, onSelect, onLogout }) => (
         onClick={() => onSelect("mantenimientorol")}
       >
         <FiUsers /> <span>Roles</span>
+      </button>
+
+      <button
+        className={`sb__link ${activeView === "mantenimientotickets" ? "sb__link--active" : ""}`}
+        onClick={() => onSelect("mantenimientotickets")}
+      >
+        <FiUsers /> <span>Tickets</span>
+      </button>
+
+      <button
+        className={`sb__link ${activeView === "MantTramites" ? "sb__link--active" : ""}`}
+        onClick={() => onSelect("MantTramites")}
+      >
+        <FiUsers /> <span>Tramites</span>
       </button>
 
       <button
@@ -217,6 +233,12 @@ const MainPage = () => {
 
       case "mantenimientorol":
         return <MantenimientoRol />;
+
+      case "mantenimientotickets":
+        return <MantenimientoTickets />;
+
+      case "MantTramites":
+        return <Tramites />;
 
       case "bitacora":
         return <Bitacora />;

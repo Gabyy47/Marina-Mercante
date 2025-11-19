@@ -1,0 +1,367 @@
+/* ============================
+   Tokens y reset (igual que panel de tickets)
+============================ */
+:root{
+  --bg: #eef3f6;
+  --card: #ffffff;
+  --ink: #0f172a;
+  --muted: #6b7280;
+  --brand-dark: #0d2935;
+  --line: #e5e7eb;
+
+  --primary: #1f6feb;
+  --danger: #e11d48;
+  --ok: #10b981;
+
+  --radius: 14px;
+  --shadow: 0 10px 22px rgba(2,15,24,.08);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; background: var(--bg); color: var(--ink); }
+a { text-decoration: none; }
+
+/* ============================
+   Página general
+============================ */
+.mt-page {
+  padding: 25px 16px 32px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+}
+
+/* ============================
+   Header tipo tarjeta oscura
+============================ */
+.mt-header {
+  max-width: 1120px;
+  margin: 0 auto 18px;
+  background: var(--brand-dark);
+  color: #fff;
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: var(--shadow);
+}
+
+.mt-header-left h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.mt-subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  color: rgba(255,255,255,.7);
+}
+
+.mt-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* ============================
+   Botones (estilo similar al panel tickets)
+============================ */
+.btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  padding: 9px 13px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  transition: transform .05s ease, background .2s ease, border-color .2s;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  background: #f9fafb;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn-success {
+  background: var(--ok);
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn-warning {
+  background: #fbbf24;
+  color: #111827;
+  border-color: transparent;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn-secondary {
+  background: #6b7280;
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn-sm {
+  padding: 5px 9px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+
+/* ============================
+   Botones pequeños SOLO en Acciones
+============================ */
+.mt-actions-cell .btn {
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  border-radius: 8px !important;
+  min-width: 68px;
+}
+
+.mt-actions-cell .btn:not(:last-child) {
+  margin-bottom: 4px;
+}
+
+/* ============================
+   Filtros (debajo del header)
+============================ */
+.mt-filters {
+  max-width: 1120px;
+  margin: 0 auto 16px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px 18px 16px;
+}
+
+.mt-date-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 16px;
+}
+
+.mt-date-field {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+
+.mt-date-field label {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.mt-date-field input[type="date"] {
+  padding: 7px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 13px;
+  outline: none;
+}
+
+.mt-date-field input[type="date"]:focus {
+  border-color: #c4d3ff;
+  box-shadow: 0 0 0 3px rgba(31,111,235,.12);
+}
+
+/* ============================
+   Tabla
+============================ */
+.mt-table-wrap {
+  max-width: 1120px;
+  margin: 0 auto 24px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.mt-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: 14px;
+}
+
+.mt-table thead th {
+  background: var(--brand-dark);
+  color: #fff;
+  text-align: left;
+  padding: 11px 14px;
+  border-right: 1px solid rgba(255,255,255,.08);
+}
+
+.mt-table thead th:last-child {
+  border-right: none;
+}
+
+.mt-table tbody td {
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+
+/* Tamaños de columnas */
+.mt-table th:nth-child(1) { width: 70px; }
+.mt-table th:nth-child(2) { width: 230px; }
+.mt-table th:nth-child(4) { width: 110px; }
+.mt-table th:nth-child(5) { width: 160px; }
+.mt-table th:nth-child(6) { width: 70px; }
+.col--acciones { width: 150px; }
+
+/* Fila vacía */
+.mt-empty {
+  text-align: center;
+  padding: 22px 8px;
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* ============================
+   Estado (chip-style)
+============================ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.badge-ok {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #6ee7b7;
+}
+
+.badge-off {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+/* ============================
+   Modal
+============================ */
+.mt-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,.45);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.mt-modal {
+  background: #fff;
+  width: min(520px, 92vw);
+  padding: 20px 20px 16px;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  max-height: 85vh;
+  overflow: auto;
+  animation: mt-fade-in .2s ease-out;
+}
+
+@keyframes mt-fade-in{
+  from { opacity: 0; transform: scale(.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.mt-field {
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mt-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.mt-field input,
+.mt-field textarea {
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font-size: 14px;
+  outline: none;
+  resize: vertical;
+}
+
+.mt-field input:focus,
+.mt-field textarea:focus {
+  border-color: #c4d3ff;
+  box-shadow: 0 0 0 3px rgba(31,111,235,.12);
+}
+
+.mt-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.mt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ============================
+   Loading bar
+============================ */
+.mt-loading-bar {
+  text-align: center;
+  font-size: 13px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* ============================
+   Responsivo
+============================ */
+@media (max-width: 900px) {
+  .mt-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mt-actions-cell .btn {
+    margin-bottom: 4px;
+  }
+}
+
+@media (max-width: 640px) {
+  .mt-date-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mt-header {
+    padding: 16px 14px;
+  }
+}

@@ -40,97 +40,79 @@ const Login = () => {
   };
 
   // ====== LOGIN ======
-const handleChange = (e) => {
-  let { name, value } = e.target;
-  if (name === "nombre_usuario") value = value.toUpperCase();
-  if ((name === "nombre_usuario" || name === "contraseña") && /\s/.test(value)) return;
-  setFormData((prev) => ({ ...prev, [name]: value }));
-};
+  const handleChange = (e) => {
+    let { name, value } = e.target;
+    if (name === "nombre_usuario") value = value.toUpperCase();
+    if ((name === "nombre_usuario" || name === "contraseña") && /\s/.test(value)) return;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
-<<<<<<< HEAD
   const handleSubmit = async (e) => {
-  e.preventDefault(); // ✅ Evita recarga
-
-=======
-const handleSubmit = async (e) => {
-  e.preventDefault();
->>>>>>> Gaby
-  if (!formData.nombre_usuario || !formData.contraseña) {
-    showToast("Completa usuario y contraseña.", "error");
-    return;
-  }
-
-  setLoading(true);
-
-<<<<<<< HEAD
-=======
-  try {
-    const { data } = await api.post("/login", formData);
-
-    // Asegurarse que viene el token
->>>>>>> Gaby
-    if (data?.token) {
-      localStorage.setItem("token", data.token);
+    e.preventDefault();
+    if (!formData.nombre_usuario || !formData.contraseña) {
+      showToast("Completa usuario y contraseña.", "error");
+      return;
     }
 
-<<<<<<< HEAD
-    if (data?.usuario) {
-      localStorage.setItem("mm_user", JSON.stringify(data.usuario));
-=======
-    // Guardar datos del usuario que inició sesión
-    if (data?.usuario) {
-      localStorage.setItem("usuarioData", JSON.stringify(data.usuario));
->>>>>>> Gaby
-    }
+    setLoading(true);
 
-    showToast("¡Inicio de sesión exitoso!", "success");
+    try {
+      const { data } = await api.post("/login", formData);
 
-<<<<<<< HEAD
-    const rol = data?.usuario?.rol_nombre|| "";
-    const rolNorm = rol.toLowerCase();
+      // Asegurarse que viene el token
+      if (data?.token) {
+        localStorage.setItem("token", data.token);
+      }
 
-    // Guarda almacén O Auxiliar de almacén → dashboard de almacén
+      // Guardar datos del usuario que inició sesión
+      if (data?.usuario) {
+        localStorage.setItem("mm_user", JSON.stringify(data.usuario));
+        localStorage.setItem("usuarioData", JSON.stringify(data.usuario));
+      }
+
+      showToast("¡Inicio de sesión exitoso!", "success");
+
+      const rol = data?.usuario?.rol_nombre || "";
+const rolNorm = rol.toLowerCase();
+
 if (
   (rolNorm.includes("guarda") && rolNorm.includes("almacen")) ||
   (rolNorm.includes("auxiliar") && rolNorm.includes("almacen"))
 ) {
   navigate("/guarda/dashboard", { replace: true });
 
-// Administrador → dashboard admin
+} else if (rolNorm.includes("tickets")) {
+  navigate("/tickets/dashboard", { replace: true });
+
 } else if (rolNorm.includes("admin")) {
   navigate("/dashboard", { replace: true });
-      navigate(from === "/login" ? "/" : from, { replace: true });
+
+} else {
+  navigate(from === "/login" ? "/" : from, { replace: true });
+}
+
+
+    } catch (error) {
+      const status = error.response?.status;
+      const msg = error.response?.data?.mensaje || "Error al iniciar sesión.";
+
+      if (status === 403 && msg.includes("No tiene un rol")) {
+        setModal({
+          show: true,
+          message:
+            "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
+        });
+      } else if (status === 401) {
+        showToast("Credenciales inválidas. Verifica usuario y contraseña.", "error");
+      } else {
+        showToast(msg, "error");
+      }
+    } finally {
+      setLoading(false);
     }
-=======
-    // Redirigir después de 1s
-    setTimeout(() => {
-      navigate(from === "/login" ? "/" : from, { replace: true });
-    }, 1000);
-
->>>>>>> Gaby
-  } catch (error) {
-    const status = error.response?.status;
-    const msg = error.response?.data?.mensaje || "Error al iniciar sesión.";
-
-    if (status === 403 && msg.includes("No tiene un rol")) {
-      setModal({
-        show: true,
-        message:
-          "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
-      });
-    } else if (status === 401) {
-      showToast("Credenciales inválidas. Verifica usuario y contraseña.", "error");
-    } else {
-      showToast(msg, "error");
-    }
-
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // ====== RECUPERACIÓN DE CONTRASEÑA ======
-
   const handleRecoveryChange = (e) => {
     const { name, value } = e.target;
     setRecoveryData((prev) => ({ ...prev, [name]: value }));
@@ -141,7 +123,8 @@ if (
     e.preventDefault();
     const correo = recoveryData.correo.trim();
     if (!correo) return showToast("Ingresa tu correo o usuario.", "error");
-console.log("[FRONT] Enviando a /recuperar-iniciar:", { correo });
+
+    console.log("[FRONT] Enviando a /recuperar-iniciar:", { correo });
     setRecoveryLoading(true);
     try {
       const { data } = await api.post("/recuperar-iniciar", { correo });
@@ -187,7 +170,10 @@ console.log("[FRONT] Enviando a /recuperar-iniciar:", { correo });
         correo,
         nueva_contraseña: nueva1,
       });
-      showToast(data?.mensaje || "Contraseña actualizada. Ya puedes iniciar sesión.", "success");
+      showToast(
+        data?.mensaje || "Contraseña actualizada. Ya puedes iniciar sesión.",
+        "success"
+      );
       setForgotStep(0);
       setRecoveryData({ correo: "", codigo: "", nueva1: "", nueva2: "" });
     } catch (err) {
@@ -198,7 +184,10 @@ console.log("[FRONT] Enviando a /recuperar-iniciar:", { correo });
   };
 
   return (
-    <div className="login-page" style={{ background: `url(${fondo}) center / cover no-repeat fixed` }}>
+    <div
+      className="login-page"
+      style={{ background: `url(${fondo}) center / cover no-repeat fixed` }}
+    >
       <div className="login-card">
         <div className="login-left">
           <img src={miImagen} alt="Login Visual" />
@@ -276,7 +265,7 @@ console.log("[FRONT] Enviando a /recuperar-iniciar:", { correo });
         </div>
       </div>
 
-      {/*  Toast flotante */}
+      {/* Toast flotante */}
       {toast.show && (
         <div
           className={`toast-box ${toast.type === "error" ? "error" : "success"}`}
@@ -286,13 +275,15 @@ console.log("[FRONT] Enviando a /recuperar-iniciar:", { correo });
         </div>
       )}
 
-      {/*  Modal de acceso denegado */}
+      {/* Modal de acceso denegado */}
       {modal.show && (
         <div className="modal-overlay">
           <div className="modal-box">
             <h3>Acceso denegado</h3>
             <p>{modal.message}</p>
-            <button onClick={() => setModal({ show: false, message: "" })}>Entendido</button>
+            <button onClick={() => setModal({ show: false, message: "" })}>
+              Entendido
+            </button>
           </div>
         </div>
       )}
@@ -325,7 +316,11 @@ console.log("[FRONT] Enviando a /recuperar-iniciar:", { correo });
                     >
                       Cancelar
                     </button>
-                    <button type="submit" className="primary" disabled={recoveryLoading}>
+                    <button
+                      type="submit"
+                      className="primary"
+                      disabled={recoveryLoading}
+                    >
                       {recoveryLoading ? "Enviando..." : "Enviar código"}
                     </button>
                   </div>
@@ -358,7 +353,11 @@ console.log("[FRONT] Enviando a /recuperar-iniciar:", { correo });
                     >
                       Atrás
                     </button>
-                    <button type="submit" className="primary" disabled={recoveryLoading}>
+                    <button
+                      type="submit"
+                      className="primary"
+                      disabled={recoveryLoading}
+                    >
                       {recoveryLoading ? "Verificando..." : "Verificar código"}
                     </button>
                   </div>
@@ -399,7 +398,11 @@ console.log("[FRONT] Enviando a /recuperar-iniciar:", { correo });
                     >
                       Cancelar
                     </button>
-                    <button type="submit" className="primary" disabled={recoveryLoading}>
+                    <button
+                      type="submit"
+                      className="primary"
+                      disabled={recoveryLoading}
+                    >
                       {recoveryLoading ? "Guardando..." : "Cambiar contraseña"}
                     </button>
                   </div>
