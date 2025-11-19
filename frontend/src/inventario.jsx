@@ -20,6 +20,7 @@ export default function Inventario() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [filtros, setFiltros] = useState({
+    
     producto: "",
     proveedor: "",
     tipo: "",
@@ -27,6 +28,7 @@ export default function Inventario() {
     fecha: ""
   });
 
+  
   const cargarTodo = async () => {
     setLoading(true);
     setError(null);
@@ -35,7 +37,7 @@ export default function Inventario() {
         api.get("/kardex"),
         api.get("/inventario"),
         api.get("/productos"),
-        api.get("/proveedor"),
+        api.get("/proveedor"), // endpoint en el backend es '/api/proveedor' (singular)
         api.get("/detalle_compra")
       ]);
       setKardex(rKardex.data || []);
@@ -45,6 +47,7 @@ export default function Inventario() {
       setDetalleCompra(rDet.data || []);
     } catch (e) {
       console.error("Error cargando datos de inventario:", e);
+      // Guardamos información útil para mostrar en la UI
       const info = {
         message: e.message,
         status: e.response?.status,
@@ -58,13 +61,14 @@ export default function Inventario() {
   };
 
   useEffect(() => { cargarTodo(); }, []);
+  // Escuchar eventos globales para refrescar datos cuando otras pantallas hagan cambios
   useEffect(() => {
     const handler = () => { cargarTodo(); };
     window.addEventListener('dataChanged', handler);
     return () => window.removeEventListener('dataChanged', handler);
   }, []);
 
-  // Construcción de filas combinadas
+  // Construir vista combinada
   const construyeFilas = () =>
     (kardex || []).map(k => {
       const prod = productos.find(p => p.id_producto === k.id_producto) || {};
@@ -86,12 +90,12 @@ export default function Inventario() {
 
   const filas = construyeFilas();
 
-  // === Referencias ===
+  // ref para capturar la sección que irá al PDF
   const reportRef = useRef(null);
-  const tipoChartDivRef = useRef(null);
-  const estadoChartDivRef = useRef(null);
+  const tipoChartRef = useRef(null);
+  const estadoChartRef = useRef(null);
 
-  // === Construcción de gráficos ===
+  // construir datos para gráficos (tipo movimiento y estado)
   const buildCounts = (items, key) => {
     const map = {};
     (items || []).forEach((it) => {
@@ -116,103 +120,91 @@ export default function Inventario() {
   const tipoData = chartFromCounts(tipoCounts);
   const estadoData = chartFromCounts(estadoCounts);
 
-  // === Generador de PDF con logo y gráficos ===
   const generatePDF = async () => {
-    try {
-      const pdf = new jsPDF('landscape', 'pt', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 40;
-      let y = 40;
+  try {
+    const pdf = new jsPDF('landscape', 'pt', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 40;
+    let y = 40;
 
-      // === LOGO + ENCABEZADO ===
-      try {
-        const logoImg = await fetch(logoDGMM).then(res => res.blob()).then(blob => {
-          return new Promise(resolve => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.readAsDataURL(blob);
-          });
-        });
-        pdf.addImage(logoImg, 'PNG', margin, 20, 70, 40);
-      } catch (err) {
-        console.warn('No se pudo agregar el logo:', err);
-      }
+    // === ENCABEZADO ===
+    pdf.setFontSize(18);
+    pdf.text('Reporte de Inventario', pageWidth / 2, y, { align: 'center' });
+    pdf.setFontSize(10);
+    pdf.text(`Generado: ${new Date().toLocaleString()}`, pageWidth - margin, y, { align: 'right' });
+    y += 20;
 
-      pdf.setFontSize(18);
-      pdf.text('Reporte de Inventario', pageWidth / 2, 40, { align: 'center' });
-      pdf.setFontSize(10);
-      pdf.text(`Generado: ${new Date().toLocaleString()}`, pageWidth - margin, 60, { align: 'right' });
-      y = 90;
+    // === GRÁFICOS ===
+    const charts = [tipoChartRef, estadoChartRef];
+    const chartWidth = (pageWidth - margin * 2) / 2 - 10;
+    const chartHeight = 140;
+    let chartX = margin;
 
-      // === CAPTURA DE GRÁFICOS ===
-      const chartDivs = [tipoChartDivRef.current, estadoChartDivRef.current];
-      const chartW = (pageWidth - margin * 2) / 2 - 10;
-      const chartH = 140;
-      let chartX = margin;
-
-      for (let i = 0; i < chartDivs.length; i++) {
-        if (chartDivs[i]) {
-          const canvasImg = await html2canvas(chartDivs[i], { backgroundColor: '#ffffff', scale: 2 });
-          const imgData = canvasImg.toDataURL('image/png');
-          pdf.addImage(imgData, 'PNG', chartX, y, chartW, chartH);
-          chartX += chartW + 20;
+    for (const ref of charts) {
+      if (ref.current) {
+        const canvas = ref.current.canvas || ref.current.ctx?.canvas;
+        if (canvas) {
+          const imgData = await html2canvas(canvas).then(c => c.toDataURL('image/png'));
+          pdf.addImage(imgData, 'PNG', chartX, y, chartWidth, chartHeight);
+          chartX += chartWidth + 20;
         }
       }
-      y += chartH + 30;
-
-      // === TABLA DE DATOS ===
-      const rows = filas.filter(aplicarFiltro).map(r => ([
-        r.fecha ? new Date(r.fecha).toLocaleString() : '-',
-        String(r.producto || '-'),
-        String(r.proveedor || '-'),
-        String(r.tipo || '-'),
-        String(r.cantidad ?? '-'),
-        String(r.estado || '-'),
-        String(r.stock_actual ?? '-'),
-        String(r.descripcion || '')
-      ]));
-
-      const head = [['Fecha', 'Producto', 'Proveedor', 'Tipo', 'Cantidad', 'Estado', 'Stock', 'Descripción']];
-
-      if (rows.length > 0) {
-        pdf.autoTable({
-          startY: y,
-          head,
-          body: rows,
-          theme: 'striped',
-          headStyles: { fillColor: [27, 144, 184], textColor: 255, fontStyle: 'bold' },
-          styles: { fontSize: 9, cellPadding: 4, lineColor: [200, 200, 200], lineWidth: 0.1 },
-          columnStyles: {
-            0: { cellWidth: 75 },
-            1: { cellWidth: 90 },
-            2: { cellWidth: 80 },
-            7: { cellWidth: 160 }
-          },
-          showHead: 'everyPage',
-          margin: { left: margin, right: margin },
-        });
-      } else {
-        pdf.setFontSize(11);
-        pdf.text('No hay registros para los filtros actuales.', margin, y + 12);
-      }
-
-      // === PIE DE PÁGINA ===
-      const totalPages = pdf.internal.getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
-        pdf.setPage(i);
-        pdf.setFontSize(8);
-        pdf.text(`Página ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
-      }
-
-      pdf.save('inventario-report.pdf');
-    } catch (e) {
-      console.error('Error generando PDF con gráficos:', e);
-      alert('Error al generar PDF. Revisa la consola.');
     }
-  };
+    y += chartHeight + 30;
 
-  // === FILTRO ===
+    // === TABLA ===
+    const rows = filas.filter(aplicarFiltro).map(r => ([
+      r.fecha ? new Date(r.fecha).toLocaleString() : '-',
+      String(r.producto || '-'),
+      String(r.proveedor || '-'),
+      String(r.tipo || '-'),
+      String(r.cantidad ?? '-'),
+      String(r.estado || '-'),
+      String(r.stock_actual ?? '-'),
+      String(r.descripcion || '')
+    ]));
+
+    const head = [['Fecha', 'Producto', 'Proveedor', 'Tipo', 'Cantidad', 'Estado', 'Stock', 'Descripción']];
+
+    if (rows.length > 0) {
+      pdf.autoTable({
+        startY: y,
+        head,
+        body: rows,
+        theme: 'striped',
+        headStyles: { fillColor: [27, 144, 184], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 4, lineColor: [200, 200, 200], lineWidth: 0.1 },
+        columnStyles: {
+          0: { cellWidth: 75 },
+          1: { cellWidth: 90 },
+          2: { cellWidth: 80 },
+          7: { cellWidth: 160 }
+        },
+        showHead: 'everyPage',
+        margin: { left: margin, right: margin },
+      });
+    } else {
+      pdf.setFontSize(11);
+      pdf.text('No hay registros para los filtros actuales.', margin, y + 12);
+    }
+
+    // === PIE DE PÁGINA ===
+    const pageCount = pdf.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(8);
+      pdf.text(`Página ${i} de ${pageCount}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
+    }
+
+    pdf.save('inventario-report.pdf');
+  } catch (e) {
+    console.error('Error generando PDF:', e);
+    alert('Error al generar PDF. Revisa la consola.');
+  }
+};
+
+
   const aplicarFiltro = f => {
     const { producto, proveedor, tipo, estado, fecha } = filtros;
     return (!producto || f.producto?.toLowerCase().includes(producto.toLowerCase())) &&
@@ -222,7 +214,6 @@ export default function Inventario() {
            (!fecha || (f.fecha && new Date(f.fecha).toDateString() === new Date(fecha).toDateString()));
   };
 
-  // === RENDERIZADO ===
   return (
     <div className="inventario-page">
       <div className="inventario-logo-wrap"><img src={logoDGMM} alt="DGMM" /></div>
@@ -237,6 +228,7 @@ export default function Inventario() {
       </div>
 
       <div className="inventario-card">
+        {/* sección que se captura en PDF */}
         <div ref={reportRef}>
         {error && (
           <div className="inventario-error" style={{marginBottom:12, padding:12, borderRadius:6, background:'#fdecea', color:'#611a15'}}>
@@ -303,13 +295,13 @@ export default function Inventario() {
             </tbody>
           </table>
           <div className="inventario-charts">
-            <div className="chart-card" ref={tipoChartDivRef}>
+            <div className="chart-card">
               <h4>Por tipo de movimiento</h4>
-              <Pie data={tipoData} />
+              <Pie data={tipoData} ref={tipoChartRef} />
             </div>
-            <div className="chart-card" ref={estadoChartDivRef}>
+            <div className="chart-card">
               <h4>Por estado</h4>
-              <Pie data={estadoData} />
+              <Pie data={estadoData} ref={estadoChartRef} />
             </div>
           </div>
           </>
