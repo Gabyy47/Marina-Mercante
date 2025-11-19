@@ -158,7 +158,11 @@
   display: flex;
   justify-content: center;
   align-items: baseline;
+<<<<<<< HEAD
   gap: 12px; /* ← separa los textos */
+=======
+  gap: 12px; 
+>>>>>>> Gaby
   margin-bottom: 18px;
 }
 
@@ -196,7 +200,11 @@
   transform: translateY(-1px);
 }
 
+<<<<<<< HEAD
 /* ===== Barra superior azul (como usuarios) ===== */
+=======
+/* ===== Barra superior azul ===== */
+>>>>>>> Gaby
 .bitacora-topbar{
   width: min(1000px, 100%);
   background: var(--dgmm-navy);
@@ -251,6 +259,10 @@
   margin-bottom: 10px;
 }
 .bitacora-logo-wrap img{
+<<<<<<< HEAD
   height: 90px; /* ajusta si lo quieres más grande */
+=======
+  height: 90px; 
+>>>>>>> Gaby
   width: auto;
 }

@@ -10,6 +10,15 @@ import MantenimientoProductos from "./mantenimientoproductos";
 import MantenimientoRol from "./mantenimientorol";
 import PerfilModal from "./perfilmodal";
 
+<<<<<<< HEAD
+=======
+// Componentes de las vistas
+const Dashboard = () => <h2>Salpicadero</h2>;
+const Settings = () => <h2>Configuración</h2>;
+const MantenimientoUsuarios = () => <h2>Mantenimiento de Usuario</h2>;
+const Proveedores = () => <h2>Proveedores</h2>
+const Bitacora = () => <h2>Bitácora</h2>
+>>>>>>> Gaby
 
 const rol = localStorage.getItem("rol_nombre");
 
@@ -225,6 +234,7 @@ const MainPage = () => {
     navigate("/login", { replace: true });
   };
 
+<<<<<<< HEAD
   const renderContent = () => {
     if (activeView === "dashboard") {
       return (
@@ -247,6 +257,23 @@ const MainPage = () => {
           <RecentTable />
         </>
       );
+=======
+  // Función para renderizar la vista actual
+  const renderView = () => {
+    switch (activeView) {
+      case "dashboard":
+        return <Dashboard />;
+      case "settings":
+        return <Settings />;
+      case "mantenimientousuarios":
+        return <MantenimientoUsuarios />;
+        case "proveedores":
+        return <Proveedores />;
+         case "bitacora":
+        return <Bitacora />;
+      default:
+        return <Dashboard />;
+>>>>>>> Gaby
     }
 
    if (activeView === "mantenimientousuarios") {
@@ -268,6 +295,7 @@ if (activeView === "mantenimientorol") {
   };
 
   return (
+<<<<<<< HEAD
     <div className="layout">
      <Sidebar
   activeView={activeView}
@@ -278,6 +306,88 @@ if (activeView === "mantenimientorol") {
         <Topbar />
         <div className="content">{renderContent()}</div>
       </div>
+=======
+    <div className="d-flex">
+      {/* Menú lateral */}
+      <nav className="bg-dark text-white vh-100 p-3" style={{ width: "250px" }}>
+        <h2 className="text-center mb-4">Menú</h2>
+        <ul className="nav flex-column">
+          <li className="nav-item">
+            <button
+              className={`nav-link btn text-white ${
+                activeView === "dashboard" ? "active" : ""
+              }`}
+              onClick={() => setActiveView("dashboard")}
+            >
+              Salpicadero
+            </button>
+          </li>
+
+          <li className="nav-item">
+            <button
+              className={`nav-link btn text-white ${
+                activeView === "users" ? "active" : ""
+              }`}
+              onClick={() => setActiveView("users")}
+            >
+              Usuarios
+            </button>
+          </li>
+
+          <li className="nav-item">
+            <button
+              className={`nav-link btn text-white ${
+                activeView === "settings" ? "active" : ""
+              }`}
+              onClick={() => setActiveView("settings")}
+            >
+              Configuración
+            </button>
+          </li>
+
+          <li className="nav-item">
+            <Link
+              to="/mantenimientousuarios"
+              className="nav-link text-white"
+              onClick={() => setActiveView("mantenimientousuarios")}
+            >
+              Mantenimiento de Usuarios
+            </Link>
+          </li>
+           <li className="nav-item">
+            <Link
+              to="/proveedores"
+              className="nav-link text-white"
+              onClick={() => setActiveView("proveedores")}
+            >
+              Proveedores
+            </Link>
+          </li>
+           <li className="nav-item">
+            <Link
+              to="/bitácora"
+              className="nav-link text-white"
+              onClick={() => setActiveView("bitacora")}
+            >
+              Bitácora
+            </Link>
+          </li>
+
+          {/* 👇 Aquí agregamos el botón de cerrar sesión */}
+          <li className="nav-item mt-4">
+            <button
+              className="btn btn-outline-light w-100"
+              onClick={handleLogout}
+            >
+              Cerrar sesión
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      {/* Área de contenido principal */}
+      <div className="flex-grow-1 p-4">{renderView()}</div>
+>>>>>>> Gaby
     </div>
   );
 };

@@ -7,9 +7,15 @@ import Register from "./Register.jsx";
 import MantUsuarios from "./mantenimientousuarios.jsx";
 import MantenimientoProductos from "./mantenimientoproductos.jsx";
 import RequireAuth from "./RequireAuth.jsx";
+<<<<<<< HEAD
 import PublicOnly from "./PublicOnly.jsx";
 import DashboardGuarda from "./Dashboardguarda.jsx";
 import ProtectedRouteRol from "./ProtectedRouteRol.jsx";
+=======
+import PublicOnly from "./PublicOnly.jsx";  
+import Proveedores from "./proveedores.jsx";
+import Bitacora from "./bitacora.jsx";
+>>>>>>> Gaby
 
 export default function App() {
   return (
@@ -30,6 +36,7 @@ export default function App() {
         {/* Dashboard ADMIN */}
         <Route path="/" element={<MainPage />} />
         <Route path="/dashboard" element={<MainPage />} />
+<<<<<<< HEAD
 
         {/* Mantenimiento de usuarios – solo Admin */}
         <Route
@@ -60,6 +67,13 @@ export default function App() {
             </ProtectedRouteRol>
           }
         />
+=======
+        <Route path="/mantenimientousuarios" element={<MantUsuarios />} />
+        <Route path="/proveedores" element={<Proveedores />} />
+        <Route path="/bitácora" element={<Bitacora/>} />
+
+        {/* agrega aquí más rutas protegidas */}
+>>>>>>> Gaby
       </Route>
 
       {/* ===== Cualquier otra ruta ===== */}

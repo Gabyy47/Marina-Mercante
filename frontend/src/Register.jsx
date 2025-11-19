@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
 import "./Register.css";
-import api from "./api"; // usa la instancia con baseURL y credenciales
+import api from "./api"; // instancia con baseURL y credenciales
 
 const Register = ({ onShowLogin }) => {
   const [formData, setFormData] = useState({
@@ -24,6 +24,14 @@ const Register = ({ onShowLogin }) => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
   };
+
+  // Modal verificación
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [sendLoading, setSendLoading] = useState(false);
+  const [lastEmail, setLastEmail] = useState("");
 
   const handleChange = (e) => {
     let { name, value } = e.target;
@@ -49,70 +57,142 @@ const Register = ({ onShowLogin }) => {
   const passwordStrong = strongPassword.test(formData.contraseña);
   const passwordsMatch = formData.contraseña === formData.confirmar_contraseña;
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
+  // === REGISTRO ===
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  if (!passwordStrong) {
-    showToast(
-      "La contraseña debe tener mínimo 8 caracteres e incluir mayúsculas, minúsculas, número y símbolo.",
-      "error"
-    );
-    return;
-  }
-
-  if (!passwordsMatch) {
-    showToast("Las contraseñas no coinciden.", "error");
-    return;
-  }
-
-  setLoading(true);
-  try {
-    const { data } = await api.post("/usuario", {
-      nombre: formData.nombre.trim(),
-      apellido: formData.apellido.trim(),
-      nombre_usuario: formData.nombre_usuario.trim().toUpperCase(),
-      correo: formData.correo.trim(),
-      contraseña: formData.contraseña,
-    });
-
-    // 👇 Mostrar el mensaje real del backend (si lo trae)
-    const msgBackend =
-      data?.mensaje ||
-      data?.message ||
-      "¡Cuenta creada exitosamente! Revisa tu correo para verificar tu cuenta.";
-
-    showToast("" + msgBackend, "success");
-
-    // Limpiar formulario
-    setFormData({
-      nombre: "",
-      apellido: "",
-      nombre_usuario: "",
-      correo: "",
-      contraseña: "",
-      confirmar_contraseña: "",
-    });
-
-    // Regresar al login en 1.5s
-    setTimeout(() => onShowLogin?.(), 1500);
-  } catch (error) {
-    console.error("Error en registro:", error);
-    const raw =
-      error.response?.data?.error || error.response?.data?.mensaje || error.message;
-
-    let msg = raw;
-    if (/Duplicate entry/i.test(raw)) {
-      if (/correo/i.test(raw)) msg = "Ese correo ya está registrado.";
-      else if (/nombre_usuario/i.test(raw)) msg = "Ese nombre de usuario ya existe.";
-      else msg = "Registro duplicado. Verifica tus datos.";
+    if (!passwordStrong) {
+      showToast(
+        "La contraseña debe tener mínimo 8 caracteres e incluir mayúsculas, minúsculas, número y símbolo.",
+        "error"
+      );
+      return;
     }
 
-    showToast("Error en el registro: " + msg, "error");
-  } finally {
-    setLoading(false);
-  }
-};
+    if (!passwordsMatch) {
+      showToast("Las contraseñas no coinciden.", "error");
+      return;
+    }
 
+    setLoading(true);
+    try {
+      const { data } = await api.post("/usuario", {
+        nombre: formData.nombre.trim(),
+        apellido: formData.apellido.trim(),
+        nombre_usuario: formData.nombre_usuario.trim().toUpperCase(),
+        correo: formData.correo.trim(),
+        contraseña: formData.contraseña,
+      });
+
+      const msgBackend =
+        data?.mensaje ||
+        data?.message ||
+        "¡Cuenta creada! Te enviamos un código. Revisa tu correo.";
+
+      // Guarda el correo para usarlo en verificar / reenviar
+      setLastEmail(formData.correo.trim());
+
+      // Abre el modal para ingresar el código
+      setVerifyOpen(true);
+      showToast(" Código enviado, revisa tu correo.", "success", 5000);
+
+      // Limpia los campos visibles (opcional)
+      setFormData({
+        nombre: "",
+        apellido: "",
+        nombre_usuario: "",
+        correo: "",
+        contraseña: "",
+        confirmar_contraseña: "",
+      });
+    } catch (error) {
+      console.error("Error en registro:", error);
+      const raw = error.response?.data?.error || error.response?.data?.mensaje || error.message;
+
+      let msg = raw;
+      if (/Duplicate entry/i.test(raw)) {
+        if (/correo/i.test(raw)) msg = "Ese correo ya está registrado.";
+        else if (/nombre_usuario/i.test(raw)) msg = "Ese nombre de usuario ya existe.";
+        else msg = "Registro duplicado. Verifica tus datos.";
+      }
+
+      showToast("Error en el registro: " + msg, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // === VERIFICAR CÓDIGO ===
+  const handleVerify = async (e) => {
+    e.preventDefault();
+
+    const correo = lastEmail || formData.correo.trim();
+    if (!correo) return showToast("Falta el correo para verificar.", "error");
+
+    if (!/^\d{6}$/.test(code)) {
+      showToast("El código debe tener 6 dígitos.", "error");
+      return;
+    }
+
+    setVerifyLoading(true);
+    try {
+      await api.post("/auth/verify-code", { correo, code });
+      showToast(" Cuenta verificada.", "success");
+      setVerifyOpen(false);
+      setCode("");
+      onShowLogin?.();
+    } catch (error) {
+      const msg = error.response?.data?.mensaje || error.response?.data?.error || error.message;
+      showToast("No se pudo verificar: " + msg, "error");
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  // === REENVIAR CÓDIGO ===
+  const handleResend = async () => {
+    const correo = lastEmail || formData.correo.trim();
+    if (!correo) return showToast("Escribe tu correo primero.", "error");
+
+    setResendLoading(true);
+    try {
+      await api.post("/reenviar", { correo });
+      showToast("Código reenviado. Revisa tu bandeja.", "success");
+    } catch (error) {
+      const msg = error.response?.data?.mensaje || error.response?.data?.error || error.message;
+      showToast("No se pudo reenviar: " + msg, "error");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  // === ENVIAR CÓDIGO 
+  const handleSend = async () => {
+    const correo = lastEmail || formData.correo.trim();
+    if (!correo) return showToast("Escribe tu correo primero.", "error");
+
+    setSendLoading(true);
+    try {
+      await api.post("/reenviar", { correo });
+      showToast( "Código enviado. Revisa tu bandeja.", "success");
+    } catch (error) {
+      // Fallback si /enviar no existe
+      if (error.response?.status === 404) {
+        try {
+          await api.post("/reenviar", { correo });
+          showToast("Código enviado. Revisa tu bandeja.", "success");
+        } catch (e2) {
+          const m2 = e2.response?.data?.mensaje || e2.response?.data?.error || e2.message;
+          showToast("No se pudo enviar: " + m2, "error");
+        }
+      } else {
+        const msg = error.response?.data?.mensaje || error.response?.data?.error || error.message;
+        showToast("No se pudo enviar: " + msg, "error");
+      }
+    } finally {
+      setSendLoading(false);
+    }
+  };
 
   return (
     <div className="register-container">
@@ -228,7 +308,7 @@ const Register = ({ onShowLogin }) => {
             autoComplete="new-password"
             minLength={8}
             maxLength={20}
-            aria-invalid={formData.confirmar_contraseña ? !passwordsMatch : false}
+            aria-invalid={formData.confirmar_contraseña ? !(formData.contraseña === formData.confirmar_contraseña) : false}
           />
           <button
             type="button"
@@ -241,7 +321,7 @@ const Register = ({ onShowLogin }) => {
           </button>
         </div>
 
-        {formData.confirmar_contraseña && !passwordsMatch && (
+        {formData.confirmar_contraseña && formData.contraseña !== formData.confirmar_contraseña && (
           <p className="field-hint error-hint">Las contraseñas no coinciden.</p>
         )}
 
@@ -262,15 +342,77 @@ const Register = ({ onShowLogin }) => {
         </div>
       </form>
 
-    {toast.show && (
-    <div
-    className={`toast-box ${toast.type === "error" ? "error" : "success"}`}
-    onClick={() => setToast({ show: false, message: "", type: "success" })}
-  >
-    {toast.message}
-  </div>
-)}
+      {/* Toast */}
+      {toast.show && (
+        <div
+          className={`toast ${toast.type === "error" ? "error" : ""}`}
+          onClick={() => setToast({ show: false, message: "", type: "success" })}
+        >
+          {toast.message}
+        </div>
+      )}
 
+      {/* Modal: Verificar código (incluye Reenviar y Enviar) */}
+      {verifyOpen && (
+        <div className="code-modal-backdrop">
+          <div className="code-modal">
+            <h3>Verifica tu correo</h3>
+            <p>Ingresa el código de 6 dígitos que te enviamos a <b>{lastEmail}</b>.</p>
+
+            <form onSubmit={handleVerify} className="code-form">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="000000"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="code-input"
+                required
+              />
+
+              <div className="code-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setVerifyOpen(false)}
+                  disabled={verifyLoading || resendLoading || sendLoading}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={handleResend}
+                  disabled={resendLoading || verifyLoading || sendLoading}
+                  title="Reenviar el código al mismo correo"
+                >
+                  {resendLoading ? "Reenviando..." : "Reenviar código"}
+                </button>
+
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={handleSend}
+                  disabled={sendLoading || verifyLoading || resendLoading}
+                  title="Enviar un nuevo código"
+                >
+                  {sendLoading ? "Enviando..." : "Enviar código"}
+                </button>
+
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={verifyLoading || code.length !== 6 || resendLoading || sendLoading}
+                >
+                  {verifyLoading ? "Verificando..." : "Verificar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
