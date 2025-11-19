@@ -94,7 +94,7 @@ const Register = ({ onShowLogin }) => {
 
       // Abre el modal para ingresar el código
       setVerifyOpen(true);
-      showToast(" Código enviado, revisa tu correo.", "success", 5000);
+      showToast("✅ Código enviado, revisa tu correo.", "success", 5000);
 
       // Limpia los campos visibles (opcional)
       setFormData({
@@ -137,7 +137,7 @@ const Register = ({ onShowLogin }) => {
     setVerifyLoading(true);
     try {
       await api.post("/auth/verify-code", { correo, code });
-      showToast(" Cuenta verificada.", "success");
+      showToast("✅ Cuenta verificada.", "success");
       setVerifyOpen(false);
       setCode("");
       onShowLogin?.();
@@ -157,7 +157,7 @@ const Register = ({ onShowLogin }) => {
     setResendLoading(true);
     try {
       await api.post("/reenviar", { correo });
-      showToast("Código reenviado. Revisa tu bandeja.", "success");
+      showToast("✅ Código reenviado. Revisa tu bandeja.", "success");
     } catch (error) {
       const msg = error.response?.data?.mensaje || error.response?.data?.error || error.message;
       showToast("No se pudo reenviar: " + msg, "error");
@@ -166,21 +166,21 @@ const Register = ({ onShowLogin }) => {
     }
   };
 
-  // === ENVIAR CÓDIGO 
+  // === ENVIAR CÓDIGO (ruta /api/enviar si existe; si no, usa /reenviar) ===
   const handleSend = async () => {
     const correo = lastEmail || formData.correo.trim();
     if (!correo) return showToast("Escribe tu correo primero.", "error");
 
     setSendLoading(true);
     try {
-      await api.post("/reenviar", { correo });
-      showToast( "Código enviado. Revisa tu bandeja.", "success");
+      await api.post("/enviar", { correo });
+      showToast("✅ Código enviado. Revisa tu bandeja.", "success");
     } catch (error) {
       // Fallback si /enviar no existe
       if (error.response?.status === 404) {
         try {
           await api.post("/reenviar", { correo });
-          showToast("Código enviado. Revisa tu bandeja.", "success");
+          showToast("✅ Código enviado. Revisa tu bandeja.", "success");
         } catch (e2) {
           const m2 = e2.response?.data?.mensaje || e2.response?.data?.error || e2.message;
           showToast("No se pudo enviar: " + m2, "error");

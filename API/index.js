@@ -8,40 +8,94 @@ var cookieParser = require("cookie-parser");
 var speakeasy = require("speakeasy");
 var QRCode = require("qrcode"); 
 
-// Código para preparar el envío de correo
+// ===== CONFIGURACIÓN Y ENVÍO DE CORREOS =====
 require('dotenv').config();
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 
+// URL base del sistema (para enlaces en correos)
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
 
+// Variables de entorno
+const {
+  SMTP_HOST,
+  SMTP_PORT,
+  SMTP_SECURE,
+  SMTP_USER,
+  SMTP_PASS,
+  MAIL_FROM
+} = process.env;
+
+// Log de configuración
+console.log('[SMTP cfg]', { SMTP_HOST, SMTP_PORT, SMTP_SECURE });
+
+// Resolver DNS para verificar conexión
+dns.lookup(SMTP_HOST, { all: true }, (err, addrs) => {
+  console.log('[SMTP resolve]', err || addrs);
+});
+
+// Crear transporter seguro
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  secure: true, 
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  host: SMTP_HOST,
+  port: Number(SMTP_PORT) || 587,
+  secure: String(SMTP_SECURE) === 'true', // true → 465, false → 587
+  auth: { user: SMTP_USER, pass: SMTP_PASS },
   connectionTimeout: 10000,
   greetingTimeout: 8000,
   socketTimeout: 10000,
 });
 
+// Verificar conexión SMTP al iniciar
 transporter.verify((err, ok) => {
   if (err) {
-    console.error('SMTP VERIFY ERROR:', err);
+    console.error('❌ SMTP VERIFY ERROR:', err);
   } else {
-    console.log('SMTP READY:', ok);
+    console.log('✅ SMTP READY:', ok);
   }
 });
+
+// ===== Funciones auxiliares =====
 
 // Genera un código de 6 dígitos
 function gen6Code() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-// Hash del código 
+// Hashea el código
 function hashCode(code) {
   return crypto.createHash('sha256').update(code).digest('hex');
 }
+
+// Envía correo con código de verificación
+async function SendVerifyMail({ to, name, code }) {
+  try {
+    console.log(`📤 Intentando enviar correo a: ${to}`);
+
+    const info = await transporter.sendMail({
+      from: MAIL_FROM || `"Soporte Marina Mercante" <${SMTP_USER}>`,
+      to,
+      subject: 'Tu código de verificación',
+      html: `
+        <p>Hola ${name || ''},</p>
+        <p>Tu código de verificación es:</p>
+        <p style="font-size:20px;font-weight:bold;letter-spacing:3px;">${code}</p>
+        <p>Caduca en 15 minutos.</p>
+        <p>Si no solicitaste este correo, puedes ignorarlo.</p>
+      `,
+    });
+
+    console.log('✅ Correo de verificación enviado a:', to);
+    console.log('✉️ ID del mensaje:', info.messageId);
+    return info;
+  } catch (err) {
+    console.error('❌ Error al enviar código:', err);
+    throw err;
+  }
+}
+
+// Exportar para usar en otros módulos
+module.exports = { transporter, SendVerifyMail, gen6Code, hashCode };
 
 // ===== Registrar acción en la bitácora =====
 function logBitacora(conexion, { id_objeto, id_usuario, accion, descripcion, usuario }, callback) {
@@ -64,32 +118,6 @@ function logBitacora(conexion, { id_objeto, id_usuario, accion, descripcion, usu
       if (callback) callback(null, results);
     }
   });
-}
-
-// Envía email con código 
-async function SendVerifyMail({ to, name, code }) {
-  try {
-    console.log("Intentando enviar correo a:", to);
-
-    const info = await transporter.sendMail({
-      from: `"Soporte Marina Mercante" <${process.env.SMTP_USER}>`,
-      to,
-      subject: "Tu código de verificación",
-      html: `
-        <p>Hola ${name || ""},</p>
-        <p>Tu código de verificación es:</p>
-        <p style="font-size:20px;font-weight:bold;letter-spacing:3px;">${code}</p>
-        <p>Caduca en 15 minutos.</p>
-      `,
-    });
-    console.log("Correo de verificación enviado a:", to);
-    console.log("ID del mensaje:", info.messageId);
-
-    return info; 
-  } catch (err) {
-    console.error("Error enviando código:", err.message || err);
-    throw err;
-  }
 }
 
 // ===== Middlewares de auth (IMPORTAR SOLO UNA VEZ) =====
@@ -869,9 +897,6 @@ app.get("/api/cookie", (req, res) => {
     res.status(404).json({ mensaje: "No se encontró la cookie" });
   }
 });
-
-// === helpers 
-const crypto = require('crypto');
 
 function gen6Code() {
   return Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
