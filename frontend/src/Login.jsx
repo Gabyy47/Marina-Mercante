@@ -67,7 +67,7 @@ const Login = () => {
       // Guardar datos del usuario que inició sesión
       if (data?.usuario) {
         localStorage.setItem("mm_user", JSON.stringify(data.usuario));
-        localStorage.setItem("usuarioData", JSON.stringify(data.usuario));
+        localStorage.setItem("usuarioData", JSON.stringify(data.usuario)); 
       }
 
       showToast("¡Inicio de sesión exitoso!", "success");

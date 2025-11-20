@@ -28,37 +28,46 @@ export default function Inventario() {
     fecha: ""
   });
 
-  
-  const cargarTodo = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [rKardex, rInv, rProd, rProv, rDet] = await Promise.all([
-        api.get("/kardex"),
-        api.get("/inventario"),
-        api.get("/productos"),
-        api.get("/proveedor"), // endpoint en el backend es '/api/proveedor' (singular)
-        api.get("/detalle_compra")
-      ]);
-      setKardex(rKardex.data || []);
-      setInventario(rInv.data || []);
-      setProductos(rProd.data || []);
-      setProveedores(rProv.data || []);
-      setDetalleCompra(rDet.data || []);
-    } catch (e) {
-      console.error("Error cargando datos de inventario:", e);
-      // Guardamos información útil para mostrar en la UI
-      const info = {
-        message: e.message,
-        status: e.response?.status,
-        data: e.response?.data,
-        url: e.config?.url,
-      };
-      setError(info);
-    } finally {
-      setLoading(false);
-    }
-  };
+const usuarioData = JSON.parse(localStorage.getItem("usuarioData") || "{}");
+
+const cargarTodo = async () => {
+  setLoading(true);
+  setError(null);
+
+  try {
+    const params = {
+      id_usuario: usuarioData.id_usuario,
+      usuario: usuarioData.nombre_usuario
+    };
+
+    const [rKardex, rInv, rProd, rProv, rDet] = await Promise.all([
+      api.get("/kardex", { params }),            // GET → bitácora
+      api.get("/inventario", { params }),        // GET → bitácora
+      api.get("/productos", { params }),         // GET → bitácora
+      api.get("/proveedor", { params }),         // GET → bitácora
+      api.get("/detalle_compra", { params })     // GET → bitácora
+    ]);
+
+    setKardex(rKardex.data || []);
+    setInventario(rInv.data || []);
+    setProductos(rProd.data || []);
+    setProveedores(rProv.data || []);
+    setDetalleCompra(rDet.data || []);
+
+  } catch (e) {
+    console.error("Error cargando datos de inventario:", e);
+
+    setError({
+      message: e.message,
+      status: e.response?.status,
+      data: e.response?.data,
+      url: e.config?.url
+    });
+
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => { cargarTodo(); }, []);
   // Escuchar eventos globales para refrescar datos cuando otras pantallas hagan cambios

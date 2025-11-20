@@ -1,6 +1,6 @@
 // ===== Dependencias =====
 var Express = require("express");
-var bodyParser = require("body-parser");
+var bodyParser = require("body-parser"); 
 var cors = require("cors");
 const mysql = require('mysql2');
 var jwt = require("jsonwebtoken");
