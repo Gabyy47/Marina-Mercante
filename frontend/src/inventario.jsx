@@ -15,7 +15,7 @@ export default function Inventario() {
   const [kardex, setKardex] = useState([]);
   const [inventario, setInventario] = useState([]);
   const [productos, setProductos] = useState([]);
-  const [proveedores, setProveedores] = useState([]);
+  const [proveedor, setProveedor] = useState([]);
   const [detalleCompra, setDetalleCompra] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -83,7 +83,7 @@ const cargarTodo = async () => {
       const prod = productos.find(p => p.id_producto === k.id_producto) || {};
       const inv = inventario.find(i => i.id_producto === k.id_producto) || {};
       const det = detalleCompra.find(d => d.id_kardex === k.id_kardex) || null;
-      const prov = det ? (proveedores.find(pv => pv.id_proveedor === det.id_proveedor) || {}) : null;
+      const prov = det ? (proveedor.find(pv => pv.id_proveedor === det.id_proveedor) || {}) : null;
       return {
         id: k.id_kardex,
         fecha: k.fecha_hora || k.fecha || null,

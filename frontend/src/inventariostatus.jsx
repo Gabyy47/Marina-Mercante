@@ -3,21 +3,6 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import api from "./api"; 
 
-/**
- * Componente Frontend para:
- *  1) Calcular y mostrar estados de inventario (BAJO, NORMAL, ALTO).
- *  2) Emitir mensajes en UI.
- *  3) Pintar colores: rojo (bajo), verde (alto), gris/ámbar (normal).
- *
- * Supone un endpoint GET /api/inventario que devuelve items con:
- *  {
- *    id_inventario: number,
- *    nombre_producto: string,
- *    cantidad_actual: number,
- *    stock_minimo: number | null,
- *    stock_maximo: number | null
- *  }
- */
 export default function InventarioStatus() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -30,13 +15,42 @@ export default function InventarioStatus() {
       setLoading(true);
       setError(null);
       try {
+        console.log("🔄 [1] Iniciando petición a /inventario...");
+        
         const { data } = await api.get("/inventario");
-        setItems(Array.isArray(data) ? data : (data?.items || []));
+        console.log("✅ [2] Respuesta recibida:", data);
+        console.log("📊 [3] Tipo de datos:", typeof data);
+        console.log("🔢 [4] Es array?:", Array.isArray(data));
+        console.log("📋 [5] Número de elementos:", data?.length || 0);
+        
+        if (data && data.length > 0) {
+          console.log("🎯 [6] Primer elemento:", data[0]);
+          console.log("🔑 [7] Keys del primer elemento:", Object.keys(data[0]));
+        }
+        
+        const transformedData = data.map(item => ({
+          id_inventario: item.id_inventario,
+          nombre_producto: item.nombre_producto,
+          cantidad_actual: item.cantidad,
+          stock_minimo: item.cantidad_minima,
+          stock_maximo: item.cantidad_maxima
+        }));
+        
+        console.log("🚀 [8] Datos transformados:", transformedData);
+        setItems(transformedData);
+        
+        // ESTA LÍNEA ESTÁ DE MÁS - LA ESTÁS SOBREESCRIBIENDO
+        // setItems(Array.isArray(data) ? data : (data?.items || []));
+        
       } catch (err) {
-        console.error(err);
+        console.error("❌ [ERROR] Detalles completos:", err);
+        console.error("📡 Response del error:", err.response);
+        console.error("🔧 Mensaje:", err.message);
+        console.error("🌐 URL intentada:", err.config?.url);
         setError("No se pudo cargar el inventario.");
       } finally {
         setLoading(false);
+        console.log("🏁 [9] Fetch terminado, loading: false");
       }
     };
     fetchData();
@@ -44,14 +58,18 @@ export default function InventarioStatus() {
 
   // ==== Lógica de estado por item ====
   function getStockStatus(item) {
+    console.log("🔍 [getStockStatus] Analizando item:", item);
+    
     const qty = Number(item.cantidad_actual ?? 0);
     const min = item.stock_minimo ?? null;
     const max = item.stock_maximo ?? null;
 
+    console.log(`📦 [getStockStatus] cantidad_actual: ${qty}, stock_minimo: ${min}, stock_maximo: ${max}`);
+
     if (min != null && qty < min) {
       return {
         level: "BAJO",
-        color: "#ef4444", // rojo
+        color: "#ef4444",
         bg: "#fee2e2",
         text: `Bajo stock: ${qty} < mínimo (${min}).`,
         rowBg: "#fff1f2",
@@ -61,17 +79,16 @@ export default function InventarioStatus() {
     if (max != null && qty >= max) {
       return {
         level: "ALTO",
-        color: "#22c55e", // verde
+        color: "#22c55e",
         bg: "#dcfce7",
         text: `Stock al tope o superior: ${qty} ≥ máximo (${max}).`,
         rowBg: "#ecfdf5",
       };
     }
 
-    // NORMAL
     return {
       level: "NORMAL",
-      color: "#f59e0b", // ámbar
+      color: "#f59e0b",
       bg: "#fef3c7",
       text: min != null && max != null
         ? `Dentro del rango (${min}–${max}).`
@@ -145,6 +162,19 @@ export default function InventarioStatus() {
     );
   }
 
+  // 🔍 DEBUG DEL RENDER - AGREGA ESTO AL FINAL ANTES DEL RETURN
+  console.log("🔍 [RENDER] Estado actual del componente:");
+  console.log("📦 Items:", items);
+  console.log("🔢 Número de items:", items.length);
+  console.log("🔄 Loading:", loading);
+  console.log("❌ Error:", error);
+
+  if (items.length > 0) {
+    console.log("📋 Primer item en render:", items[0]);
+  } else {
+    console.log("⚠️ Array items está VACÍO en render");
+  }
+
   return (
     <div style={{ padding: 24 }}>
       <ToastContainer position="bottom-right" />
@@ -204,7 +234,7 @@ export default function InventarioStatus() {
 
               const maxVal = Number(it.stock_maximo ?? 0);
               const qtyVal = Number(it.cantidad_actual ?? 0);
-              const progressMax = maxVal > 0 ? maxVal : Math.max(qtyVal, 1); // evita división por 0
+              const progressMax = maxVal > 0 ? maxVal : Math.max(qtyVal, 1);
 
               return (
                 <tr key={it.id_inventario} style={{ background: st.rowBg }}>

@@ -1585,7 +1585,7 @@ app.delete('/api/estado_ticket/:id', (request, response) => {
 
 //CRUD PROVEEDORES
 
-app.get('/api/proveedores', (req, res) => { 
+app.get('/api/proveedor', (req, res) => { 
   const { id_usuario, usuario } = req.query;
   const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
 
@@ -1613,7 +1613,7 @@ app.get('/api/proveedores', (req, res) => {
   });
 });
 
-app.get('/api/proveedores/:id', (req, res) => {
+app.get('/api/proveedor/:id', (req, res) => {
   const { id } = req.params;
   const { id_usuario, usuario } = req.query;
   const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
@@ -1647,7 +1647,7 @@ app.get('/api/proveedores/:id', (req, res) => {
   );
 });
 
-app.post('/api/proveedores', (req, res) => {
+app.post('/api/proveedor', (req, res) => {
   const { nombre, telefono, direccion } = req.body;
   const { id_usuario, usuario } = req.query;
   const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
@@ -1687,7 +1687,7 @@ app.post('/api/proveedores', (req, res) => {
   );
 });
 
-app.put('/api/proveedores/:id', (req, res) => {
+app.put('/api/proveedor/:id', (req, res) => {
   const { id } = req.params;
   const { nombre, telefono, direccion } = req.body;
   const { id_usuario, usuario } = req.query;
@@ -1719,7 +1719,7 @@ app.put('/api/proveedores/:id', (req, res) => {
   );
 });
 
-app.delete('/api/proveedores/:id', (req, res) => {
+app.delete('/api/proveedor/:id', (req, res) => {
   const { id } = req.params;
   const { id_usuario, usuario } = req.query;
   const usuarioNombre = usuario || req.user?.nombre_usuario || 'sistema';
@@ -2365,9 +2365,9 @@ app.get('/api/inventario', (req, res) => {
       i.id_inventario,
       i.id_producto,
       p.nombre_producto,
-      i.cantidad,
-      i.cantidad_minima,
-      i.cantidad_maxima
+      i.cantidad as cantidad_actual,          // ← Cambiado
+      i.cantidad_minima as stock_minimo,      // ← Cambiado
+      i.cantidad_maxima as stock_maximo       // ← Cambiado
     FROM tbl_inventario i
     JOIN tbl_productos p ON i.id_producto = p.id_producto
   `;
