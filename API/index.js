@@ -226,7 +226,6 @@ app.get("/api/seguro", verificarToken, (req, res) => {
 
 // Listar roles
 app.get("/api/roles", verificarToken, autorizarRoles("Administrador"),async (req, res) => {
- unificacion
   const { id_usuario } = req.query; 
   try {
     const [rows] = await conexion.promise().query(

@@ -7,6 +7,11 @@ import "react-toastify/dist/ReactToastify.css";
 import api from "./api";   // baseURL: http://localhost:49146/api
 import logo from "./imagenes/DGMM-Gobierno.png";
 import "./mantenimiento.css";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import logoDGMM from "./imagenes/DGMM-Gobierno.png";
+import { FaFilePdf } from "react-icons/fa";
+
 
 Modal.setAppElement("#root");
 
@@ -21,6 +26,63 @@ export default function MantenimientoRol() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editItemId, setEditItemId] = useState(null);
 
+   const generarPDF = () => {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "pt",
+    format: "A4",
+  });
+
+  // --- ENCABEZADO DGMM ---
+  doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(14, 42, 59);
+  doc.text("Dirección General de la Marina Mercante", 170, 50);
+
+  doc.setFontSize(14);
+  doc.text("Reporte de Roles", 170, 72);
+
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+  // --- CONFIGURACIÓN DE TABLA ---
+  const columnas = ["ID Rol", "Nombre", "Descripción"];
+
+  // AQUÍ USAMOS ITEMS (LOS ROLES)
+  const filas = items.map((rol) => [
+    rol.id_rol,
+    rol.nombre,
+    rol.descripcion || "",
+  ]);
+
+  // --- TABLA ---
+  autoTable(doc, {
+    startY: 125,
+    head: [columnas],
+    body: filas,
+    styles: { fontSize: 10, cellPadding: 5 },
+    headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [242, 245, 247] },
+  });
+
+  // --- PIE DE PÁGINA ---
+  const h = doc.internal.pageSize.height;
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(
+    "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+    doc.internal.pageSize.width / 2,
+    h - 30,
+    { align: "center" }
+  );
+
+  // --- GUARDAR PDF ---
+  doc.save("Roles_DGMM.pdf");
+};
+
+  
   const limpiarCampos = () => {
     setNewNombre("");
     setNewDescripcion("");
@@ -130,6 +192,9 @@ export default function MantenimientoRol() {
           <div className="mm-actions">
             <Link to="/" className="mm-link">← Volver al Menú Principal</Link>
             <button className="btn btn-primary" onClick={openModal}>+ Nuevo rol</button>
+            <button className="btn btn-topbar-primary" onClick={generarPDF}>
+                        <FaFilePdf size={16} /> Generar Reporte
+                      </button>
           </div>
         </div>
 
