@@ -2365,9 +2365,9 @@ app.get('/api/inventario', (req, res) => {
       i.id_inventario,
       i.id_producto,
       p.nombre_producto,
-      i.cantidad as cantidad_actual,          // ← Cambiado
-      i.cantidad_minima as stock_minimo,      // ← Cambiado
-      i.cantidad_maxima as stock_maximo       // ← Cambiado
+      i.cantidad as cantidad_actual,          
+      i.cantidad_minima as stock_minimo,      
+      i.cantidad_maxima as stock_maximo       
     FROM tbl_inventario i
     JOIN tbl_productos p ON i.id_producto = p.id_producto
   `;

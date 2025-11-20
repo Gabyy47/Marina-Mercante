@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import api from "./api"; 
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function InventarioStatus() {
   const [items, setItems] = useState([]);
@@ -15,42 +17,26 @@ export default function InventarioStatus() {
       setLoading(true);
       setError(null);
       try {
-        console.log("🔄 [1] Iniciando petición a /inventario...");
+        console.log("🔄 Cargando inventario...");
         
-        const { data } = await api.get("/inventario");
-        console.log("✅ [2] Respuesta recibida:", data);
-        console.log("📊 [3] Tipo de datos:", typeof data);
-        console.log("🔢 [4] Es array?:", Array.isArray(data));
-        console.log("📋 [5] Número de elementos:", data?.length || 0);
+        const response = await api.get("/inventario");
+        console.log("✅ Datos recibidos:", response.data);
         
-        if (data && data.length > 0) {
-          console.log("🎯 [6] Primer elemento:", data[0]);
-          console.log("🔑 [7] Keys del primer elemento:", Object.keys(data[0]));
-        }
-        
-        const transformedData = data.map(item => ({
+        const transformedData = response.data.map(item => ({
           id_inventario: item.id_inventario,
           nombre_producto: item.nombre_producto,
-          cantidad_actual: item.cantidad,
-          stock_minimo: item.cantidad_minima,
-          stock_maximo: item.cantidad_maxima
+          cantidad_actual: item.cantidad_actual,
+          stock_minimo: item.stock_minimo,
+          stock_maximo: item.stock_maximo
         }));
         
-        console.log("🚀 [8] Datos transformados:", transformedData);
         setItems(transformedData);
         
-        // ESTA LÍNEA ESTÁ DE MÁS - LA ESTÁS SOBREESCRIBIENDO
-        // setItems(Array.isArray(data) ? data : (data?.items || []));
-        
       } catch (err) {
-        console.error("❌ [ERROR] Detalles completos:", err);
-        console.error("📡 Response del error:", err.response);
-        console.error("🔧 Mensaje:", err.message);
-        console.error("🌐 URL intentada:", err.config?.url);
+        console.error("❌ Error:", err);
         setError("No se pudo cargar el inventario.");
       } finally {
         setLoading(false);
-        console.log("🏁 [9] Fetch terminado, loading: false");
       }
     };
     fetchData();
@@ -58,13 +44,9 @@ export default function InventarioStatus() {
 
   // ==== Lógica de estado por item ====
   function getStockStatus(item) {
-    console.log("🔍 [getStockStatus] Analizando item:", item);
-    
     const qty = Number(item.cantidad_actual ?? 0);
     const min = item.stock_minimo ?? null;
     const max = item.stock_maximo ?? null;
-
-    console.log(`📦 [getStockStatus] cantidad_actual: ${qty}, stock_minimo: ${min}, stock_maximo: ${max}`);
 
     if (min != null && qty < min) {
       return {
@@ -96,6 +78,67 @@ export default function InventarioStatus() {
       rowBg: "transparent",
     };
   }
+
+  // ==== FUNCIÓN PARA GENERAR PDF ====
+  const generarPDF = () => {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "pt",
+      format: "A4",
+    });
+
+    // -------- ENCABEZADO --------
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Reporte de Estado de Inventario", 40, 40);
+
+    doc.setFontSize(10);
+    doc.text(`Generado: ${new Date().toLocaleString()}`, 40, 60);
+
+    // -------- COLUMNAS --------
+    const columnas = [
+      "Producto",
+      "Cantidad",
+      "Mínimo",
+      "Máximo",
+      "Estado",
+      "Mensaje",
+    ];
+
+    // -------- FILAS --------
+    const filas = filtered.map((it) => {
+      const st = getStockStatus(it);
+      return [
+        it.nombre_producto,
+        it.cantidad_actual,
+        it.stock_minimo ?? "—",
+        it.stock_maximo ?? "—",
+        st.level,
+        st.text,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 80,
+      head: [columnas],
+      body: filas,
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [14, 42, 59], textColor: 255 },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+    });
+
+    // -------- PIE DE PAGINA --------
+    const pageHeight = doc.internal.pageSize.height;
+    doc.setFontSize(9);
+    doc.text(
+      "Dirección General de la Marina Mercante — Sistema Interno ©️ 2025",
+      300,
+      pageHeight - 20,
+      { align: "center" }
+    );
+
+    doc.save("InventarioStatus_DGMM.pdf");
+  };
 
   // Notificaciones para BAJO/ALTO al cargar
   useEffect(() => {
@@ -162,19 +205,6 @@ export default function InventarioStatus() {
     );
   }
 
-  // 🔍 DEBUG DEL RENDER - AGREGA ESTO AL FINAL ANTES DEL RETURN
-  console.log("🔍 [RENDER] Estado actual del componente:");
-  console.log("📦 Items:", items);
-  console.log("🔢 Número de items:", items.length);
-  console.log("🔄 Loading:", loading);
-  console.log("❌ Error:", error);
-
-  if (items.length > 0) {
-    console.log("📋 Primer item en render:", items[0]);
-  } else {
-    console.log("⚠️ Array items está VACÍO en render");
-  }
-
   return (
     <div style={{ padding: 24 }}>
       <ToastContainer position="bottom-right" />
@@ -186,7 +216,7 @@ export default function InventarioStatus() {
         <strong style={{ color: "#f59e0b" }}>Ámbar</strong> = Normal.
       </p>
 
-      <div style={{ display: "flex", gap: 12, margin: "12px 0 20px" }}>
+      <div style={{ display: "flex", gap: 12, margin: "12px 0 20px", alignItems: "center" }}>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -202,6 +232,23 @@ export default function InventarioStatus() {
           <input type="checkbox" checked={onlyAlerts} onChange={(e) => setOnlyAlerts(e.target.checked)} />
           Solo alertas (BAJO/ALTO)
         </label>
+        
+        {/* BOTÓN PARA GENERAR PDF */}
+        <button
+          onClick={generarPDF}
+          style={{
+            padding: "10px 16px",
+            backgroundColor: "#1e40af",
+            color: "white",
+            border: "none",
+            borderRadius: 8,
+            cursor: "pointer",
+            fontWeight: 600,
+            marginLeft: "auto"
+          }}
+        >
+          📄 Generar PDF
+        </button>
       </div>
 
       {loading && <div>Cargando inventario...</div>}
