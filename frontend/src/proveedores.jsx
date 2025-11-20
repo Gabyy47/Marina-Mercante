@@ -119,13 +119,14 @@ export default function Proveedores(){
           <button className="btn btn-topbar-outline" onClick={()=>navigate('/')}>← Menú</button>
           <button className="btn btn-topbar-outline" onClick={fetchAll} style={{marginLeft:8}}>⟳ Refrescar</button>
           <button className="btn btn-topbar-outline" onClick={openNew} style={{marginLeft:8}}>＋ Nuevo</button>
-          <div className="topbar-actions">
+          
           <button className="btn btn-topbar-primary" onClick={generarPDF}>
             <FaFilePdf size={16} /> Generar Reporte PDF
           </button>
+        
+        
         </div>
-        </div>
-        </div>
+      </div>
 
 
 
