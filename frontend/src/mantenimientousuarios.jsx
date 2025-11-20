@@ -7,6 +7,10 @@ import "react-toastify/dist/ReactToastify.css";
 import api from "./api";   // instancia Axios con baseURL http://localhost:49146/api
 import logo from "./imagenes/DGMM-Gobierno.png";
 import "./mantenimiento.css";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import logoDGMM from "./imagenes/DGMM-Gobierno.png";
+import { FaFilePdf } from "react-icons/fa";
 
 // Necesario para accesibilidad del modal
 Modal.setAppElement("#root");
@@ -24,11 +28,70 @@ export default function MantenimientoUsuarios() {
   const [newNombre_usuario, setNewNombre_usuario] = useState("");
   const [newContraseña, setNewContraseña] = useState("");
 
+
   // ====== modales ======
   const [isModalOpen, setIsModalOpen] = useState(false);        // crear
   const [isEditModalOpen, setIsEditModalOpen] = useState(false); // editar
   const [editItemId, setEditItemId] = useState(null);
   
+  const generarPDFUsuarios = () => {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "pt",
+    format: "A4",
+  });
+
+  // --- ENCABEZADO DGMM ---
+  doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(14, 42, 59);
+  doc.text("Dirección General de la Marina Mercante", 170, 50);
+
+  doc.setFontSize(14);
+  doc.text("Reporte de Usuarios", 170, 72);
+
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+  // --- CABECERAS DE LA TABLA ---
+  const columnas = ["ID", "Nombre", "Usuario", "Correo", "Rol", "Estado"];
+
+  // items = arreglo con usuarios (ajusta nombres de campos según tu API)
+  const filas = items.map((u) => [
+    u.id_usuario,
+    u.nombre,
+    u.nombre_usuario,
+    u.correo,
+    u.rol_nombre || u.nombreRol || "",
+    u.estado || u.estado_usuario || "",
+  ]);
+
+  // --- TABLA ---
+  autoTable(doc, {
+    startY: 125,
+    head: [columnas],
+    body: filas,
+    styles: { fontSize: 10, cellPadding: 5 },
+    headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [242, 245, 247] },
+  });
+
+  // --- PIE DE PÁGINA ---
+  const h = doc.internal.pageSize.height;
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(
+    "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+    doc.internal.pageSize.width / 2,
+    h - 30,
+    { align: "center" }
+  );
+
+  doc.save("Usuarios_DGMM.pdf");
+};
+
 
 
   // ====== helpers ======
@@ -212,6 +275,9 @@ const toPayload = () => {
             <button className="btn btn-primary" onClick={openModal}>
               + Nuevo usuario
             </button>
+            <button className="btn btn-topbar-primary" onClick={generarPDFUsuarios}>
+      <FaFilePdf size={16} /> Generar Reporte
+    </button>
           </div>
         </div>
 

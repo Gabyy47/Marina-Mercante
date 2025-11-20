@@ -16,7 +16,6 @@ import Inventario from "./inventario.jsx";
 import Inventariostatus from "./inventariostatus.jsx";
 import HistorialKardex from "./HistorialKardex.jsx";
 import DetalleCompra from "./DetalleCompra.jsx";
-import Mantenimientocliente from "./mantenimientocliente.jsx";
 
 
 
@@ -118,15 +117,7 @@ const Sidebar = ({ activeView, onSelect, onLogout }) => (
       >
         <FiUsers /> <span>DetalleCompra</span>
       </button>
-
-      <button
-        className={`sb__link ${activeView === "mantenimientocliente" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("mantenimientocliente")}
-      >
-        <FiUsers /> <span>MantenimientoCliente</span>
-      </button>
       
-
       <button
         className={`sb__link ${activeView === "settings" ? "sb__link--active" : ""}`}
         onClick={() => onSelect("settings")}
@@ -311,9 +302,6 @@ const MainPage = () => {
 
       case "DetalleCompra":
         return <DetalleCompra />;
-      
-      case "mantenimientocliente":
-        return <Mantenimientocliente />;
 
       case "settings":
         return <div className="card p-4">Configuración del sistema</div>;
