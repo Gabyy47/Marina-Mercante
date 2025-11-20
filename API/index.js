@@ -1019,10 +1019,13 @@ app.post('/api/auth/verify-code', (req, res) => {
   });
 });
 
-// ===== REENVIAR CÓDIGO DE VERIFICACIÓN 
-app.post('/api/reenviar', (req, res) => {
+// ===== ENVIAR CÓDIGO DE VERIFICACIÓN =====
+app.post('/api/enviar', (req, res) => {
   const { correo } = req.body;
-  if (!correo) return res.status(400).json({ mensaje: 'correo es requerido' });
+
+  if (!correo) {
+    return res.status(400).json({ mensaje: 'correo es requerido' });
+  }
 
   // Buscar usuario
   const qUser = `
@@ -1033,54 +1036,68 @@ app.post('/api/reenviar', (req, res) => {
   `;
 
   conexion.query(qUser, [correo], (err, rows) => {
-    if (err) return handleDatabaseError(err, res, 'Error al buscar usuario:');
-    if (rows.length === 0)
-      return res.status(404).json({ mensaje: 'Usuario no encontrado.' }); 
+    if (err) {
+      return handleDatabaseError(err, res, 'Error al buscar usuario:');
+    }
+
+    if (rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+    }
 
     const u = rows[0];
 
-    // Si ya está verificado, no reenviar
-    if (u.is_verified)
+    // Si ya está verificado -> no reenviar código
+    if (u.is_verified) {
       return res.json({ mensaje: 'El correo ya está verificado.' });
+    }
 
-    // Marcar tokens anteriores como usados (opcional, por seguridad)
+    // Marcar tokens anteriores como usados (por seguridad)
     const qMarkUsed = `
       UPDATE verificar_email_tokens 
       SET used = 1 
       WHERE id_usuario = ?
     `;
+
     conexion.query(qMarkUsed, [u.id_usuario], (err2) => {
-      if (err2)
+      if (err2) {
         return handleDatabaseError(err2, res, 'Error al invalidar tokens anteriores:');
+      }
 
       // Generar nuevo código y expiración
-      const code = gen6Code(); 
+      const code = gen6Code();
       const code_hash = hashCode(code);
-      const expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+      const expires_at = new Date(Date.now() + 15 * 60 * 1000);
 
-      // Guardar el nuevo token (used = 0)
+      // Guardar nuevo token
       const qTok = `
-        INSERT INTO verificar_email_tokens 
-        (id_usuario, token_hash, expires_at, created_at, used)
+        INSERT INTO verificar_email_tokens
+          (id_usuario, token_hash, expires_at, created_at, used)
         VALUES (?, ?, ?, NOW(), 0)
       `;
 
       conexion.query(qTok, [u.id_usuario, code_hash, expires_at], async (err3) => {
-        if (err3)
-          return handleDatabaseError(err3, res, 'Error al crear nuevo token:');
+        if (err3) {
+          return handleDatabaseError(err3, res, 'Error al crear el nuevo token:');
+        }
 
-        // Enviar el correo
+        // ENVIAR EL CORREO 
         try {
-          await SendVerifyMail({ to: correo, name: u.nombre, code });
-          console.log(` Nuevo código enviado a ${correo}: ${code}`);
+          await SendVerifyMail({
+            to: correo,
+            name: u.nombre,
+            code
+          });
+
+          console.log(`Código enviado a ${correo}: ${code}`);
 
           return res.json({
-            mensaje: 'Se envió un nuevo código de verificación al correo proporcionado.',
+            mensaje: 'Se envió un código de verificación al correo proporcionado.'
           });
+
         } catch (e) {
-          console.error(' Error al enviar correo:', e);
+          console.error(' Error enviando correo:', e);
           return res.status(500).json({
-            mensaje: 'Usuario creado, pero no se pudo enviar el código al correo.',
+            mensaje: 'No se pudo enviar el código al correo.'
           });
         }
       });
@@ -1148,50 +1165,98 @@ app.post("/api/usuario", verificarToken, autorizarRoles("Administrador"),  (req,
   });
 });
 
-// REENVIAR CÓDIGO
-app.post('/api/reenviar', (req, res) => {
+// ===== REENVIAR CÓDIGO DE VERIFICACIÓN =====
+app.post("/api/reenviar", (req, res) => {
   const { correo } = req.body;
 
-  if (!correo) return res.status(400).json({ mensaje: 'correo es requerido' });
+  if (!correo) {
+    return res.status(400).json({ mensaje: "correo es requerido" });
+  }
 
   const qUser = `
-    SELECT id_usuario, nombre, is_verified 
-    FROM tbl_usuario 
-    WHERE correo = ? 
+    SELECT id_usuario, nombre, is_verified
+    FROM tbl_usuario
+    WHERE correo = ?
     LIMIT 1
   `;
 
   conexion.query(qUser, [correo], (err, rows) => {
-    if (err) return handleDatabaseError(err, res, 'Error al buscar usuario:');
-    if (rows.length === 0) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+    if (err) {
+      return handleDatabaseError(err, res, "Error al buscar usuario:");
+    }
+
+    if (rows.length === 0) {
+      return res.status(404).json({ mensaje: "Usuario no encontrado." });
+    }
 
     const u = rows[0];
 
+    // Si ya está verificado, no tiene sentido reenviar
     if (u.is_verified) {
-      return res.json({ mensaje: 'El correo ya está verificado.' });
+      return res.json({ mensaje: "El correo ya está verificado." });
     }
 
-    // Generar nuevo código
-    const code = gen6Code();
-    const code_hash = hashCode(code);
-    const expires_at = new Date(Date.now() + 15 * 60 * 1000);
-
-    // Guardar el nuevo token
-    const qTok = `
-      INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, created_at)
-      VALUES (?, ?, ?, NOW())
+    // Marcar tokens anteriores como usados (por seguridad)
+    const qMarkUsed = `
+      UPDATE verificar_email_tokens
+      SET used = 1
+      WHERE id_usuario = ?
     `;
 
-    conexion.query(qTok, [u.id_usuario, code_hash, expires_at], async (e3) => {
-      if (e3) return handleDatabaseError(e3, res, 'Error al crear nuevo token:');
-
-      try {
-        await SendVerifyMail({ to: correo, name: u.nombre, code });
-        return res.json({ mensaje: 'Se envió un nuevo código de verificación.' });
-      } catch (e) {
-        console.error('Email error:', e);
-        return res.status(500).json({ mensaje: 'No se pudo enviar el código.' });
+    conexion.query(qMarkUsed, [u.id_usuario], (err2) => {
+      if (err2) {
+        return handleDatabaseError(
+          err2,
+          res,
+          "Error al invalidar tokens anteriores:"
+        );
       }
+
+      // Generar nuevo código y expiración
+      const code = gen6Code();
+      const code_hash = hashCode(code);
+      const expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+
+      // Guardar nuevo token (used = 0)
+      const qTok = `
+        INSERT INTO verificar_email_tokens
+          (id_usuario, token_hash, expires_at, created_at, used)
+        VALUES (?, ?, ?, NOW(), 0)
+      `;
+
+      conexion.query(
+        qTok,
+        [u.id_usuario, code_hash, expires_at],
+        async (err3) => {
+          if (err3) {
+            return handleDatabaseError(
+              err3,
+              res,
+              "Error al crear nuevo token:"
+            );
+          }
+
+          // Enviar correo 
+          try {
+            await SendVerifyMail({
+              to: correo,
+              name: u.nombre,
+              code,
+            });
+
+            console.log(`Nuevo código reenviado a ${correo}: ${code}`);
+
+            return res.json({
+              mensaje: "Se envió un nuevo código de verificación al correo proporcionado.",
+            });
+          } catch (e) {
+            console.error("Error enviando correo:", e);
+            return res.status(500).json({
+              mensaje: "No se pudo enviar el código al correo.",
+            });
+          }
+        }
+      );
     });
   });
 });

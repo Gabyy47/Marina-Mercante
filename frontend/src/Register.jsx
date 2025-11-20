@@ -157,7 +157,7 @@ const Register = ({ onShowLogin }) => {
     setResendLoading(true);
     try {
       await api.post("/reenviar", { correo });
-      showToast("✅ Código reenviado. Revisa tu bandeja.", "success");
+      showToast("Código reenviado. Revisa tu bandeja.", "success");
     } catch (error) {
       const msg = error.response?.data?.mensaje || error.response?.data?.error || error.message;
       showToast("No se pudo reenviar: " + msg, "error");
@@ -174,13 +174,13 @@ const Register = ({ onShowLogin }) => {
     setSendLoading(true);
     try {
       await api.post("/enviar", { correo });
-      showToast("✅ Código enviado. Revisa tu bandeja.", "success");
+      showToast("Código enviado. Revisa tu bandeja.", "success");
     } catch (error) {
       // Fallback si /enviar no existe
       if (error.response?.status === 404) {
         try {
           await api.post("/reenviar", { correo });
-          showToast("✅ Código enviado. Revisa tu bandeja.", "success");
+          showToast("Código enviado. Revisa tu bandeja.", "success");
         } catch (e2) {
           const m2 = e2.response?.data?.mensaje || e2.response?.data?.error || e2.message;
           showToast("No se pudo enviar: " + m2, "error");
@@ -381,6 +381,16 @@ const Register = ({ onShowLogin }) => {
                   Cancelar
                 </button>
 
+<button
+                  type="button"
+                  className="link-button"
+                  onClick={handleSend}
+                  disabled={sendLoading || verifyLoading || resendLoading}
+                  title="Enviar código"
+                >
+                  {sendLoading ? "Enviando..." : "Enviar código"}
+                </button>
+
                 <button
                   type="button"
                   className="link-button"
@@ -389,16 +399,6 @@ const Register = ({ onShowLogin }) => {
                   title="Reenviar el código al mismo correo"
                 >
                   {resendLoading ? "Reenviando..." : "Reenviar código"}
-                </button>
-
-                <button
-                  type="button"
-                  className="link-button"
-                  onClick={handleSend}
-                  disabled={sendLoading || verifyLoading || resendLoading}
-                  title="Enviar un nuevo código"
-                >
-                  {sendLoading ? "Enviando..." : "Enviar código"}
                 </button>
 
                 <button
