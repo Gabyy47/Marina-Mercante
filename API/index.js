@@ -145,7 +145,7 @@ const conexion = mysql.createPool({
   host: "localhost",
   port: 3306,
   user: "root",
-  password: "123456",
+  password: "H0nduras",
   database: "marina_mercante",
   waitForConnections: true,
   connectionLimit: 10,
@@ -226,7 +226,6 @@ app.get("/api/seguro", verificarToken, (req, res) => {
 
 // Listar roles
 app.get("/api/roles", verificarToken, autorizarRoles("Administrador"),async (req, res) => {
- unificacion
   const { id_usuario } = req.query; 
   try {
     const [rows] = await conexion.promise().query(
@@ -897,6 +896,7 @@ app.get("/api/cookie", (req, res) => {
     res.status(404).json({ mensaje: "No se encontró la cookie" });
   }
 });
+
 
 
 // === helpers 
@@ -2360,16 +2360,27 @@ app.delete('/api/salidas_productos/:id', (req, res) => {
 // ====== CRUD PARA tl_inventario ======
 
 app.get('/api/inventario', (req, res) => {
-  const query = "SELECT * FROM tbl_inventario";
+  const query = `
+    SELECT 
+      i.id_inventario,
+      i.id_producto,
+      p.nombre_producto,
+      i.cantidad,
+      i.cantidad_minima,
+      i.cantidad_maxima
+    FROM tbl_inventario i
+    JOIN tbl_productos p ON i.id_producto = p.id_producto
+  `;
+
   conexion.query(query, (err, rows) => {
     if (err) {
       console.error("Error al listar el inventario:", err);
-      res.status(500).json({ error: "Error al listar el inventario" });
-      return;
+      return res.status(500).json({ error: "Error al listar el inventario" });
     }
     res.json(rows);
   });
 });
+
 
 app.get('/api/inventario/:id', (req, res) => {
   const query = "SELECT * FROM tbl_inventario WHERE id_inventario = ?";
@@ -2547,7 +2558,7 @@ const ID_OBJETO_PROVEEDOR = 2;
 // ==========================
 //  INSERTAR PROVEEDOR (SP)
 // ==========================
-app.post('/api/proveedor', verificarToken, (req, res) => {
+app.post('/api/proveedor', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { nombre, telefono, direccion } = req.body;
   const user = req.user;
 
@@ -2581,7 +2592,7 @@ app.post('/api/proveedor', verificarToken, (req, res) => {
 // ==========================
 //  ACTUALIZAR PROVEEDOR (SP)
 // ==========================
-app.put('/api/proveedor/:id', verificarToken, (req, res) => {
+app.put('/api/proveedor/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { nombre, telefono, direccion } = req.body;
   const id_proveedor = parseInt(req.params.id);
   const user = req.user;
@@ -2611,7 +2622,7 @@ app.put('/api/proveedor/:id', verificarToken, (req, res) => {
 // ==========================
 //  ELIMINAR PROVEEDOR (SP)
 // ==========================
-app.delete('/api/proveedor/:id', verificarToken, (req, res) => {
+app.delete('/api/proveedor/:id', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res) => {
   const id_proveedor = parseInt(req.params.id);
   const user = req.user;
 
@@ -2639,7 +2650,7 @@ app.delete('/api/proveedor/:id', verificarToken, (req, res) => {
 // ==========================
 //  MOSTRAR PROVEEDORES (SP)
 // ==========================
-app.get('/api/proveedor', verificarToken, (req, res) => {
+app.get('/api/proveedor', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const user = req.user;
   const query = "CALL SP_MostrarProveedores()";
 
@@ -2669,7 +2680,7 @@ const ID_OBJETO_INVENTARIO = 5;
 // ==========================
 //  INSERTAR INVENTARIO (SP)
 // ==========================
-app.post('/api/inventario', verificarToken, (req, res) => {
+app.post('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { id_producto, cantidad } = req.body;
   const user = req.user;
 
@@ -2702,7 +2713,7 @@ app.post('/api/inventario', verificarToken, (req, res) => {
 // ==========================
 //  ACTUALIZAR INVENTARIO (SP)
 // ==========================
-app.put('/api/inventario/:id', verificarToken, (req, res) => {
+app.put('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { cantidad } = req.body;
   const id_inventario = parseInt(req.params.id);
   const user = req.user;
@@ -2732,7 +2743,7 @@ app.put('/api/inventario/:id', verificarToken, (req, res) => {
 // ==========================
 //  ELIMINAR INVENTARIO (SP)
 // ==========================
-app.delete('/api/inventario/:id', verificarToken, (req, res) => {
+app.delete('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res) => {
   const id_inventario = parseInt(req.params.id);
   const user = req.user;
 
@@ -2760,7 +2771,7 @@ app.delete('/api/inventario/:id', verificarToken, (req, res) => {
 // ==========================
 //  MOSTRAR INVENTARIO (SP)
 // ==========================
-app.get('/api/inventario', verificarToken, (req, res) => {
+app.get('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const user = req.user;
   const query = "CALL SP_MostrarInventario()";
 
@@ -2793,7 +2804,7 @@ const ID_OBJETO_DETALLE_COMPRA = 8;
 // =============================
 //  INSERTAR KARDEX (SP)
 // =============================
-app.post('/api/kardex', verificarToken, (req, res) => {
+app.post('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { 
     id_producto, cantidad, tipo_movimiento, estado, descripcion, id_proveedor, monto_total
   } = req.body;
@@ -2839,7 +2850,7 @@ app.post('/api/kardex', verificarToken, (req, res) => {
 // =============================
 //  ACTUALIZAR KARDEX (SP)
 // =============================
-app.put('/api/kardex/:id', verificarToken, (req, res) => {
+app.put('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { estado } = req.body;
   const id_kardex = parseInt(req.params.id);
   const user = req.user;
@@ -2873,7 +2884,7 @@ app.put('/api/kardex/:id', verificarToken, (req, res) => {
 // =============================
 //  ELIMINAR KARDEX (SP)
 // =============================
-app.delete('/api/kardex/:id', verificarToken, (req, res) => {
+app.delete('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res) => {
   const id_kardex = parseInt(req.params.id);
   const user = req.user;
 
@@ -2901,7 +2912,7 @@ app.delete('/api/kardex/:id', verificarToken, (req, res) => {
 // =============================
 //  MOSTRAR KARDEX (SP)
 // =============================
-app.get('/api/kardex', verificarToken, (req, res) => {
+app.get('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const user = req.user;
 
   const query = "CALL SP_MostrarKardex()";
@@ -2927,7 +2938,7 @@ app.get('/api/kardex', verificarToken, (req, res) => {
 // =============================
 //  INSERTAR DETALLE DE COMPRA (SP)
 // =============================
-app.post('/api/detalle_compra', verificarToken, (req, res) => {
+app.post('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res) => {
   const { id_kardex, id_proveedor, monto_total } = req.body;
   const user = req.user;
 
@@ -2960,7 +2971,7 @@ app.post('/api/detalle_compra', verificarToken, (req, res) => {
 // =============================
 //  ACTUALIZAR DETALLE DE COMPRA (SP)
 // =============================
-app.put('/api/detalle_compra/:id', verificarToken, (req, res) => {
+app.put('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const { monto_total } = req.body;
   const id_detalle = parseInt(req.params.id);
   const user = req.user;
@@ -2994,7 +3005,7 @@ app.put('/api/detalle_compra/:id', verificarToken, (req, res) => {
 // =============================
 //  ELIMINAR DETALLE DE COMPRA (SP)
 // =============================
-app.delete('/api/detalle_compra/:id', verificarToken, (req, res) => {
+app.delete('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const id_detalle = parseInt(req.params.id);
   const user = req.user;
 
@@ -3022,7 +3033,7 @@ app.delete('/api/detalle_compra/:id', verificarToken, (req, res) => {
 // =============================
 //  MOSTRAR DETALLE DE COMPRA (SP)
 // =============================
-app.get('/api/detalle_compra', verificarToken, (req, res) => {
+app.get('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const user = req.user;
 
   const query = "CALL SP_MostrarDetalleCompra()";

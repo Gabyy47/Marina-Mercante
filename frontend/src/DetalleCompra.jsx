@@ -3,12 +3,75 @@ import { useNavigate } from 'react-router-dom';
 import api from './api';
 import './inventario.css';
 import logoDGMM from './imagenes/DGMM-Gobierno.png';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { FaFilePdf } from "react-icons/fa"; // si quieres el icono en el botón
+
 
 export default function DetalleCompra(){
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const generarPDF = () => {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "pt",
+    format: "A4"
+  });
+
+  // --- Encabezado institucional ---
+  doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(14, 42, 59);
+  doc.text("Dirección General de la Marina Mercante", 170, 50);
+  doc.setFontSize(14);
+  doc.text("Reporte de Detalle de Compra", 170, 72);
+
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+  // --- Tabla ---
+  const columnas = [
+    "ID",
+    "Proveedor",
+    "Monto",
+    "Fecha"
+  ];
+
+  const filas = items.map(it => [
+    it.id_detalle_compra ?? it.id,
+    it.nombre_proveedor ?? it.proveedor ?? it.nombre ?? "-",
+    it.monto_total ?? it.monto ?? "",
+    it.fecha_hora_compra ?? it.fecha ?? "-"
+  ]);
+
+  autoTable(doc, {
+    startY: 125,
+    head: [columnas],
+    body: filas,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [242, 245, 247] }
+  });
+
+  // --- Pie de página ---
+  const h = doc.internal.pageSize.height;
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(
+    "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+    doc.internal.pageSize.width / 2,
+    h - 30,
+    { align: "center" }
+  );
+
+  // --- Descargar PDF ---
+  doc.save("DetalleCompra_DGMM.pdf");
+};
 
   const fetchAll = async ()=>{
     setLoading(true); setError(null);
@@ -34,6 +97,8 @@ export default function DetalleCompra(){
   }, []);
 
   return (
+
+    
     <div className="inventario-page">
       <div className="inventario-logo-wrap"><img src={logoDGMM} alt="DGMM"/></div>
       <div className="inventario-topbar" style={{maxWidth:1000}}>
@@ -41,8 +106,13 @@ export default function DetalleCompra(){
         <div className="topbar-actions">
           <button className="btn btn-topbar-outline" onClick={()=>navigate('/')}>← Menú</button>
           <button className="btn btn-topbar-outline" onClick={fetchAll} style={{marginLeft:8}}>⟳ Refrescar</button>
+
+          <button className="btn btn-topbar-primary" onClick={generarPDF}>
+          <FaFilePdf size={16} /> Generar Reporte PDF
+          </button>
         </div>
       </div>
+
 
       <div className="inventario-card" style={{maxWidth:1000}}>
         {displayError(error) && (

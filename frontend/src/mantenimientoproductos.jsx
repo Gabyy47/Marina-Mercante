@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Modal from "react-modal";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { useNavigate } from "react-router-dom";
+
 import api from "./api";   // instancia Axios con baseURL http://localhost:49146/api
 import logo from "./imagenes/DGMM-Gobierno.png";
 import "./mantenimiento.css";
 import "./Dashboardguarda";
 import "./bitacora.jsx";
+
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-
+import logoDGMM from "./imagenes/DGMM-Gobierno.png"; // <-- para el PDF institucional
+import { FaFilePdf } from "react-icons/fa";          // <-- icono PDF
 
 Modal.setAppElement("#root");
 
@@ -21,14 +23,13 @@ export default function MantenimientoProducto() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-
   // ====== estado de formulario (compartido para crear/editar) ======
   const [newNombre_producto, setNewNombre_producto] = useState("");
   const [newCantidad_minima, setNewCantidad_minima] = useState("");
   const [newCantidad_maxima, setNewCantidad_maxima] = useState("");
 
   // ====== modales ======
-  const [isModalOpen, setIsModalOpen] = useState(false);        // crear
+  const [isModalOpen, setIsModalOpen] = useState(false);         // crear
   const [isEditModalOpen, setIsEditModalOpen] = useState(false); // editar
   const [editItemId, setEditItemId] = useState(null);
 
@@ -67,13 +68,15 @@ export default function MantenimientoProducto() {
     setIsEditModalOpen(false);
   };
 
-  const camposCompletos = useMemo(() => {
-    return Boolean(
-      newNombre_producto.trim() !== "" &&
-      newCantidad_minima !== "" &&
-      newCantidad_maxima !== ""
-    );
-  }, [newNombre_producto, newCantidad_minima, newCantidad_maxima]);
+  const camposCompletos = useMemo(
+    () =>
+      Boolean(
+        newNombre_producto.trim() !== "" &&
+          newCantidad_minima !== "" &&
+          newCantidad_maxima !== ""
+      ),
+    [newNombre_producto, newCantidad_minima, newCantidad_maxima]
+  );
 
   const validarNumeros = () => {
     const min = Number(newCantidad_minima);
@@ -95,19 +98,23 @@ export default function MantenimientoProducto() {
   };
 
   const handleVolver = () => {
-  const rawUser = localStorage.getItem("mm_user");
-  const user = rawUser ? JSON.parse(rawUser) : null;
-  const rol = (user?.rol_nombre || "").toLowerCase();
+    const rawUser = localStorage.getItem("mm_user");
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    const rol = (user?.rol_nombre || "").toLowerCase();
 
-  if (rol.includes("guarda") && rol.includes("almacen")|| (rol.includes("auxiliar") && rol.includes("de") && rol.includes("almacen"))) {
-    navigate("/guarda/dashboard");
-  } else if (rol.includes("admin")) {
-    navigate("/dashboard");
-  } else {
-    navigate("/"); // por si acaso
-  }
-};
-
+    if (
+      (rol.includes("guarda") && rol.includes("almacen")) ||
+      (rol.includes("auxiliar") &&
+        rol.includes("de") &&
+        rol.includes("almacen"))
+    ) {
+      navigate("/guarda/dashboard");
+    } else if (rol.includes("admin")) {
+      navigate("/dashboard");
+    } else {
+      navigate("/"); // por si acaso
+    }
+  };
 
   // ====== API ======
   const fetchItems = async () => {
@@ -122,6 +129,7 @@ export default function MantenimientoProducto() {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     fetchItems();
   }, []);
@@ -173,8 +181,13 @@ export default function MantenimientoProducto() {
       await fetchItems();
       closeEditModal();
     } catch (error) {
-      console.error(`PUT /productos/${editItemId} error:`, error.response?.data || error);
-      toast.error(error.response?.data?.mensaje || "Error al actualizar el producto");
+      console.error(
+        `PUT /productos/${editItemId} error:`,
+        error.response?.data || error
+      );
+      toast.error(
+        error.response?.data?.mensaje || "Error al actualizar el producto"
+      );
     }
   };
 
@@ -186,45 +199,83 @@ export default function MantenimientoProducto() {
       setItems((prev) => prev.filter((i) => i.id_producto !== id));
     } catch (error) {
       console.error("DELETE /productos error:", error.response?.data || error);
-      toast.error(error.response?.data?.mensaje || "Error al eliminar el registro");
+      toast.error(
+        error.response?.data?.mensaje || "Error al eliminar el registro"
+      );
     }
   };
 
-  // Obtener usuario y rol desde localStorage
-const rawUser = localStorage.getItem("mm_user");
-const user = rawUser ? JSON.parse(rawUser) : null;
-const rol = (user?.rol_nombre || "").toLowerCase();
-  // Puede editar si es admin o guarda almacén
-const canEdit =
-  rol.includes("admin") || (rol.includes("guarda") && rol.includes("almacen"))|| (rol.includes("auxiliar") && rol.includes("de") && rol.includes("almacen"));
+  // ====== Permisos según rol ======
+  const rawUser = localStorage.getItem("mm_user");
+  const user = rawUser ? JSON.parse(rawUser) : null;
+  const rol = (user?.rol_nombre || "").toLowerCase();
 
- const handleGenerarPDF = () => {
-  const doc = new jsPDF();
+  const canEdit =
+    rol.includes("admin") ||
+    (rol.includes("guarda") && rol.includes("almacen")) ||
+    (rol.includes("auxiliar") &&
+      rol.includes("de") &&
+      rol.includes("almacen"));
 
-  doc.setFontSize(16);
-  doc.text("Reporte de Productos", 14, 15);
+  // ====== REPORTE PDF (estilo institucional) ======
+  const generarPDFProductos = () => {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "pt",
+      format: "A4",
+    });
 
-  const tableColumn = ["ID", "Nombre del producto", "Cantidad Mínima", "Cantidad Máxima"];
-  const tableRows = [];
+    // --- Encabezado DGMM ---
+    doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(14, 42, 59);
+    doc.text("Dirección General de la Marina Mercante", 170, 50);
 
-  items.forEach((it) => {
-    tableRows.push([
+    doc.setFontSize(14);
+    doc.text("Reporte de Productos", 170, 72);
+
+    doc.setFontSize(10);
+    doc.setTextColor(80);
+    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+    // --- Tabla ---
+    const columnas = [
+      "ID Producto",
+      "Nombre del producto",
+      "Cantidad mínima",
+      "Cantidad máxima",
+    ];
+
+    const filas = items.map((it) => [
       it.id_producto,
       it.nombre_producto,
       it.cantidad_minima,
-      it.cantidad_maxima
+      it.cantidad_maxima,
     ]);
-  });
 
-  autoTable(doc, {
-    head: [tableColumn],
-    body: tableRows,
-    startY: 25,
-  });
+    autoTable(doc, {
+      startY: 125,
+      head: [columnas],
+      body: filas,
+      styles: { fontSize: 10, cellPadding: 5 },
+      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [242, 245, 247] },
+    });
 
-  doc.save("reporte_productos.pdf");
-};
+    // --- Pie de página ---
+    const h = doc.internal.pageSize.height;
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(
+      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+      doc.internal.pageSize.width / 2,
+      h - 30,
+      { align: "center" }
+    );
 
+    doc.save("Productos_DGMM.pdf");
+  };
 
   // ====== UI ======
   return (
@@ -239,16 +290,22 @@ const canEdit =
           <h2>Mantenimiento de Productos</h2>
           <div className="mm-actions">
             <button className="link-volver" onClick={handleVolver}>
-             ← Volver al Menú Principal
-             </button>
+              ← Volver al Menú Principal
+            </button>
+
             <button className="btn btn-primary" onClick={openModal}>
               + Nuevo producto
             </button>
+
+            <button
+              className="btn btn-topbar-primary"
+              onClick={generarPDFProductos}
+            >
+              <FaFilePdf size={16} /> Generar Reporte
+            </button>
           </div>
         </div>
-         <button className="btn btn-pdf" onClick={handleGenerarPDF}>
-  Generar PDF
-</button>
+
         <div className="mm-table__wrap">
           <table className="mm-table">
             <thead>
@@ -263,11 +320,15 @@ const canEdit =
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center">Cargando…</td>
+                  <td colSpan={7} className="text-center">
+                    Cargando…
+                  </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center">Sin registros</td>
+                  <td colSpan={7} className="text-center">
+                    Sin registros
+                  </td>
                 </tr>
               ) : (
                 items.map((it) => (
@@ -278,23 +339,25 @@ const canEdit =
                     <td>{it.cantidad_maxima}</td>
                     <td className="mm-actions--row">
                       {canEdit && (
-                            <>
+                        <>
                           <button
-                        className="btn btn-outline"
-                        onClick={() => openEditModal(it)}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => handleDelete(it.id_producto)}
-                      >
-                        Eliminar
-                      </button>
-                      </>
+                            className="btn btn-outline"
+                            onClick={() => openEditModal(it)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            className="btn btn-danger"
+                            onClick={() =>
+                              handleDelete(it.id_producto)
+                            }
+                          >
+                            Eliminar
+                          </button>
+                        </>
                       )}
                     </td>
-                  </tr> 
+                  </tr>
                 ))
               )}
             </tbody>
@@ -384,5 +447,6 @@ const canEdit =
     </div>
   );
 }
+
 
 
