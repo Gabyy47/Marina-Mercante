@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import api from './api';
 import './inventario.css';
 import logoDGMM from './imagenes/DGMM-Gobierno.png';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { FaFilePdf } from "react-icons/fa";
+
 
 export default function Proveedores(){
   const navigate = useNavigate();
@@ -11,6 +15,66 @@ export default function Proveedores(){
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ nombre:'', telefono:'', direccion:''});
+
+  
+  const generarPDF = () => {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "pt",
+    format: "A4"
+  });
+
+  // --- ENCABEZADO ---
+  doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(14, 42, 59);
+  doc.text("Dirección General de la Marina Mercante", 170, 50);
+
+  doc.setFontSize(14);
+  doc.text("Reporte de Proveedores", 170, 72);
+
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+  // --- COLUMNAS ---
+  const columnas = ["ID", "Nombre", "Teléfono", "Dirección"];
+
+  // --- FILAS ---
+  const filas = proveedores.map(p => [
+    p.id_proveedor,
+    p.nombre,
+    p.telefono,
+    p.direccion
+  ]);
+
+  // --- TABLA ---
+  autoTable(doc, {
+    startY: 125,
+    head: [columnas],
+    body: filas,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [242, 245, 247] }
+  });
+
+  // --- PIE DE PÁGINA ---
+  const h = doc.internal.pageSize.height;
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(
+    "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+    doc.internal.pageSize.width / 2,
+    h - 30,
+    { align: "center" }
+  );
+
+  // --- DESCARGA ---
+  doc.save("Proveedores_DGMM.pdf");
+};
+
 
   const fetchAll = async ()=>{
     setLoading(true); setError(null);
@@ -55,8 +119,15 @@ export default function Proveedores(){
           <button className="btn btn-topbar-outline" onClick={()=>navigate('/')}>← Menú</button>
           <button className="btn btn-topbar-outline" onClick={fetchAll} style={{marginLeft:8}}>⟳ Refrescar</button>
           <button className="btn btn-topbar-outline" onClick={openNew} style={{marginLeft:8}}>＋ Nuevo</button>
+          <div className="topbar-actions">
+          <button className="btn btn-topbar-primary" onClick={generarPDF}>
+            <FaFilePdf size={16} /> Generar Reporte PDF
+          </button>
         </div>
-      </div>
+        </div>
+        </div>
+
+
 
       <div className="inventario-card" style={{maxWidth:1000}}>
         {loading && <div className="loading">Cargando proveedores...</div>}
