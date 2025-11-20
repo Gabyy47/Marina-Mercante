@@ -145,7 +145,7 @@ const conexion = mysql.createPool({
   host: "localhost",
   port: 3306,
   user: "root",
-  password: "1984",
+  password: "H0nduras",
   database: "marina_mercante",
   waitForConnections: true,
   connectionLimit: 10,
@@ -2296,16 +2296,27 @@ app.delete('/api/salidas_productos/:id', (req, res) => {
 // ====== CRUD PARA tl_inventario ======
 
 app.get('/api/inventario', (req, res) => {
-  const query = "SELECT * FROM tbl_inventario";
+  const query = `
+    SELECT 
+      i.id_inventario,
+      i.id_producto,
+      p.nombre_producto,
+      i.cantidad,
+      i.cantidad_minima,
+      i.cantidad_maxima
+    FROM tbl_inventario i
+    JOIN tbl_productos p ON i.id_producto = p.id_producto
+  `;
+
   conexion.query(query, (err, rows) => {
     if (err) {
       console.error("Error al listar el inventario:", err);
-      res.status(500).json({ error: "Error al listar el inventario" });
-      return;
+      return res.status(500).json({ error: "Error al listar el inventario" });
     }
     res.json(rows);
   });
 });
+
 
 app.get('/api/inventario/:id', (req, res) => {
   const query = "SELECT * FROM tbl_inventario WHERE id_inventario = ?";
