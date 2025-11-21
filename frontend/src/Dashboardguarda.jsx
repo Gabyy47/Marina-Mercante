@@ -1,26 +1,29 @@
 // src/DashboardGuarda.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MdInventory2, MdLogout, MdHome,} from "react-icons/md";
+import { MdInventory2, MdLogout, MdHome } from "react-icons/md";
 import api from "./api";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
 
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,} from "recharts";
-import "./mainpage.css"; // el mismo que usa tu dashboard admin
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+import "./mainpage.css";
 import "./Dashboardguarda.css";
 import PerfilModal from "./perfilmodal";
-import Proveedores from "./proveedores.jsx";
-import Inventario from "./inventario.jsx";
-import Inventariostatus from "./inventariostatus.jsx";
-import HistorialKardex from "./HistorialKardex.jsx";
-import DetalleCompra from "./DetalleCompra.jsx";
-
 
 export default function DashboardGuarda() {
   const navigate = useNavigate();
   const [usuario, setUsuario] = useState(null);
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showPerfil, setShowPerfil] = useState(false);
 
   // Cargar usuario logueado
   useEffect(() => {
@@ -33,7 +36,7 @@ export default function DashboardGuarda() {
     const cargar = async () => {
       try {
         setLoading(true);
-        const { data } = await api.get("/productos"); // ← /api/productos
+        const { data } = await api.get("/productos");
         setProductos(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error(e);
@@ -45,9 +48,7 @@ export default function DashboardGuarda() {
     cargar();
   }, []);
 
-  // ===== Métricas reales =====
   const totalProductos = productos.length;
-
   const totalMinima = productos.reduce(
     (acc, p) => acc + Number(p.cantidad_minima || 0),
     0
@@ -57,14 +58,12 @@ export default function DashboardGuarda() {
     0
   );
 
-  // Datos para la gráfica: un registro por producto
   const chartData = productos.map((p) => ({
     nombre: p.nombre_producto,
     minima: Number(p.cantidad_minima || 0),
     maxima: Number(p.cantidad_maxima || 0),
   }));
 
-  // Últimos 5 productos (los más nuevos primero porque el SELECT viene DESC)
   const ultimosProductos = productos.slice(0, 5);
 
   const handleLogout = () => {
@@ -73,11 +72,9 @@ export default function DashboardGuarda() {
     navigate("/login", { replace: true });
   };
 
-  const [showPerfil, setShowPerfil] = useState(false);
-
   return (
     <div className="mm-layout">
-      {/* === SIDEBAR (igual estilo que admin, pero con menos opciones) === */}
+      {/* === SIDEBAR === */}
       <aside className="mm-sidebar">
         <div className="mm-logo">
           <img src={logoDGMM} alt="DGMM" />
@@ -90,7 +87,7 @@ export default function DashboardGuarda() {
             onClick={() => navigate("/guarda/dashboard")}
           >
             <MdHome />
-            <span>Panel principal</span>
+            <span>Principal del panel</span>
           </button>
 
           <button
@@ -100,18 +97,18 @@ export default function DashboardGuarda() {
             <MdInventory2 />
             <span>Mantenimiento de Productos</span>
           </button>
-        
 
-        <button
+          <button
             className="mm-menu-item"
-            onClick={() => navigate("/guarda/productos")}
+            onClick={() => navigate("/guarda/Proveedores")}
           >
             <MdInventory2 />
-            <span>Mantenimiento proveedores</span>
+            <span>Proveedores de mantenimiento</span>
           </button>
-        <button
+
+          <button
             className="mm-menu-item"
-            onClick={() => navigate("/guarda/productos")}
+            onClick={() => navigate("/guarda/inventario")}
           >
             <MdInventory2 />
             <span>Mantenimiento inventario</span>
@@ -119,33 +116,28 @@ export default function DashboardGuarda() {
 
           <button
             className="mm-menu-item"
-            onClick={() => navigate("/guarda/productos")}
+            onClick={() => navigate("/guarda/inventariostatus")}
           >
             <MdInventory2 />
             <span>Mantenimiento Inventariostatus</span>
           </button>
+
           <button
             className="mm-menu-item"
-            onClick={() => navigate("/guarda/productos")}
+            onClick={() => navigate("/guarda/HistorialKardex")}
           >
             <MdInventory2 />
             <span>Mantenimiento HistorialKardex</span>
           </button>
+
           <button
             className="mm-menu-item"
-            onClick={() => navigate("/guarda/productos")}
+            onClick={() => navigate("/guarda/DetalleCompra")}
           >
             <MdInventory2 />
             <span>Mantenimiento DetalleCompra</span>
           </button>
 
-          <button
-            className="mm-menu-item"
-            onClick={() => navigate("/guarda/productos")}
-          >
-            <MdInventory2 />
-            <span>Mantenimiento cliente</span>
-          </button>
         </nav>
 
         <button className="mm-logout" onClick={handleLogout}>
@@ -156,7 +148,6 @@ export default function DashboardGuarda() {
 
       {/* === CONTENIDO PRINCIPAL === */}
       <main className="mm-main">
-        {/* Barra superior similar a la del admin */}
         <header className="mm-main-header">
           <h1>PANEL PRINCIPAL</h1>
           <div className="mm-header-right">
@@ -165,16 +156,15 @@ export default function DashboardGuarda() {
               👤 {usuario?.nombre_usuario || "Guarda Almacén"}
             </button>
             <button onClick={() => setShowPerfil(true)}>Mi Perfil</button>
-                     <PerfilModal
-                    open={showPerfil}
-                    onClose={() => setShowPerfil(false)}
-                      onSaved={() => {}}
-                       />
+            <PerfilModal
+              open={showPerfil}
+              onClose={() => setShowPerfil(false)}
+              onSaved={() => {}}
+            />
           </div>
         </header>
 
         <section className="mm-main-content">
-          {/* Tarjetas de métricas */}
           <div className="grid grid--stats">
             <div className="stat-card">
               <div className="stat-icon">📦</div>
@@ -201,9 +191,7 @@ export default function DashboardGuarda() {
             </div>
           </div>
 
-          {/* Gráfica + tabla */}
           <div className="grid grid--charts">
-            {/* Gráfica de barras por producto */}
             <div className="chart-card">
               <h2>Cantidades mínima y máxima por producto</h2>
               {loading ? (
@@ -224,7 +212,6 @@ export default function DashboardGuarda() {
               )}
             </div>
 
-            {/* Tabla de últimos productos */}
             <div className="chart-card">
               <h2>Últimos productos registrados</h2>
               {ultimosProductos.length === 0 ? (

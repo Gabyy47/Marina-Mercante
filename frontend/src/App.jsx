@@ -1,4 +1,4 @@
-// src/App.jsx
+//src/app,jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import MainPage from "./mainpage.jsx";
@@ -14,6 +14,10 @@ import Bitacora from "./bitacora.jsx";
 import DashboardTickets from "./DashboardTickets.jsx"; 
 import MonitorTv from "./MonitorTv.jsx";
 import Kiosko from "./kiosko.jsx";
+import Inventario from "./inventario.jsx";
+import Inventariostatus from "./inventariostatus.jsx";
+import HistorialKardex from "./HistorialKardex.jsx";
+import DetalleCompra from "./DetalleCompra.jsx";
 
 
 
@@ -44,6 +48,7 @@ export default function App() {
           }
         />
 
+
         {/* Dashboard Guarda */}
         <Route
           path="/guarda/dashboard"
@@ -67,6 +72,47 @@ export default function App() {
             </ProtectedRouteRol>
           }
         />
+
+        <Route
+  path="/guarda/proveedores"
+  element={
+    <ProtectedRouteRol allowedRoles={["Guarda almacen", "Administrador", "Auxiliar de almacen"]}>
+      <Proveedores />
+    </ProtectedRouteRol>
+  }
+/>
+<Route
+  path="/guarda/inventario"
+  element={
+    <ProtectedRouteRol allowedRoles={["Guarda Almacén", "Administrador", "Auxiliar de Almacén"]}>
+      <Inventario />
+    </ProtectedRouteRol>
+  }
+/>
+<Route
+  path="/guarda/inventariostatus"
+  element={
+    <ProtectedRouteRol allowedRoles={["Guarda almacen", "Administrador", "Auxiliar de almacen"]}>
+      <Inventariostatus />
+    </ProtectedRouteRol>
+  }
+/>
+<Route
+  path="/guarda/HistorialKardex"
+  element={
+    <ProtectedRouteRol allowedRoles={["Guarda Almacén", "Administrador", "Auxiliar de Almacén"]}>
+      <HistorialKardex />
+    </ProtectedRouteRol>
+  }
+/>
+<Route
+  path="/guarda/DetalleCompra"
+  element={
+    <ProtectedRouteRol allowedRoles={["Guarda Almacén", "Administrador", "Auxiliar de Almacén"]}>
+      <DetalleCompra />
+    </ProtectedRouteRol>
+  }
+/>
 
         {/* Proveedores */}
         <Route path="/proveedores" element={<Proveedores />} />

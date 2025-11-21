@@ -145,7 +145,7 @@ const conexion = mysql.createPool({
   host: "localhost",
   port: 3306,
   user: "root",
-  password: "H0nduras",
+  password: "MysqlRoot47!",
   database: "marina_mercante",
   waitForConnections: true,
   connectionLimit: 10,
