@@ -48,4 +48,6 @@ export default function ProtectedRouteRol({ roles = [], allowedRoles = [], child
   }
 
   return children;
+
 }
+

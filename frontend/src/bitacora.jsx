@@ -14,34 +14,72 @@ export default function Bitacora() {
   const [loading, setLoading] = useState(false);
 
 
-  //GENERAR REPORTE EN PDF
-  const generarPDF = () => {
-    const doc = new jsPDF({ orientation:"portrait", unit:"pt", format:"A4" });
-    // Encabezado institucional PDF
-    doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
-    doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(14,42,59);
-    doc.text("Dirección General de la Marina Mercante", 170, 50);
-    doc.setFontSize(14); doc.text("Bitácora del Sistema", 170, 72);
-    doc.setFontSize(10); doc.setTextColor(80);
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+// GENERAR REPORTE EN PDF 
+const generarPDF = () => {
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
 
-    const columnas = ["Fecha","Usuario","ID Objeto","Acción","Descripción"];
-    const filas = bitacoras.map(b => [
-      new Date(b.fecha).toLocaleString(), b.usuario, b.id_objeto, b.accion, b.descripcion
-    ]);
+  // === ENCABEZADO ===
+  doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(14, 42, 59);
+  doc.text("Dirección General de la Marina Mercante", 170, 50);
 
-    autoTable(doc, {
-      startY: 125, head:[columnas], body: filas,
-      styles:{ fontSize:9, cellPadding:5 }, headStyles:{ fillColor:[14,42,59], textColor:[255,255,255] },
-      alternateRowStyles:{ fillColor:[242,245,247] }
-    });
+  doc.setFontSize(14);
+  doc.text("Bitácora del Sistema", 170, 72);
 
-    const h = doc.internal.pageSize.height;
-    doc.setFontSize(9); doc.setTextColor(100);
-    doc.text("Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
-      doc.internal.pageSize.width/2, h-30, { align:"center" });
-    doc.save("Bitacora_DGMM.pdf");
-  };
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+  // === TABLA ===
+  const columnas = ["Fecha", "Usuario", "ID Objeto", "Acción", "Descripción"];
+  const filas = bitacoras.map(b => [
+    new Date(b.fecha).toLocaleString(),
+    b.usuario,
+    b.id_objeto,
+    b.accion,
+    b.descripcion,
+  ]);
+
+  autoTable(doc, {
+    startY: 125,
+    head: [columnas],
+    body: filas,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [242, 245, 247] },
+  });
+
+  // ==== PIE DE PÁGINA  ====
+  const pageCount = doc.internal.getNumberOfPages();
+
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+
+    // Texto centrado
+    doc.text(
+      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+      doc.internal.pageSize.width / 2,
+      doc.internal.pageSize.height - 30,
+      { align: "center" }
+    );
+
+    // Texto a la izquierda
+    doc.text(
+      `Página ${i} de ${pageCount}`,
+      40,
+      doc.internal.pageSize.height - 30
+    );
+  }
+
+  // === ABRIR DOCUMENTO EN PESTAÑA NUEVA ===
+  const blobUrl = doc.output("bloburl");
+  window.open(blobUrl, "_blank");
+};
+
 
   const cargarBitacora = async () => {
     setLoading(true);
