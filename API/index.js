@@ -2695,6 +2695,8 @@ app.get('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   });
 });
 
+
+
 // =============================
 //  INSERTAR DETALLE DE COMPRA (SP)
 // =============================
