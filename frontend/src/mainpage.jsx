@@ -1,139 +1,47 @@
+// src/mainpage.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
+
 import logo from "./imagenes/DGMM-Gobierno.png";
 import "./mainpage.css";
 
-import MantenimientoUsuarios from "./mantenimientousuarios";
-import MantenimientoProductos from "./mantenimientoproductos";
-import MantenimientoRol from "./mantenimientorol";
-import MantenimientoTickets from"./mantenimientotickets";
-import Bitacora from "./bitacora";
-import PerfilModal from "./perfilmodal";
+import MantenimientoUsuarios from "./mantenimientousuarios.jsx";
+import MantenimientoProductos from "./mantenimientoproductos.jsx";
+import MantenimientoRol from "./mantenimientorol.jsx";
+import MantenimientoTickets from "./mantenimientotickets.jsx";
+import Bitacora from "./bitacora.jsx";
+import PerfilModal from "./perfilmodal.jsx";
 import Tramites from "./MantTramites.jsx";
 import Proveedores from "./proveedores.jsx";
 import Inventario from "./inventario.jsx";
 import Inventariostatus from "./inventariostatus.jsx";
 import HistorialKardex from "./HistorialKardex.jsx";
 import DetalleCompra from "./DetalleCompra.jsx";
+import Mantenimientocliente from "./mantenimientocliente.jsx";
+import Kardex from "./Kardex.jsx"; // 
+import Tipo from "./MantenimientoTipoTicket.jsx";
 
+import api from "./api";
 
+import {
+  FiHome,
+  FiUsers,
+  FiSettings,
+  FiLogOut,
+  FiUser,
+  FiChevronDown,
+  FiClipboard,
+  FiBox,
+  FiDatabase,
+  FiList,
+  FiFileText,
+} from "react-icons/fi";
 
-
-
-
-import { FiHome, FiUsers, FiSettings, FiLogOut } from "react-icons/fi";
-
-/* ======================= SIDEBAR ======================= */
-const Sidebar = ({ activeView, onSelect, onLogout }) => (
-  <aside className="sb">
-    <div className="sb__brand">
-      <img src={logo} alt="DGMM" />
-      <span>NAVI-MASTER</span>
-    </div>
-
-    <nav className="sb__nav">
-
-      <button
-        className={`sb__link ${activeView === "dashboard" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("dashboard")}
-      >
-        <FiHome /> <span>Panel principal</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "mantenimientousuarios" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("mantenimientousuarios")}
-      >
-        <FiUsers /> <span>Usuarios</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "mantenimientoproductos" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("mantenimientoproductos")}
-      >
-        <FiUsers /> <span>Productos</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "mantenimientorol" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("mantenimientorol")}
-      >
-        <FiUsers /> <span>Roles</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "mantenimientotickets" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("mantenimientotickets")}
-      >
-        <FiUsers /> <span>Tickets</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "MantTramites" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("MantTramites")}
-      >
-        <FiUsers /> <span>Tramites</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "bitacora" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("bitacora")}
-      >
-        <FiUsers /> <span>Bitácora</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "proveedores" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("proveedores")}
-      >
-        <FiUsers /> <span>Proveedores</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "inventario" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("inventario")}
-      >
-        <FiUsers /> <span>Inventario</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "inventariostatus" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("inventariostatus")}
-      >
-        <FiUsers /> <span>InventarioStatus</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "HistorialKardex" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("HistorialKardex")}
-      >
-        <FiUsers /> <span>HistorialKardex</span>
-      </button>
-
-      <button
-        className={`sb__link ${activeView === "DetalleCompra" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("DetalleCompra")}
-      >
-        <FiUsers /> <span>DetalleCompra</span>
-      </button>
-      
-      <button
-        className={`sb__link ${activeView === "settings" ? "sb__link--active" : ""}`}
-        onClick={() => onSelect("settings")}
-      >
-        <FiSettings /> <span>Configuración</span>
-      </button>
-
-      <button className="sb__link" onClick={onLogout}>
-        <FiLogOut /> <span>Cerrar sesión</span>
-      </button>
-    </nav>
-  </aside>
-);
-
-/* ======================= TOPBAR ======================= */
-const Topbar = () => {
+/* ======================================================
+   TOPBAR
+====================================================== */
+function Topbar() {
   const [user, setUser] = useState(null);
   const [showPerfil, setShowPerfil] = useState(false);
 
@@ -155,129 +63,533 @@ const Topbar = () => {
 
   return (
     <header className="tb">
-      <div className="tb__title">PANEL PRINCIPAL</div>
-      <div className="tb__right">
-        <button className="tb__btn">Notificaciones</button>
-        <div className="tb__user">👤 {nombre}{rol}</div>
-        <button className="tb__btn">🌐 ES</button>
-        <button onClick={() => setShowPerfil(true)}>Mi Perfil</button>
-
-        <PerfilModal
-          open={showPerfil}
-          onClose={() => setShowPerfil(false)}
-          onSaved={() => {}}
-        />
+      <div className="tb__user">
+        👤 {nombre}
+        {rol}
       </div>
+      <button className="profile-btn" onClick={() => setShowPerfil(true)}>
+        <FiUser /> Mi perfil
+      </button>
+
+      <PerfilModal
+        open={showPerfil}
+        onClose={() => setShowPerfil(false)}
+        onSaved={() => {}}
+      />
     </header>
   );
-};
+}
 
-/* ======================= COMPONENTES DE DASHBOARD ======================= */
-const StatCard = ({ icon, label, value }) => (
-  <div className="card stat">
-    <div className="stat__icon">{icon}</div>
-    <div className="stat__body">
-      <div className="stat__label">{label}</div>
-      <div className="stat__value">{value}</div>
-    </div>
-  </div>
-);
-
-const BarChart = ({ seriesA = [2, 3, 6, 2, 4, 7], seriesB = [1, 2, 3, 1.8, 2.5, 5] }) => (
-  <div className="card chart">
-    <div className="card__head">Actividad Semanal</div>
-    <div className="bars">
-      {seriesA.map((a, i) => {
-        const b = seriesB[i] ?? 0;
-        return (
-          <div className="bars__group" key={i}>
-            <div className="bar bar--a" style={{ "--h": `${a * 6}%` }} />
-            <div className="bar bar--b" style={{ "--h": `${b * 6}%` }} />
-            <div className="bars__label">{i + 1}</div>
-          </div>
-        );
-      })}
-    </div>
-  </div>
-);
-
-const PieChart = ({ slices = [60, 25, 15] }) => {
-  const total = slices.reduce((s, v) => s + v, 0);
-  const [a, b] = slices.map((v) => (v / total) * 360);
-
-  const bg = `conic-gradient(
-    var(--cyan) 0 ${a}deg,
-    var(--navy-30) ${a}deg ${a + b}deg,
-    var(--navy-60) ${a + b}deg 360deg
-  )`;
+/* ======================================================
+   SIDEBAR
+====================================================== */
+function Sidebar({ activeView, onSelect, onLogout }) {
+  const [openUsuarios, setOpenUsuarios] = useState(false);
+  const [openTickets, setOpenTickets] = useState(false);
+  const [openInventario, setOpenInventario] = useState(false);
+  const [openBitacora, setOpenBitacora] = useState(false);
 
   return (
-    <div className="card chart">
-      <div className="card__head">Módulos más usados</div>
-      <div className="pie" style={{ background: bg }} />
-    </div>
+    <aside className="sb">
+      <div className="sb__brand">
+        <img src={logo} alt="DGMM" />
+      </div>
+
+      <nav className="sb__nav">
+        {/* Panel principal */}
+        <button
+          className={`sb__link ${
+            activeView === "dashboard" ? "sb__link--active" : ""
+          }`}
+          onClick={() => onSelect("dashboard")}
+        >
+          <span>
+            <FiHome />
+            <span>Panel principal</span>
+          </span>
+        </button>
+
+        {/* ================== USUARIOS ================== */}
+        <div className="sb__section">
+          <button
+            className={`sb__sectionBtn ${openUsuarios ? "open" : ""}`}
+            onClick={() => setOpenUsuarios((v) => !v)}
+          >
+            <span>
+              <FiUsers />
+              <span>Usuarios</span>
+            </span>
+            <FiChevronDown className="sb__caret" />
+          </button>
+
+          {openUsuarios && (
+            <div className="sb__submenu">
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "mantenimientousuarios"
+                    ? "sb__link--active"
+                    : ""
+                }`}
+                onClick={() => onSelect("mantenimientousuarios")}
+              >
+                <span>
+                  <FiUser />
+                  <span>Mantenimiento</span>
+                </span>
+              </button>
+
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "mantenimientorol" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("mantenimientorol")}
+              >
+                <span>
+                  <FiClipboard />
+                  <span>Roles</span>
+                </span>
+              </button>
+
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "mantenimientocliente"
+                    ? "sb__link--active"
+                    : ""
+                }`}
+                onClick={() => onSelect("mantenimientocliente")}
+              >
+                <span>
+                  <FiUsers />
+                  <span>Clientes</span>
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ================== TICKETS ================== */}
+        <div className="sb__section">
+          <button
+            className={`sb__sectionBtn ${openTickets ? "open" : ""}`}
+            onClick={() => setOpenTickets((v) => !v)}
+          >
+            <span>
+              <FiClipboard />
+              <span>Tickets</span>
+            </span>
+            <FiChevronDown className="sb__caret" />
+          </button>
+
+          {openTickets && (
+            <div className="sb__submenu">
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "mantenimientotickets"
+                    ? "sb__link--active"
+                    : ""
+                }`}
+                onClick={() => onSelect("mantenimientotickets")}
+              >
+                <span>
+                  <FiClipboard />
+                  <span>Mantenimiento</span>
+                </span>
+              </button>
+
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "MantTramites" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("MantTramites")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Trámites</span>
+                </span>
+              </button>
+
+
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "MantTramites" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("MantenimientoTipoTicket")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Tipo Ticket</span>
+                </span>
+              </button>
+
+            </div>
+          )}
+        </div>
+
+        {/* ================== INVENTARIO ================== */}
+        <div className="sb__section">
+          <button
+            className={`sb__sectionBtn ${openInventario ? "open" : ""}`}
+            onClick={() => setOpenInventario((v) => !v)}
+          >
+            <span>
+              <FiBox />
+              <span>Inventario</span>
+            </span>
+            <FiChevronDown className="sb__caret" />
+          </button>
+
+          {openInventario && (
+            <div className="sb__submenu">
+              {/* Inventario (pantalla general) */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "inventario" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("inventario")}
+              >
+                <span>
+                  <FiDatabase />
+                  <span>Inventario</span>
+                </span>
+              </button>
+
+              {/* Productos */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "mantenimientoproductos"
+                    ? "sb__link--active"
+                    : ""
+                }`}
+                onClick={() => onSelect("mantenimientoproductos")}
+              >
+                <span>
+                  <FiBox />
+                  <span>Productos</span>
+                </span>
+              </button>
+
+              {/* Status */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "inventariostatus" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("inventariostatus")}
+              >
+                <span>
+                  <FiList />
+                  <span>Status</span>
+                </span>
+              </button>
+
+              {/* Kardex */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "kardex" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("kardex")}
+              >
+                <span>
+                  <FiClipboard />
+                  <span>Kardex</span>
+                </span>
+              </button>
+
+              {/* Historial Kardex */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "HistorialKardex" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("HistorialKardex")}
+              >
+                <span>
+                  <FiDatabase />
+                  <span>Historial Kardex</span>
+                </span>
+              </button>
+
+              {/* Detalle compra */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "DetalleCompra" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("DetalleCompra")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Detalle compra</span>
+                </span>
+              </button>
+
+              {/* Proveedores */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "proveedores" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("proveedores")}
+              >
+                <span>
+                  <FiClipboard />
+                  <span>Proveedores</span>
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ================== BITÁCORA ================== */}
+        <div className="sb__section">
+          <button
+            className={`sb__sectionBtn ${openBitacora ? "open" : ""}`}
+            onClick={() => setOpenBitacora((v) => !v)}
+          >
+            <span>
+              <FiFileText />
+              <span>Bitácora</span>
+            </span>
+            <FiChevronDown className="sb__caret" />
+          </button>
+
+          {openBitacora && (
+            <div className="sb__submenu">
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "bitacora" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("bitacora")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Registros</span>
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Configuración simple */}
+        <button
+          className={`sb__link ${
+            activeView === "settings" ? "sb__link--active" : ""
+          }`}
+          onClick={() => onSelect("settings")}
+        >
+          <span>
+            <FiSettings />
+            <span>Configuración</span>
+          </span>
+        </button>
+
+        {/* Cerrar sesión */}
+        <button className="sb__link sb__link--logout" onClick={onLogout}>
+          <span>
+            <FiLogOut />
+            <span>Cerrar sesión</span>
+          </span>
+        </button>
+      </nav>
+    </aside>
   );
-};
+}
 
-const RecentTable = () => (
-  <div className="card table">
-    <div className="card__head">Actividad Reciente</div>
-    <div className="table__wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Acción</th>
-            <th>Módulo</th>
-            <th>Usuario</th>
-            <th>Fecha</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td>Cambio de rol</td><td>Usuarios</td><td>ADMIN</td><td>10/10</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-);
-
-/* ======================= MAIN PAGE ======================= */
+/* ======================================================
+   MAIN PAGE
+====================================================== */
 const MainPage = () => {
   const [activeView, setActiveView] = useState("dashboard");
+
+  const [stats, setStats] = useState({
+    usuarios: 0,
+    ticketsHoy: 0,
+    movimientosHoy: 0,
+  });
+
+  const [ticketsHoy, setTicketsHoy] = useState([]);
+  const [bitacoraReciente, setBitacoraReciente] = useState([]);
+
   const navigate = useNavigate();
 
   const logout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("mm_user");
     navigate("/login", { replace: true });
   };
 
+  const formatDateTime = (value) => {
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString("es-HN");
+  };
+
+  const cargarDashboard = async () => {
+    try {
+      const hoy = new Date().toISOString().slice(0, 10);
+
+      const [uRes, tRes, bRes] = await Promise.all([
+        api.get("/usuario"), // ajusta si tu endpoint es /usuario
+        api.get("/tickets", {
+          params: { from: hoy, to: hoy, pageSize: 200 },
+        }),
+        api.get("/bitacora", { params: { limit: 10 } }),
+      ]);
+
+      const usuariosTotal = Array.isArray(uRes.data)
+        ? uRes.data.length
+        : uRes.data.total || 0;
+
+      let listaTickets =
+        (tRes.data && tRes.data.data) ||
+        (Array.isArray(tRes.data) ? tRes.data : []);
+      let listaBitacora = Array.isArray(bRes.data) ? bRes.data : [];
+
+      setStats({
+        usuarios: usuariosTotal,
+        ticketsHoy: listaTickets.length,
+        movimientosHoy: listaBitacora.length,
+      });
+
+      setTicketsHoy(listaTickets);
+      setBitacoraReciente(listaBitacora);
+    } catch (err) {
+      console.error("Error cargando datos del dashboard:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeView === "dashboard") {
+      cargarDashboard();
+    }
+  }, [activeView]);
+
+  /* -------------------- DASHBOARD -------------------- */
+  const Dashboard = () => (
+    <>
+      <div className="dashboard-header">
+        <h2>Resumen de hoy</h2>
+        <p>Vista rápida de usuarios, tickets y actividad reciente.</p>
+      </div>
+
+      {/* KPIs */}
+      <div className="stats-row">
+        <div className="stat-card">
+          <div className="stat-icon">👥</div>
+          <div className="stat-label">Usuarios</div>
+          <div className="stat-value">{stats.usuarios}</div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">🎟️</div>
+          <div className="stat-label">Tickets de hoy</div>
+          <div className="stat-value">{stats.ticketsHoy}</div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">📌</div>
+          <div className="stat-label">Movimientos de hoy</div>
+          <div className="stat-value">{stats.movimientosHoy}</div>
+        </div>
+      </div>
+
+      {/* TICKETS DE HOY */}
+      <div className="dashboard-box">
+        <div className="box-title-row">
+          <div className="box-title">Tickets de hoy</div>
+          <div className="box-pill">
+            {stats.ticketsHoy}{" "}
+            {stats.ticketsHoy === 1 ? "ticket" : "tickets"}
+          </div>
+        </div>
+
+        {ticketsHoy.length === 0 ? (
+          <div className="table-empty">Sin tickets hoy</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticket</th>
+                  <th>Estado</th>
+                  <th>Usuario</th>
+                  <th>Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ticketsHoy.map((tk) => (
+                  <tr key={tk.id_ticket || tk.NO_ticket || tk.no_ticket}>
+                    <td>
+                      {tk.NO_ticket ||
+                        tk.no_ticket ||
+                        tk.ticket ||
+                        tk.codigo ||
+                        "-"}
+                    </td>
+                    <td>{tk.estado || tk.estado_ticket || "-"}</td>
+                    <td>{tk.empleado || tk.usuario || "-"}</td>
+                    <td>
+                      {formatDateTime(
+                        tk.creado_en || tk.fecha || tk.fecha_creacion
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ACTIVIDAD BITÁCORA */}
+      <div className="dashboard-box">
+        <div className="box-title-row">
+          <div className="box-title">Actividad reciente (Bitácora)</div>
+          <div className="box-pill">
+            {stats.movimientosHoy}{" "}
+            {stats.movimientosHoy === 1 ? "movimiento" : "movimientos"}
+          </div>
+        </div>
+
+        {bitacoraReciente.length === 0 ? (
+          <div className="table-empty">Sin movimientos recientes</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Acción</th>
+                  <th>Usuario</th>
+                  <th>Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bitacoraReciente.map((b) => (
+                  <tr key={b.id_bitacora || `${b.usuario}-${b.fecha}`}>
+                    <td>{b.accion || b.accion_realizada || "-"}</td>
+                    <td>{b.usuario || b.nombre_usuario || "-"}</td>
+                    <td>{formatDateTime(b.fecha || b.fecha_hora)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  /* -------------------- RENDER SEGÚN VISTA -------------------- */
   const renderContent = () => {
     switch (activeView) {
       case "dashboard":
-        return (
-          <>
-            <div className="grid grid--stats">
-              <StatCard icon="👥" label="Usuarios" value="1250" />
-              <StatCard icon="📝" label="Tareas" value="15" />
-              <StatCard icon="🕒" label="Último acceso" value="30/10/2025" />
-            </div>
-
-            <div className="grid grid--charts">
-              <BarChart />
-              <PieChart />
-            </div>
-
-            <RecentTable />
-          </>
-        );
+        return <Dashboard />;
 
       case "mantenimientousuarios":
         return <MantenimientoUsuarios />;
 
-      case "mantenimientoproductos":
-        return <MantenimientoProductos />;
-
       case "mantenimientorol":
         return <MantenimientoRol />;
+
+      case "mantenimientocliente":
+        return <Mantenimientocliente />;
 
       case "mantenimientotickets":
         return <MantenimientoTickets />;
@@ -285,39 +597,51 @@ const MainPage = () => {
       case "MantTramites":
         return <Tramites />;
 
-      case "bitacora":
-        return <Bitacora />;
-
-      case "proveedores":
-        return <Proveedores />;
+      case "MantenimientoTipoTicket":
+        return <Tipo />;
 
       case "inventario":
         return <Inventario />;
-      
+
+      case "mantenimientoproductos":
+        return <MantenimientoProductos />;
+
       case "inventariostatus":
         return <Inventariostatus />;
-      
+
+      case "kardex":
+        return <Kardex />;
+
       case "HistorialKardex":
         return <HistorialKardex />;
 
       case "DetalleCompra":
         return <DetalleCompra />;
 
+      case "proveedores":
+        return <Proveedores />;
+
+      case "bitacora":
+        return <Bitacora />;
+
       case "settings":
-        return <div className="card p-4">Configuración del sistema</div>;
+        return <div className="dashboard-box">Configuración del sistema</div>;
 
       default:
-        return <h2>Error: Vista no encontrada</h2>;
+        return <div className="dashboard-box">Vista no encontrada.</div>;
     }
-
   };
 
   return (
     <div className="layout">
-      <Sidebar activeView={activeView} onSelect={setActiveView} onLogout={logout} />
+      <Sidebar
+        activeView={activeView}
+        onSelect={setActiveView}
+        onLogout={logout}
+      />
       <div className="main">
         <Topbar />
-        <div className="content">{renderContent()}</div>
+        <main className="content">{renderContent()}</main>
       </div>
     </div>
   );

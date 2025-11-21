@@ -5,12 +5,6 @@ import "./kiosko.css";
 import logoGobierno from "./imagenes/DGMM-Gobierno.png";
 import { FaUser, FaWheelchair } from "react-icons/fa";
 
-/** IDs reales en BD (ajústalos si difieren) */
-const TIPO_BY_PRIORIDAD = {
-  NORMAL: 1,
-  PREFERENCIAL: 2,
-};
-
 /** Helpers fecha/hora */
 function yyyymmdd(d = new Date()) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -24,67 +18,96 @@ function hhmmss(d = new Date()) {
 
 export default function Kiosko() {
   const [tramites, setTramites] = useState([]);
-  const [paso, setPaso] = useState(1); // 1: prioridad, 2: trámite, 3: ticket
-  const [prioridad, setPrioridad] = useState(null); // "NORMAL" | "PREFERENCIAL"
-  const [enviando, setEnviando] = useState(false);
-  const [ticket, setTicket] = useState(null); // { no_ticket, prioridad, tramite, fecha, hora }
+  const [tipos, setTipos] = useState([]);
 
-  /** Cargar trámites desde la API */
+  const [tipoSel, setTipoSel] = useState(null);
+  const [paso, setPaso] = useState(1);
+  const [enviando, setEnviando] = useState(false);
+  const [ticket, setTicket] = useState(null);
+
+  /** Cargar trámites y tipos de ticket */
   useEffect(() => {
-    api
-      .get("/tramites")
-      .then((r) => setTramites(r.data || []))
-      .catch(() => setTramites([]));
+    const cargar = async () => {
+      try {
+        const [rTram, rTipos] = await Promise.all([
+          api.get("/tramites"),
+          api.get("/tipo_ticket"),
+        ]);
+
+        setTramites(Array.isArray(rTram.data) ? rTram.data : []);
+
+        // 👉 SIN FILTRAR POR ESTADO, para no perder nada por espacios, etc.
+        const listaTipos = Array.isArray(rTipos.data) ? rTipos.data : [];
+        console.log("TIPOS DESDE API /tipo_ticket:", listaTipos);
+        setTipos(listaTipos);
+      } catch (err) {
+        console.error("Error cargando datos en kiosko:", err);
+        setTramites([]);
+        setTipos([]);
+      }
+    };
+
+    cargar();
   }, []);
 
-  /** Selección de prioridad (paso 1 -> paso 2) */
-  const elegirPrioridad = (p) => {
-    setPrioridad(p);
+  /** Buscar los dos tipos importantes (NORMAL / PREFERENCIAL) */
+  const tipoNormal = tipos.find((t) => {
+    const nombre = (t.tipo_ticket || "").trim().toUpperCase();
+    return nombre === "NORMAL";
+  });
+
+  const tipoPreferencial = tipos.find((t) => {
+    const nombre = (t.tipo_ticket || "").trim().toUpperCase();
+    return nombre === "PREFERENCIAL";
+  });
+
+  /** Elegir tipo (paso 1 → paso 2) */
+  const elegirTipo = (tipo) => {
+    if (!tipo) {
+      alert("Este tipo no existe en BD. Revise tbl_tipo_ticket.");
+      return;
+    }
+    setTipoSel(tipo);
     setPaso(2);
   };
 
-  /** Llamar a API para crear ticket */
+  /** Crear ticket */
   const tomarTicket = async (tramiteSel) => {
-    if (!prioridad || !tramiteSel) return;
-
-    const id_tipo_ticket = TIPO_BY_PRIORIDAD[prioridad];
-    const id_tramite = tramiteSel.id_tramite;
-    const tramiteTexto = tramiteSel.nombre_tramite;
+    if (!tipoSel || !tramiteSel) return;
 
     try {
       setEnviando(true);
+
       const { data } = await api.post("/kiosko/tomar", {
-        id_tipo_ticket,
-        id_tramite,
+        id_tipo_ticket: tipoSel.id_tipo_ticket,
+        id_tramite: tramiteSel.id_tramite,
       });
 
       setTicket({
         no_ticket: data.no_ticket,
-        prioridad,
-        tramite: tramiteTexto,
+        tipo: (tipoSel.tipo_ticket || "").trim(),
+        tramite: tramiteSel.nombre_tramite,
         fecha: data.fecha || yyyymmdd(),
         hora: data.hora || hhmmss(),
       });
+
       setPaso(3);
     } catch (err) {
-      alert(
-        err.response?.data?.error ||
-          err.response?.data?.mensaje ||
-          "No se pudo generar el ticket"
-      );
+      alert("Error al generar ticket");
+      console.error(err);
     } finally {
       setEnviando(false);
     }
   };
 
-  /** Resetear flujo (volver al inicio) */
+  /** Reset */
   const reiniciar = () => {
     setPaso(1);
-    setPrioridad(null);
+    setTipoSel(null);
     setTicket(null);
   };
 
-  /** Al llegar al paso 3: imprimir automáticamente y volver al inicio */
+  /** Imprimir y volver */
   useEffect(() => {
     if (paso === 3 && ticket) {
       const after = () => {
@@ -95,19 +118,14 @@ export default function Kiosko() {
       window.addEventListener("afterprint", after);
       window.print();
 
-      // Fallback por si afterprint no se dispara
       const t = setTimeout(after, 2000);
-
-      return () => {
-        window.removeEventListener("afterprint", after);
-        clearTimeout(t);
-      };
+      return () => clearTimeout(t);
     }
   }, [paso, ticket]);
 
-  /** Componente pasos (1•2•3) */
+  /** Pasos */
   const Steps = () => (
-    <div className="k-steps" aria-label="progreso">
+    <div className="k-steps">
       <div className={`k-step ${paso >= 1 ? "is-done" : ""}`}>1</div>
       <div className={`k-step ${paso >= 2 ? "is-done" : ""}`}>2</div>
       <div className={`k-step ${paso >= 3 ? "is-done" : ""}`}>3</div>
@@ -116,61 +134,68 @@ export default function Kiosko() {
 
   return (
     <div className="kiosk-wrap">
-      {/* Encabezado con logo institucional */}
       <header className="k-header">
-        <img
-          src={logoGobierno}
-          alt="Dirección General de la Marina Mercante - Gobierno de Honduras"
-          className="k-logo-header"
-        />
+        <img src={logoGobierno} className="k-logo-header" />
       </header>
 
-      {/* Top: Título grande + pasos */}
       <div className="k-topbar">
-        <h1 className="k-title"></h1>
         <Steps />
       </div>
 
-      {/* ===== PASO 1: Elegir prioridad ===== */}
+      {/* ===== PASO 1 (diseño fijo) ===== */}
       {paso === 1 && (
         <main className="k-main">
+          <p className="k-instruction"></p>
+
           <div className="k-grid-2">
-            {/* Normal */}
+            {/* NORMAL */}
             <button
               className="k-card big k-prio normal"
-              onClick={() => elegirPrioridad("NORMAL")}
+              onClick={() => elegirTipo(tipoNormal)}
             >
               <div className="k-card-icon">
-                <FaUser className="k-icon-react" aria-hidden />
+                <FaUser className="k-icon-react" />
               </div>
-              <div className="k-card-title">Normal</div>
-              <div className="k-card-sub">Atención general</div>
+              <div className="k-card-title">
+                {(tipoNormal && (tipoNormal.tipo_ticket || "").trim()) ||
+                  "NORMAL"}
+              </div>
+              <div className="k-card-sub">
+                Prefijo: {(tipoNormal && (tipoNormal.prefijo || "").trim()) || "N"}
+              </div>
             </button>
 
-            {/* Preferencial */}
+            {/* PREFERENCIAL */}
             <button
               className="k-card big k-prio pref"
-              onClick={() => elegirPrioridad("PREFERENCIAL")}
+              onClick={() => elegirTipo(tipoPreferencial)}
             >
               <div className="k-card-icon">
-                <FaWheelchair className="k-icon-react" aria-hidden />
+                <FaWheelchair className="k-icon-react" />
               </div>
-              <div className="k-card-title">Preferencial</div>
+              <div className="k-card-title">
+                {(tipoPreferencial &&
+                  (tipoPreferencial.tipo_ticket || "").trim()) ||
+                  "PREFERENCIAL"}
+              </div>
               <div className="k-card-sub">
-                Adulto mayor, embarazadas y personas con discapacidad
+                Prefijo:
+                {(tipoPreferencial &&
+                  (tipoPreferencial.prefijo || "").trim()) ||
+                  "P"}
               </div>
             </button>
           </div>
         </main>
       )}
 
-      {/* ===== PASO 2: Seleccionar trámite ===== */}
+      {/* ===== PASO 2 ===== */}
       {paso === 2 && (
         <>
           <div className="k-section-head">
             <h2>Seleccione su trámite</h2>
             <button className="k-link" onClick={() => setPaso(1)}>
-              ← Cambiar prioridad
+              ← Cambiar tipo
             </button>
           </div>
 
@@ -184,38 +209,22 @@ export default function Kiosko() {
                   disabled={enviando}
                 >
                   <div className="k-card-title">{t.nombre_tramite}</div>
-                  <span className="k-arrow" aria-hidden>
-                    →
-                  </span>
+                  <span className="k-arrow">→</span>
                 </button>
               ))}
-              {tramites.length === 0 && (
-                <p style={{ textAlign: "center", width: "100%" }}>
-                  No hay trámites disponibles.
-                </p>
-              )}
+
+              {tramites.length === 0 && <p>No hay trámites disponibles.</p>}
             </div>
           </main>
-
-          <footer className="k-foot">
-            <div className="k-foot-inner">
-              Gracias por su visita <span className="dot">•</span> DGMM
-            </div>
-          </footer>
         </>
       )}
 
-      {/* ===== PASO 3: Ticket generado (se imprime solo) ===== */}
+      {/* ===== PASO 3 ===== */}
       {paso === 3 && ticket && (
         <main className="k-main">
           <div className="k-ticket">
             <div className="k-ticket-head">
-              <img
-                src={logoGobierno}
-                alt="DGMM"
-                className="k-ticket-logo"
-                loading="lazy"
-              />
+              <img src={logoGobierno} className="k-ticket-logo" />
               <div className="k-ticket-brand">
                 Dirección General de la Marina Mercante
               </div>
@@ -229,23 +238,19 @@ export default function Kiosko() {
 
             <div className="k-ticket-meta">
               <div className="k-meta-row">
-                <strong>Trámite</strong>
-                <span>{ticket.tramite}</span>
+                <strong>Trámite:</strong> {ticket.tramite}
               </div>
+
               <div className="k-meta-row">
-                <strong>Prioridad</strong>
-                <span>{ticket.prioridad}</span>
+                <strong>Tipo:</strong> {ticket.tipo}
               </div>
+
               <div className="k-meta-row">
-                <strong>Fecha / Hora</strong>
-                <span>
-                  {ticket.fecha} {ticket.hora}
-                </span>
+                <strong>Fecha / Hora:</strong> {ticket.fecha} {ticket.hora}
               </div>
             </div>
 
-            {/* Barras decorativas tipo “barcode” */}
-            <div className="k-ticket-barcode" aria-hidden>
+            <div className="k-ticket-barcode">
               <div className="bar a" />
               <div className="bar c" />
               <div className="bar e" />

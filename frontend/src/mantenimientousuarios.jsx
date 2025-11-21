@@ -4,7 +4,7 @@ import Modal from "react-modal";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-import api from "./api";   // instancia Axios con baseURL http://localhost:49146/api
+import api from "./api";
 import logo from "./imagenes/DGMM-Gobierno.png";
 import "./mantenimiento.css";
 import jsPDF from "jspdf";
@@ -12,15 +12,15 @@ import autoTable from "jspdf-autotable";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
 import { FaFilePdf } from "react-icons/fa";
 
-// Necesario para accesibilidad del modal
 Modal.setAppElement("#root");
 
 export default function MantenimientoUsuarios() {
-  // ====== estado tabla ======
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ====== estado de formulario (compartido para crear/editar) ======
+  // 🔹 Lista de roles (para el select)
+  const [roles, setRoles] = useState([]);
+
   const [newId_rol, setNewId_rol] = useState("");
   const [newNombre, setNewNombre] = useState("");
   const [newApellido, setNewApellido] = useState("");
@@ -28,73 +28,82 @@ export default function MantenimientoUsuarios() {
   const [newNombre_usuario, setNewNombre_usuario] = useState("");
   const [newContraseña, setNewContraseña] = useState("");
 
-
-  // ====== modales ======
-  const [isModalOpen, setIsModalOpen] = useState(false);        // crear
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false); // editar
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editItemId, setEditItemId] = useState(null);
-  
+
+  // Mapa id_rol -> texto del rol (por si lo necesitas en otros lados)
+  const rolesMap = useMemo(() => {
+    const map = {};
+    roles.forEach((r) => {
+      const id = r.id_rol;
+      const nombre =
+        r.rol_nombre ||
+        r.nombre_rol ||
+        r.rol ||
+        r.descripcion ||
+        r.nombre ||
+        "";
+      if (id != null && nombre) {
+        map[id] = nombre;
+      }
+    });
+    return map;
+  }, [roles]);
+
   const generarPDFUsuarios = () => {
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "pt",
-    format: "A4",
-  });
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "pt",
+      format: "A4",
+    });
 
-  // --- ENCABEZADO DGMM ---
-  doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.setTextColor(14, 42, 59);
-  doc.text("Dirección General de la Marina Mercante", 170, 50);
+    doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(14, 42, 59);
+    doc.text("Dirección General de la Marina Mercante", 170, 50);
 
-  doc.setFontSize(14);
-  doc.text("Reporte de Usuarios", 170, 72);
+    doc.setFontSize(14);
+    doc.text("Reporte de Usuarios", 170, 72);
 
-  doc.setFontSize(10);
-  doc.setTextColor(80);
-  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+    doc.setFontSize(10);
+    doc.setTextColor(80);
+    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
 
-  // --- CABECERAS DE LA TABLA ---
-  const columnas = ["ID", "Nombre", "Usuario", "Correo", "Rol", "Estado"];
+    const columnas = ["ID", "Nombre", "Usuario", "Correo", "Rol", "Estado"];
 
-  // items = arreglo con usuarios (ajusta nombres de campos según tu API)
-  const filas = items.map((u) => [
-    u.id_usuario,
-    u.nombre,
-    u.nombre_usuario,
-    u.correo,
-    u.rol_nombre || u.nombreRol || "",
-    u.estado || u.estado_usuario || "",
-  ]);
+    const filas = items.map((u) => [
+      u.id_usuario,
+      u.nombre,
+      u.nombre_usuario,
+      u.correo,
+      rolesMap[u.id_rol] || u.rol_nombre || u.nombreRol || "",
+      u.estado || "",
+    ]);
 
-  // --- TABLA ---
-  autoTable(doc, {
-    startY: 125,
-    head: [columnas],
-    body: filas,
-    styles: { fontSize: 10, cellPadding: 5 },
-    headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
-    alternateRowStyles: { fillColor: [242, 245, 247] },
-  });
+    autoTable(doc, {
+      startY: 125,
+      head: [columnas],
+      body: filas,
+      styles: { fontSize: 10, cellPadding: 5 },
+      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [242, 245, 247] },
+    });
 
-  // --- PIE DE PÁGINA ---
-  const h = doc.internal.pageSize.height;
-  doc.setFontSize(9);
-  doc.setTextColor(100);
-  doc.text(
-    "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
-    doc.internal.pageSize.width / 2,
-    h - 30,
-    { align: "center" }
-  );
+    const h = doc.internal.pageSize.height;
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(
+      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+      doc.internal.pageSize.width / 2,
+      h - 30,
+      { align: "center" }
+    );
 
-  doc.save("Usuarios_DGMM.pdf");
-};
+    doc.save("Usuarios_DGMM.pdf");
+  };
 
-
-
-  // ====== helpers ======
   const limpiarCampos = () => {
     setNewId_rol("");
     setNewNombre("");
@@ -115,8 +124,8 @@ export default function MantenimientoUsuarios() {
 
   const openEditModal = (item) => {
     setEditItemId(item.id_usuario);
-    const rol = item.id_rol ?? item.id_rol ?? "";
-    setNewId_rol(String(rol)); // puedes renombrar este estado a newId_rol luego
+    const rol = item.id_rol ?? "";
+    setNewId_rol(String(rol));
     setNewNombre(item.nombre ?? "");
     setNewApellido(item.apellido ?? "");
     setNewCorreo(item.correo ?? "");
@@ -146,22 +155,22 @@ export default function MantenimientoUsuarios() {
     ]
   );
 
-const toPayload = () => { 
-  const idrolNum = Number(newId_rol); 
-  return { 
-    id_rol: 
-    idrolNum, 
-    nombre: newNombre.trim(), 
-    apellido: newApellido.trim(), 
-    correo: newCorreo.trim(), 
-    nombre_usuario: newNombre_usuario.trim(), 
-    contraseña: newContraseña, }; 
+  const toPayload = () => {
+    const idrolNum = Number(newId_rol);
+    return {
+      id_rol: idrolNum,
+      nombre: newNombre.trim(),
+      apellido: newApellido.trim(),
+      correo: newCorreo.trim(),
+      nombre_usuario: newNombre_usuario.trim(),
+      contraseña: newContraseña,
+    };
   };
-  // ====== API ======
+
   const fetchItems = async () => {
     try {
       setLoading(true);
-      const { data } = await api.get("/usuario"); // GET /api/usuario
+      const { data } = await api.get("/usuario");
       setItems(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("GET /usuario error:", error.response?.data || error);
@@ -171,8 +180,18 @@ const toPayload = () => {
     }
   };
 
+  const fetchRoles = async () => {
+    try {
+      const { data } = await api.get("/roles");
+      setRoles(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("GET /rol error:", error.response?.data || error);
+    }
+  };
+
   useEffect(() => {
     fetchItems();
+    fetchRoles();
   }, []);
 
   const handleCreate = async () => {
@@ -180,15 +199,15 @@ const toPayload = () => {
       toast.error("Por favor completa todos los campos");
       return;
     }
-    
-    const payload = toPayload(); 
-    if (!Number.isFinite(payload.id_rol)) 
-      { toast.error("El campo 'Rol' (id_rol) debe ser numérico"); 
-        return; 
-      }
+
+    const payload = toPayload();
+    if (!Number.isFinite(payload.id_rol)) {
+      toast.error("El campo 'Rol' (id_rol) debe ser numérico");
+      return;
+    }
 
     try {
-      await api.post("/usuario", payload); // POST /api/usuario
+      await api.post("/usuario", payload);
       toast.success("¡Usuario creado con éxito!");
       await fetchItems();
       closeModal();
@@ -204,21 +223,19 @@ const toPayload = () => {
       toast.error("Por favor completa todos los campos");
       return;
     }
-    const payload = toPayload(); 
-    if (!Number.isFinite(payload.id_rol)) { 
-      toast.error("El campo 'Rol' (id_rol) debe ser numérico"); 
-      return; 
+    const payload = toPayload();
+    if (!Number.isFinite(payload.id_rol)) {
+      toast.error("El campo 'Rol' (id_rol) debe ser numérico");
+      return;
     }
 
-    // Intentamos PUT /usuario/:id; si tu backend usa otro, hacemos fallback
     try {
       await api.put(`/usuario/${editItemId}`, payload);
       toast.success("¡Usuario actualizado con éxito!");
     } catch (err1) {
       if (err1?.response?.status === 404) {
         try {
-          // fallback: PUT /usuario con id en body
-          await api.put("/usuario", { id_usuario: editItemId, ...payload});
+          await api.put("/usuario", { id_usuario: editItemId, ...payload });
           toast.success("¡Usuario actualizado con éxito!");
         } catch (err2) {
           console.error("PUT /usuario error:", err2.response?.data || err2);
@@ -246,7 +263,7 @@ const toPayload = () => {
   const handleDelete = async (id) => {
     if (!window.confirm("¿Estás seguro de eliminar este usuario?")) return;
     try {
-      await api.delete(`/usuario/${id}`); // DELETE /api/usuario/:id
+      await api.delete(`/usuario/${id}`);
       toast.success("Registro eliminado con éxito");
       setItems((prev) => prev.filter((i) => i.id_usuario !== id));
     } catch (error) {
@@ -257,10 +274,8 @@ const toPayload = () => {
     }
   };
 
-  // ====== UI ======
   return (
     <div className="mm-page">
-      {/* Encabezado institucional */}
       <header className="mm-header">
         <img src={logo} alt="DGMM" className="mm-logo" />
       </header>
@@ -275,9 +290,12 @@ const toPayload = () => {
             <button className="btn btn-primary" onClick={openModal}>
               + Nuevo usuario
             </button>
-            <button className="btn btn-topbar-primary" onClick={generarPDFUsuarios}>
-      <FaFilePdf size={16} /> Generar Reporte
-    </button>
+            <button
+              className="btn btn-topbar-primary"
+              onClick={generarPDFUsuarios}
+            >
+              <FaFilePdf size={16} /> Generar Reporte
+            </button>
           </div>
         </div>
 
@@ -311,7 +329,14 @@ const toPayload = () => {
                 items.map((it) => (
                   <tr key={it.id_usuario}>
                     <td>{it.id_usuario}</td>
-                    <td>{it.id_rol}</td>
+                    <td>
+                      {rolesMap[it.id_rol] ||
+                        it.rol_nombre ||
+                        it.nombreRol ||
+                        it.rol ||
+                        it.nombre_rol ||
+                        it.id_rol}
+                    </td>
                     <td>{it.nombre}</td>
                     <td>{it.apellido}</td>
                     <td>{it.correo}</td>
@@ -347,12 +372,24 @@ const toPayload = () => {
       >
         <h3>Crear Usuario</h3>
         <div className="mm-form">
-          <input
+          {/* ⬇️ SELECT DE ROLES */}
+          <select
             value={newId_rol}
             onChange={(e) => setNewId_rol(e.target.value)}
-            placeholder="Id_rol"
-          />
-          
+          >
+            <option value="">Seleccione un rol</option>
+            {roles.map((r) => (
+              <option key={r.id_rol} value={r.id_rol}>
+                {r.rol_nombre ||
+                  r.nombre_rol ||
+                  r.rol ||
+                  r.descripcion ||
+                  r.nombre ||
+                  `Rol ${r.id_rol}`}
+              </option>
+            ))}
+          </select>
+
           <input
             value={newNombre}
             onChange={(e) => setNewNombre(e.target.value)}
@@ -399,11 +436,24 @@ const toPayload = () => {
       >
         <h3>Editar Usuario</h3>
         <div className="mm-form">
-          <input
+          {/* ⬇️ SELECT DE ROLES TAMBIÉN EN EDITAR */}
+          <select
             value={newId_rol}
             onChange={(e) => setNewId_rol(e.target.value)}
-            placeholder="Id_rol"
-          />
+          >
+            <option value="">Seleccione un rol</option>
+            {roles.map((r) => (
+              <option key={r.id_rol} value={r.id_rol}>
+                {r.rol_nombre ||
+                  r.nombre_rol ||
+                  r.rol ||
+                  r.descripcion ||
+                  r.nombre ||
+                  `Rol ${r.id_rol}`}
+              </option>
+            ))}
+          </select>
+
           <input
             value={newNombre}
             onChange={(e) => setNewNombre(e.target.value)}

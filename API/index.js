@@ -9,7 +9,9 @@ var speakeasy = require("speakeasy");
 var QRCode = require("qrcode"); 
 
 // ===== CONFIGURACIÓN Y ENVÍO DE CORREOS =====
-require('dotenv').config();
+require('dotenv').config({
+  path: __dirname + '/.env',
+});
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const dns = require('dns');
@@ -145,7 +147,7 @@ const conexion = mysql.createPool({
   host: "localhost",
   port: 3306,
   user: "root",
-  password: "H0nduras",
+  password: "123456",
   database: "marina_mercante",
   waitForConnections: true,
   connectionLimit: 10,
@@ -719,14 +721,20 @@ function gen6Code() {
 
 // ===== CRUD PARA tbl_usuario =====
 // Listar todos los usuarios
+// Listar todos los usuarios con nombre del rol
 app.get("/api/usuario", async (req, res) => {
-  const { id_usuario } = req.query; // o extrae del token en un futuro
-  try {
-    const [rows] = await conexion.promise().query(
-      "SELECT * FROM tbl_usuario ORDER BY id_usuario DESC"
-    );
+  const { id_usuario } = req.query;
 
-    // Registrar en bitácora
+  try {
+    const [rows] = await conexion.promise().query(`
+      SELECT 
+        u.*, 
+        r.nombre AS rol_nombre
+      FROM tbl_usuario u
+      LEFT JOIN tbl_rol r ON u.id_rol = r.id_rol
+      ORDER BY u.id_usuario DESC
+    `);
+
     if (id_usuario) {
       await conexion.promise().query(
         "CALL event_bitacora(?, ?, ?, ?)",
@@ -739,6 +747,7 @@ app.get("/api/usuario", async (req, res) => {
     handleDatabaseError(err, res, "Error en listado de usuarios:");
   }
 });
+
 
 // Obtener usuario por ID
 app.get("/api/usuario/:id", async (req, res) => {
@@ -1107,8 +1116,7 @@ app.post('/api/enviar', (req, res) => {
 
 // ===== Insertar nuevo usuario (rol opcional; por defecto sin rol) =====
 app.post("/api/usuario", verificarToken, autorizarRoles("Administrador"),  (req, res) => {
-  const {
-    id_rol,          // opcional: admin puede pasarlo; si no, NULL
+  const {         
     nombre,
     apellido,
     correo,
@@ -1404,184 +1412,6 @@ app.post('/api/auth/verify-code', (req, res) => {
   });
 });
 
-//GET cliente 
-app.get('/api/cliente', (request, response) => {
-    var query = "SELECT * FROM tbl_cliente";
-    
-    conexion.query(query, (err, rows) => { 
-        if (err) {
-            logger.error("Error en listado de cliente: " + err.message);
-            return response.status(500).json({ error: "Error en listado de cliente" });
-        }
-        response.json(rows);
-        registrarBitacora("tlb_cliente", "GET", request.body); // Registra la petición en la bitácora
-        logger.info("Listado de cliente - OK");
-    });
-});
-
-// GET con where cliente
-app.get('/api/cliente/:id',(request, response)=>{
-    var query = "SELECT * FROM tbl_cliente WHERE id_cliente = ?"
-    var values = [parseInt(request.params.id)];
-
-    conexion.query(query,values,function(err,rows,fields){
-        if (err){
-            handleDatabaseError(err, response, "Error en listado de cliente con where:");
-            return;
-        }
-        registrarBitacora("tbl_cliente", "GET", request.body); 
-        logger.info("Listado de clientes con where - OK");
-        response.json(rows);
-    });
-});
-
-// Insert cliente
-app.post('/api/cliente', (request, response) => {
-    var query = "INSERT INTO tbl_cliente (nombre, identidad) VALUES (?, ?)";
-    var values = [
-        request.body["nombre"],
-        request.body["identidad"]
-    ];
-
-    conexion.query(query, values, function(err, rows, fields) {
-        if (err) {
-            handleDatabaseError(err, response, "Error en inserción del cliente:");
-            return;
-        }
-        registrarBitacora("cliente", "INSERT", request.body); // Registra accion en la bitácora
-        logger.info("INSERT de cliente - OK");
-        response.json("INSERT EXITOSO!");
-    });
-});
-
-// PUT de cliente
-app.put('/api/cliente/:id', (request, response) => {
-    console.log("Params:", request.params);
-    console.log("Body:", request.body);
-    const query = `
-        UPDATE tbl_cliente 
-        SET nombre = ?, identidad = ? WHERE id_cliente = ?
-    `;
-    const values = [
-        request.body["nombre"],
-        request.body["identidad"],
-        request.body["id_cliente"]
-    ];
-
-    conexion.query(query, values, (err) => {
-        if (err) {
-            handleDatabaseError(err, response, "Error en actualización de cliente:");
-            return;
-        }
-        registrarBitacora("cliente", "PUT");
-        logger.info("ACTUALIZACIÓN cliente - OK");
-        response.json("UPDATE EXITOSO!");
-    });
-});
-
-
-app.delete('/api/cliente/:id', (request, response) => {
-    var query = "DELETE FROM tbl_cliente where id_cliente= ?";
-    var values = [
-        parseInt(request.params.id)
-    ];
-
-    conexion.query(query, values, function(err, rows, fields) {
-        if (err) {
-            handleDatabaseError(err, response, "Error en la eliminación del cliente:");
-            return;
-        }
-        
-        registrarBitacora("cliente", "DELETE", request.body); // Registra accion en la bitácora
-        logger.info("DELETE de cliente - OK");
-        response.json("DELETE EXITOSO!");
-    });
-});
-
-//Get 
-app.get('/api/estado_ticket',(request, response)=>{
-    var query = "SELECT * FROM marina_mercante.tl_estado_ticket"
-    conexion.query(query,function(err,rows,fields){
-        if (err){
-            response.send("301 ERROR EN LISTADO DE ESTADOS DE TICKET")
-        };
-        registrarBitacora("Estados de ticket", "GET", request.body); //REGISTRAR LA PETICION EN LA BITACORA
-        response.send(rows)
-        console.log("listado de estados de ticket - OK")
-    })
-});
-
-//Get listado de estado de ticket con where
-app.get('/api/estado_ticket/:id',(request, response)=>{
-    var query = "SELECT * FROM marina_mercante.tl_estado_ticket WHERE id_estado_ticket = ?"
-    var values = [
-        parseInt(request.params.id)
-    ];
-    conexion.query(query,values,function(err,rows,fields){
-        if (err){
-            response.send("301 ERROR EN LISTADO DE ESTADO DE TICKET")
-        };
-        registrarBitacora("estado de ticket", "GET", request.body);
-        response.send(rows)
-        console.log("listado de productos con where - OK")
-    })
-});
-
-
-//Post insert de estado ticket
-app.post('/api/estado_ticket', (request, response) => {
-    var query = "INSERT INTO marina_mercante.tbl_estado_ticket (estado) VALUES (?)"; 
-    var values = [
-        request.body["estado"],
-        
-    ];
-    conexion.query(query, values, function(err, rows, fields) {
-        if (err) {
-            console.log(err.message);
-            return response.status(500).json({ error: err.message }); // Mejor manejo de errores
-        }
-        registrarBitacora("Estado ticket", "POST", request.body);
-        response.json("INSERT EXITOSO!");
-        console.log("INSERT de estado ticket - OK");
-    });
-});
-
-//Put Update de Estdo ticket
-app.put('/api/estado_ticket', (request, response) => {
-    var query = "UPDATE marina_mercante.tl_estado_ticket SET estado = ? where id_estado_ticket = ?";
-    var values = [
-        request.body["estado"]
-       
-    ];
-    conexion.query(query, values, function(err, rows, fields) {
-        if (err) {
-            console.log(err.message);
-            return response.status(500).json({ error: err.message }); // Mejor manejo de errores
-        }
-        registrarBitacora("estado ticket", "PUT", request.body);
-        response.json("UPDATE EXITOSO!");
-        console.log("UPDATE de estado ticket - OK");
-    });
-});
-
-
-//Delete de estado de ticket
-app.delete('/api/estado_ticket/:id', (request, response) => {
-    var query = "DELETE FROM marina_mercante.tl_estado_ticket where id_producto = ?";
-    var values = [
-        parseInt(request.params.id)
-    ];
-    conexion.query(query, values, function(err, rows, fields) {
-        if (err) {
-            console.log(err.message);
-            return response.status(500).json({ error: err.message }); 
-        }
-        registrarBitacora("productos", "DELETE", request.body);
-        response.json("DELETE EXITOSO!");
-        console.log("DELETE de estado ticket - OK");
-    });
-});
-
 // ====== CRUD PARA tl_compra ======  
 app.get('/api/compra', (req, res) => {  
   const query = "SELECT * FROM tbl_compra";  
@@ -1642,69 +1472,6 @@ app.delete('/api/compra/:id', (req, res) => {
       return;  
     }  
     res.json({ message: "Compra eliminada correctamente" });  
-  });  
-});
-
-// ====== CRUD PARA tl_detalle_compra ======  
-app.get('/api/detalle_compra', (req, res) => {  
-  const query = "SELECT * FROM tl_detalle_compra";  
-  conexion.query(query, (err, rows) => {  
-    if (err) {  
-      console.error("Error al listar detalles de compra:", err);  
-      res.status(500).json({ error: "Error al listar detalles de compra" });  
-      return;  
-    }  
-    res.json(rows);  
-  });  
-});  
-  
-app.get('/api/detalle_compra/:id', (req, res) => {  
-  const query = "SELECT * FROM tl_detalle_compra WHERE id_detalle_compra = ?";  
-  conexion.query(query, [req.params.id], (err, rows) => {  
-    if (err) {  
-      console.error("Error al obtener detalle de compra:", err);  
-      res.status(500).json({ error: "Error al obtener detalle de compra" });  
-      return;  
-    }  
-    res.json(rows[0]);  
-  });  
-});  
-  
-app.post('/api/detalle_compra', (req, res) => {  
-  const { id_compra, id_producto, cantidad, precio_compra } = req.body;  
-  const query = "INSERT INTO tl_detalle_compra (id_compra, id_producto, cantidad, precio_compra) VALUES (?, ?, ?, ?)";  
-  conexion.query(query, [id_compra, id_producto, cantidad, precio_compra], (err, result) => {  
-    if (err) {  
-      console.error("Error al insertar detalle de compra:", err);  
-      res.status(500).json({ error: "Error al insertar detalle de compra" });  
-      return;  
-    }  
-    res.json({ message: "Detalle de compra insertado correctamente", id: result.insertId });  
-  });  
-});  
-  
-app.put('/api/detalle_compra/:id', (req, res) => {  
-  const { id_compra, id_producto, cantidad, precio_compra } = req.body;  
-  const query = "UPDATE tl_detalle_compra SET id_compra = ?, id_producto = ?, cantidad = ?, precio_compra = ? WHERE id_detalle_compra = ?";  
-  conexion.query(query, [id_compra, id_producto, cantidad, precio_compra, req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al actualizar detalle de compra:", err);  
-      res.status(500).json({ error: "Error al actualizar detalle de compra" });  
-      return;  
-    }  
-    res.json({ message: "Detalle de compra actualizado correctamente" });  
-  });  
-});  
-  
-app.delete('/api/detalle_compra/:id', (req, res) => {  
-  const query = "DELETE FROM tl_detalle_compra WHERE id_detalle_compra = ?";  
-  conexion.query(query, [req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al eliminar detalle de compra:", err);  
-      res.status(500).json({ error: "Error al eliminar detalle de compra" });  
-      return;  
-    }  
-    res.json({ message: "Detalle de compra eliminado correctamente" });  
   });  
 });
 
@@ -2041,6 +1808,7 @@ app.delete('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res
   });
 });
 
+
 // ====== CRUD PARA tl_salida_productos ======
 // Listar todas las salidas de productos
 app.get('/api/salidas_productos', (req, res) => {
@@ -2191,6 +1959,7 @@ app.delete('/api/inventario/:id', (req, res) => {
     res.json({ message: "Inventario eliminado correctamente" });
   });
 });
+
 
 // =============== CONFIGURACIÓN BITÁCORA ===============
 const ID_OBJETO_PRODUCTOS = 6;
@@ -2575,7 +2344,7 @@ app.post('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
     return res.status(400).json({ error: "Faltan campos obligatorios" });
   }
 
-  const query = "CALL SP_InsertarKardex(?, ?, ?, ?, ?, ?, ?, ?)";
+  const query = "CALL SP_InsertarKardex(?, ?, ?, ?, ?, ?)";
   const values = [
     user.id_usuario,
     id_producto,
@@ -3974,6 +3743,149 @@ app.post("/api/kiosko/tomar", (req, res) => {
     });
   });
 });
+
+app.get("/api/historial_kardex", (req, res) => {
+    const sql = "SELECT * FROM tbl_kardex ORDER BY fecha_hora DESC";
+
+    conexion.query(sql, (err, results) => {
+        if (err) {
+            console.error("Error al obtener historial kardex:", err);
+            return res.status(500).json({ mensaje: "Error al obtener historial" });
+        }
+        res.json(results);
+    });
+});
+
+// ===== CRUD PARA tbl_tipo_ticket =====
+
+// Listar todos los tipos de ticket
+// LISTAR TODOS LOS TIPOS DE TICKET
+// LISTAR TODOS LOS TIPOS DE TICKET (ACTIVOS E INACTIVOS)
+app.get("/api/tipo_ticket", async (req, res) => {
+  try {
+    const [rows] = await conexion.promise().query(`
+      SELECT 
+        id_tipo_ticket,
+        tipo_ticket,
+        prefijo,
+        estado
+      FROM tbl_tipo_ticket
+      ORDER BY id_tipo_ticket DESC
+    `);
+
+    res.json(rows);          
+  } catch (err) {
+    handleDatabaseError(err, res, "Error en listado de tipo_ticket:");
+  }
+});
+
+
+
+// Obtener un tipo_ticket por ID
+// LISTAR
+app.get("/api/tipo_ticket", async (req, res) => {
+  try {
+    const [rows] = await conexion.promise().query(
+      "SELECT * FROM tbl_tipo_ticket ORDER BY id_tipo_ticket DESC"
+    );
+    res.json(rows);
+  } catch (err) {
+    handleDatabaseError(err, res, "Error en listado de tipo_ticket:");
+  }
+});
+
+// INSERTAR
+app.post("/api/tipo_ticket", async (req, res) => {
+  const { tipo_ticket, prefijo, estado } = req.body;
+
+  if (!tipo_ticket || !prefijo) {
+    return res
+      .status(400)
+      .json({ error: "tipo_ticket y prefijo son obligatorios." });
+  }
+
+  const query = `
+    INSERT INTO tbl_tipo_ticket (tipo_ticket, estado, prefijo)
+    VALUES (?, ?, ?)
+  `;
+  const values = [tipo_ticket, estado || "ACTIVO", prefijo];
+
+  try {
+    const [result] = await conexion.promise().query(query, values);
+    res.json({
+      mensaje: "Tipo de ticket agregado correctamente",
+      id: result.insertId,
+    });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al insertar tipo_ticket:");
+  }
+});
+
+// ACTUALIZAR
+app.put("/api/tipo_ticket/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { tipo_ticket, prefijo, estado } = req.body;
+
+  if (!tipo_ticket || !prefijo) {
+    return res
+      .status(400)
+      .json({ error: "tipo_ticket y prefijo son obligatorios." });
+  }
+
+  const query = `
+    UPDATE tbl_tipo_ticket
+    SET tipo_ticket = ?, estado = ?, prefijo = ?
+    WHERE id_tipo_ticket = ?
+  `;
+  const values = [tipo_ticket, estado || "ACTIVO", prefijo, id];
+
+  try {
+    const [result] = await conexion.promise().query(query, values);
+
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ mensaje: "Tipo de ticket no encontrado" });
+    }
+
+    res.json({ mensaje: "Tipo de ticket actualizado correctamente" });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al actualizar tipo_ticket:");
+  }
+});
+
+
+// Eliminar tipo_ticket
+app.delete("/api/tipo_ticket/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { id_usuario: id_admin } = req.body || {};
+
+  try {
+    const [result] = await conexion
+      .promise()
+      .query("DELETE FROM tbl_tipo_ticket WHERE id_tipo_ticket = ?", [id]);
+
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ mensaje: "Tipo de ticket no encontrado" });
+    }
+
+    if (id_admin) {
+      await conexion.promise().query("CALL event_bitacora(?, ?, ?, ?)", [
+        id_admin,
+        3,
+        "DELETE",
+        `Se eliminó el tipo_ticket con ID ${id}`,
+      ]);
+    }
+
+    res.json({ mensaje: "Tipo de ticket eliminado correctamente" });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al eliminar tipo_ticket:");
+  }
+});
+
 
 // ===== 404 =====
 app.use((req, res) => res.status(404).json({ mensaje: "Ruta no encontrada" }));

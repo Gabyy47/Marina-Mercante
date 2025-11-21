@@ -51,7 +51,7 @@ const cargarTodo = async () => {
     setKardex(rKardex.data || []);
     setInventario(rInv.data || []);
     setProductos(rProd.data || []);
-    setProveedores(rProv.data || []);
+    setProveedor(rProv.data || []);
     setDetalleCompra(rDet.data || []);
 
   } catch (e) {
