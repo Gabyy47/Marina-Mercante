@@ -21,6 +21,8 @@ import DetalleCompra from "./DetalleCompra.jsx";
 import Mantenimientocliente from "./mantenimientocliente.jsx";
 import Kardex from "./Kardex.jsx"; // 
 import Tipo from "./MantenimientoTipoTicket.jsx";
+import MantenimientoPermisos from "./MantenimientoPermisos.jsx";
+
 
 import api from "./api";
 
@@ -88,6 +90,7 @@ function Sidebar({ activeView, onSelect, onLogout }) {
   const [openTickets, setOpenTickets] = useState(false);
   const [openInventario, setOpenInventario] = useState(false);
   const [openBitacora, setOpenBitacora] = useState(false);
+
 
   return (
     <aside className="sb">
@@ -379,6 +382,13 @@ function Sidebar({ activeView, onSelect, onLogout }) {
           </span>
         </button>
 
+        <button
+  className={`sb__link ${activeView === "permisos" ? "sb__link--active" : ""}`}
+  onClick={() => onSelect("permisos")}
+>
+  <span> Configuracion de permisos </span>
+</button>
+
         {/* Cerrar sesión */}
         <button className="sb__link sb__link--logout" onClick={onLogout}>
           <span>
@@ -623,6 +633,9 @@ const MainPage = () => {
 
       case "bitacora":
         return <Bitacora />;
+
+      case "permisos":                 
+        return <MantenimientoPermisos />;
 
       case "settings":
         return <div className="dashboard-box">Configuración del sistema</div>;

@@ -1,0 +1,87 @@
+.perm-page {
+  padding: 24px;
+}
+
+.perm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.perm-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.perm-logo img {
+  height: 50px;
+}
+
+.perm-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.perm-filtros {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.perm-filtros select {
+  margin-left: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+}
+
+.perm-btn-primary {
+  margin-left: auto;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: none;
+  background: #0b3540;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.perm-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.perm-help {
+  margin-bottom: 10px;
+  color: #4b5563;
+}
+
+.perm-table-wrap {
+  overflow-x: auto;
+}
+
+.perm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.perm-table th,
+.perm-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.perm-table thead {
+  background: #0b3540;
+  color: white;
+}
+
+.perm-check-cell {
+  text-align: center;
+}

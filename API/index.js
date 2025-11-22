@@ -147,13 +147,69 @@ const conexion = mysql.createPool({
   host: "localhost",
   port: 3306,
   user: "root",
-  password: "123456",
+  password: "1984",
   database: "marina_mercante",
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
   charset: "utf8mb4",
 });
+
+// ====== Helper de permisos por rol/objeto ======
+function autorizarPermiso(nombreObjeto, accion) {
+  // accion: 'insertar' | 'actualizar' | 'eliminar' | 'consultar'
+  const mapCol = {
+    insertar: "puede_insertar",
+    actualizar: "puede_actualizar",
+    eliminar: "puede_eliminar",
+    consultar: "puede_consultar",
+  };
+
+  const col = mapCol[accion];
+  if (!col) {
+    throw new Error(`Acción de permiso desconocida: ${accion}`);
+  }
+
+  return (req, res, next) => {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ mensaje: "No autenticado" });
+    }
+
+    const idRol = user.id_rol;
+    if (!idRol) {
+      return res.status(403).json({ mensaje: "Rol no definido en el token" });
+    }
+
+    // IMPORTANTE: nombreObjeto debe coincidir EXACTO con la columna nombre_objeto de tbl_objeto
+    const sql = `
+      SELECT p.${col} AS permitido
+      FROM tbl_permiso p
+      INNER JOIN tbl_objeto o ON o.id_objeto = p.id_objeto
+      WHERE p.id_rol = ?
+        AND o.nombre_objeto = ?
+        AND p.${col} = 1
+      LIMIT 1
+    `;
+
+    conexion.query(sql, [idRol, nombreObjeto], (err, rows) => {
+      if (err) {
+        console.error("Error consultando permisos:", err);
+        return res.status(500).json({ mensaje: "Error verificando permisos" });
+      }
+
+      if (!rows || rows.length === 0) {
+        return res.status(403).json({
+          mensaje: `No tiene permiso para ${accion} en ${nombreObjeto}`,
+        });
+      }
+
+      // Tiene permiso
+      next();
+    });
+  };
+}
+
 
 // ===== Inicio de Express.js =====
 var app = Express();
@@ -221,6 +277,69 @@ app.get("/api/seguro", verificarToken, (req, res) => {
   res.json({
     mensaje: "Acceso concedido a la ruta segura",
     usuario: req.user,
+  });
+});
+
+// 1. Listar objetos
+app.get("/api/objetos", verificarToken, autorizarRoles("Administrador"), (req, res) => {
+  const sql = "SELECT id_objeto, nombre_objeto FROM tbl_objeto WHERE estado = 'ACTIVO'";
+  conexion.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error al listar objetos" });
+    res.json(rows);
+  });
+});
+
+// 2. Listar permisos de un rol
+app.get("/api/seguridad/permisos", verificarToken, autorizarRoles("Administrador"), (req, res) => {
+  const id_rol = req.query.id_rol;
+  const sql = `
+    SELECT id_permiso, id_rol, id_objeto,
+           puede_insertar, puede_eliminar, puede_actualizar, puede_consultar
+    FROM tbl_permiso
+    WHERE id_rol = ?
+  `;
+  conexion.query(sql, [id_rol], (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error al listar permisos" });
+    res.json(rows);
+  });
+});
+
+// 3. Guardar permisos de un rol (sobreescribe todo)
+app.post("/api/seguridad/permisos/guardar", verificarToken, autorizarRoles("Administrador"), (req, res) => {
+  const { id_rol, permisos } = req.body;
+
+  if (!id_rol || !Array.isArray(permisos)) {
+    return res.status(400).json({ mensaje: "Datos incompletos" });
+  }
+
+  // Borramos los permisos actuales del rol y metemos los nuevos
+  const deleteSql = "DELETE FROM tbl_permiso WHERE id_rol = ?";
+  conexion.query(deleteSql, [id_rol], (err) => {
+    if (err) return res.status(500).json({ mensaje: "Error al limpiar permisos" });
+
+    if (permisos.length === 0) {
+      return res.json({ mensaje: "Permisos actualizados (lista vacía)" });
+    }
+
+    const insertSql = `
+      INSERT INTO tbl_permiso
+        (id_rol, id_objeto, puede_insertar, puede_eliminar, puede_actualizar, puede_consultar)
+      VALUES ?
+    `;
+
+    const values = permisos.map((p) => [
+      id_rol,
+      p.id_objeto,
+      p.puede_insertar,
+      p.puede_eliminar,
+      p.puede_actualizar,
+      p.puede_consultar,
+    ]);
+
+    conexion.query(insertSql, [values], (err2) => {
+      if (err2) return res.status(500).json({ mensaje: "Error al guardar permisos" });
+      res.json({ mensaje: "Permisos actualizados correctamente" });
+    });
   });
 });
 
@@ -1966,7 +2085,7 @@ const ID_OBJETO_PRODUCTOS = 6;
 
 
 // =============== INSERTAR PRODUCTO (SP_InsertarProducto) ===============
-app.post('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.post('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "insertar"), (req, res) => {
   const { nombre_producto, cantidad_minima, cantidad_maxima, descripcion } = req.body;
   const user = req.user;
 
@@ -1998,7 +2117,7 @@ app.post('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
 
 
 // =============== ACTUALIZAR PRODUCTO (SP_ActualizarProducto) ===============
-app.put('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.put('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "actualizar"), (req, res) => {
   const { nombre_producto, cantidad_minima, cantidad_maxima, descripcion } = req.body;
   const id_producto = parseInt(req.params.id);
   const user = req.user;
@@ -2027,7 +2146,7 @@ app.put('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) =
 
 
 // =============== ELIMINAR PRODUCTO (SP_EliminarProducto) ===============
-app.delete('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.delete('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "eliminar"), (req, res) => {
   const id_producto = parseInt(req.params.id);
   const user = req.user;
 
@@ -2054,7 +2173,7 @@ app.delete('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res
 
 
 // =============== MOSTRAR PRODUCTOS (SP_MostrarProductos) ===============
-app.get('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.get('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "consultar"), (req, res) => {
   const user = req.user;
   const query = "CALL SP_MostrarProductos()";
 
@@ -2087,7 +2206,7 @@ const ID_OBJETO_PROVEEDOR = 2;
 // ==========================
 //  INSERTAR PROVEEDOR (SP)
 // ==========================
-app.post('/api/proveedor', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.post('/api/proveedor', verificarToken, SOLO_ALMACEN_O_ADMIN,  autorizarPermiso("Proveedores", "insertar"), (req, res) => {
   const { nombre, telefono, direccion } = req.body;
   const user = req.user;
 
@@ -2121,7 +2240,7 @@ app.post('/api/proveedor', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
 // ==========================
 //  ACTUALIZAR PROVEEDOR (SP)
 // ==========================
-app.put('/api/proveedor/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.put('/api/proveedor/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Proveedores", "actualizar"), (req, res) => {
   const { nombre, telefono, direccion } = req.body;
   const id_proveedor = parseInt(req.params.id);
   const user = req.user;
@@ -2151,7 +2270,7 @@ app.put('/api/proveedor/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) =
 // ==========================
 //  ELIMINAR PROVEEDOR (SP)
 // ==========================
-app.delete('/api/proveedor/:id', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res) => {
+app.delete('/api/proveedor/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Proveedores", "eliminar"), (req, res) => {
   const id_proveedor = parseInt(req.params.id);
   const user = req.user;
 
@@ -2179,7 +2298,7 @@ app.delete('/api/proveedor/:id', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res)
 // ==========================
 //  MOSTRAR PROVEEDORES (SP)
 // ==========================
-app.get('/api/proveedor', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.get('/api/proveedor', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Proveedores", "consultar"), (req, res) => {
   const user = req.user;
   const query = "CALL SP_MostrarProveedores()";
 
@@ -2209,7 +2328,7 @@ const ID_OBJETO_INVENTARIO = 5;
 // ==========================
 //  INSERTAR INVENTARIO (SP)
 // ==========================
-app.post('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.post('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "insertar"), (req, res) => {
   const { id_producto, cantidad } = req.body;
   const user = req.user;
 
@@ -2242,7 +2361,7 @@ app.post('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => 
 // ==========================
 //  ACTUALIZAR INVENTARIO (SP)
 // ==========================
-app.put('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.put('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "actualizar"), (req, res) => {
   const { cantidad } = req.body;
   const id_inventario = parseInt(req.params.id);
   const user = req.user;
@@ -2272,7 +2391,7 @@ app.put('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) 
 // ==========================
 //  ELIMINAR INVENTARIO (SP)
 // ==========================
-app.delete('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res) => {
+app.delete('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "eliminar"), (req, res) => {
   const id_inventario = parseInt(req.params.id);
   const user = req.user;
 
@@ -2300,7 +2419,7 @@ app.delete('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res
 // ==========================
 //  MOSTRAR INVENTARIO (SP)
 // ==========================
-app.get('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.get('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
   const user = req.user;
   const query = "CALL SP_MostrarInventario()";
 
@@ -2333,7 +2452,7 @@ const ID_OBJETO_DETALLE_COMPRA = 8;
 // =============================
 //  INSERTAR KARDEX (SP)
 // =============================
-app.post('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.post('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex", "insertar"), (req, res) => {
   const { 
     id_producto, cantidad, tipo_movimiento, estado, descripcion, id_proveedor, monto_total
   } = req.body;
@@ -2379,7 +2498,7 @@ app.post('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
 // =============================
 //  ACTUALIZAR KARDEX (SP)
 // =============================
-app.put('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.put('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex", "actualizar"), (req, res) => {
   const { estado } = req.body;
   const id_kardex = parseInt(req.params.id);
   const user = req.user;
@@ -2413,7 +2532,7 @@ app.put('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
 // =============================
 //  ELIMINAR KARDEX (SP)
 // =============================
-app.delete('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res) => {
+app.delete('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex", "eliminar"),(req, res) => {
   const id_kardex = parseInt(req.params.id);
   const user = req.user;
 
@@ -2441,7 +2560,7 @@ app.delete('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res) =>
 // =============================
 //  MOSTRAR KARDEX (SP)
 // =============================
-app.get('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.get('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex", "consultar"), (req, res) => {
   const user = req.user;
 
   const query = "CALL SP_MostrarKardex()";
@@ -2467,7 +2586,7 @@ app.get('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
 // =============================
 //  INSERTAR DETALLE DE COMPRA (SP)
 // =============================
-app.post('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res) => {
+app.post('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de compra", "insertar"),(req, res) => {
   const { id_kardex, id_proveedor, monto_total } = req.body;
   const user = req.user;
 
@@ -2500,7 +2619,7 @@ app.post('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN,(req, res) 
 // =============================
 //  ACTUALIZAR DETALLE DE COMPRA (SP)
 // =============================
-app.put('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.put('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de compra", "actualizar"), (req, res) => {
   const { monto_total } = req.body;
   const id_detalle = parseInt(req.params.id);
   const user = req.user;
@@ -2534,7 +2653,7 @@ app.put('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, r
 // =============================
 //  ELIMINAR DETALLE DE COMPRA (SP)
 // =============================
-app.delete('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.delete('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de compra", "eliminar"), (req, res) => {
   const id_detalle = parseInt(req.params.id);
   const user = req.user;
 
@@ -2562,7 +2681,7 @@ app.delete('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req
 // =============================
 //  MOSTRAR DETALLE DE COMPRA (SP)
 // =============================
-app.get('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+app.get('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de compra", "consultar"), (req, res) => {
   const user = req.user;
 
   const query = "CALL SP_MostrarDetalleCompra()";
