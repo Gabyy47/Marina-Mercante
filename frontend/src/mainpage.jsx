@@ -22,6 +22,8 @@ import Mantenimientocliente from "./mantenimientocliente.jsx";
 import Kardex from "./Kardex.jsx"; // 
 import Tipo from "./MantenimientoTipoTicket.jsx";
 import MantenimientoPermisos from "./MantenimientoPermisos.jsx";
+import MantenimientoSeguridad from "./MantenimientoSeguridad.jsx";
+
 
 
 import api from "./api";
@@ -389,6 +391,16 @@ function Sidebar({ activeView, onSelect, onLogout }) {
   <span> Configuracion de permisos </span>
 </button>
 
+        <button
+          className={`sb__link ${
+            activeView === "param_seguridad" ? "sb__link--active" : ""
+          }`}
+          onClick={() => onSelect("param_seguridad")}
+        >
+          <span>Parámetros de seguridad</span>
+        </button>
+
+
         {/* Cerrar sesión */}
         <button className="sb__link sb__link--logout" onClick={onLogout}>
           <span>
@@ -636,6 +648,9 @@ const MainPage = () => {
 
       case "permisos":                 
         return <MantenimientoPermisos />;
+
+      case "param_seguridad":
+        return <MantenimientoSeguridad />;
 
       case "settings":
         return <div className="dashboard-box">Configuración del sistema</div>;

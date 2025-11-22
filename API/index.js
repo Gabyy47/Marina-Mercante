@@ -343,6 +343,125 @@ app.post("/api/seguridad/permisos/guardar", verificarToken, autorizarRoles("Admi
   });
 });
 
+// =========================================
+// PARÁMETROS DE SEGURIDAD - LISTAR TODOS
+// Solo Administrador
+// GET /api/seguridad/parametros
+// =========================================
+app.get(
+  "/api/seguridad/parametros",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const sql = `
+      SELECT 
+        id_parametro,
+        codigo,
+        nombre,
+        valor,
+        descripcion,
+        estado
+      FROM tbl_parametro_seguridad
+      WHERE estado = 'ACTIVO'
+      ORDER BY id_parametro
+    `;
+
+    conexion.query(sql, (err, rows) => {
+      if (err) {
+        console.error("Error al listar parámetros de seguridad:", err);
+        return res
+          .status(500)
+          .json({ mensaje: "Error al listar parámetros de seguridad" });
+      }
+      return res.json(rows);
+    });
+  }
+);
+
+// =========================================
+// OBTENER UN PARÁMETRO POR CÓDIGO
+// GET /api/seguridad/parametros/:codigo
+// =========================================
+app.get(
+  "/api/seguridad/parametros/:codigo",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const { codigo } = req.params;
+
+    const sql = `
+      SELECT 
+        id_parametro,
+        codigo,
+        nombre,
+        valor,
+        descripcion,
+        estado
+      FROM tbl_parametro_seguridad
+      WHERE codigo = ?
+      LIMIT 1
+    `;
+
+    conexion.query(sql, [codigo], (err, rows) => {
+      if (err) {
+        console.error("Error al obtener parámetro de seguridad:", err);
+        return res
+          .status(500)
+          .json({ mensaje: "Error al obtener parámetro de seguridad" });
+      }
+
+      if (rows.length === 0) {
+        return res.status(404).json({ mensaje: "Parámetro no encontrado" });
+      }
+
+      return res.json(rows[0]);
+    });
+  }
+);
+
+// =========================================
+// ACTUALIZAR PARÁMETRO POR CÓDIGO
+// PUT /api/seguridad/parametros/:codigo
+// body: { valor: "nuevoValor" }
+// =========================================
+app.put(
+  "/api/seguridad/parametros/:codigo",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const { codigo } = req.params;
+    const { valor } = req.body;
+
+    if (valor === undefined || valor === null || valor === "") {
+      return res
+        .status(400)
+        .json({ mensaje: "El valor del parámetro es obligatorio" });
+    }
+
+    const sql = `
+      UPDATE tbl_parametro_seguridad
+      SET valor = ?
+      WHERE codigo = ?
+    `;
+
+    conexion.query(sql, [valor, codigo], (err, result) => {
+      if (err) {
+        console.error("Error al actualizar parámetro de seguridad:", err);
+        return res
+          .status(500)
+          .json({ mensaje: "Error al actualizar parámetro de seguridad" });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ mensaje: "Parámetro no encontrado" });
+      }
+
+      return res.json({ mensaje: "Parámetro actualizado correctamente" });
+    });
+  }
+);
+
+
 // ====== CRUD PARA tbl_rol ======
 
 // Listar roles
