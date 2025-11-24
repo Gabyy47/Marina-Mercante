@@ -8,6 +8,15 @@ var cookieParser = require("cookie-parser");
 var speakeasy = require("speakeasy");
 var QRCode = require("qrcode"); 
 
+//Importar ruta para conexión de BD
+const DB_CONFIG = require("./dbConfig");
+
+//Importar rutas para backup
+const backupRoutes = require("./backupRoutes"); 
+
+// ===== Inicio de Express.js =====
+var app = Express();
+
 // ===== CONFIGURACIÓN Y ENVÍO DE CORREOS =====
 require('dotenv').config({
   path: __dirname + '/.env',
@@ -143,17 +152,17 @@ try {
 
 // ===== Conexión a la base de datos =====
 
-const conexion = mysql.createPool({
-  host: "localhost",
-  port: 3306,
-  user: "root",
-  password: "1984",
-  database: "marina_mercante",
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  charset: "utf8mb4",
+const conexion = mysql.createConnection(DB_CONFIG);
+// o createPool(DB_CONFIG) si usas pool
+
+conexion.connect((err) => {
+  if (err) {
+    console.error("Error de conexión a BD:", err);
+  } else {
+    console.log("Conectado a BD");
+  }
 });
+
 
 // ====== Helper de permisos por rol/objeto ======
 function autorizarPermiso(nombreObjeto, accion) {
@@ -210,10 +219,6 @@ function autorizarPermiso(nombreObjeto, accion) {
   };
 }
 
-
-// ===== Inicio de Express.js =====
-var app = Express();
-
 // ===== Configuración de CORS =====
 app.use(
   cors({
@@ -245,6 +250,9 @@ app.use("/api", meRoutes(conexion, { verificarToken, bloquearCambioRolSiNoAdmin 
 const PORT = 49146;
 const SECRET_KEY = process.env.JWT_SECRET || "1984";
 
+// === usar las rutas de backup 
+app.use("/api", backupRoutes); 
+
 app.listen(PORT, () => {
   conexion.query("SELECT 1", (err, results) => {
     if (err) {
@@ -256,6 +264,7 @@ app.listen(PORT, () => {
     }
   });
 });
+
 
 // ===== Utilidades =====
 function handleDatabaseError(err, res, message) {

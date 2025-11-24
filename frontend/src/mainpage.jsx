@@ -22,6 +22,7 @@ import Mantenimientocliente from "./mantenimientocliente.jsx";
 import Kardex from "./Kardex.jsx"; // 
 import Tipo from "./MantenimientoTipoTicket.jsx";
 import MantenimientoPermisos from "./MantenimientoPermisos.jsx";
+import BackupRestore from "./BackupRestore.jsx";
 
 
 import api from "./api";
@@ -91,7 +92,6 @@ function Sidebar({ activeView, onSelect, onLogout }) {
   const [openInventario, setOpenInventario] = useState(false);
   const [openBitacora, setOpenBitacora] = useState(false);
 
-
   return (
     <aside className="sb">
       <div className="sb__brand">
@@ -99,6 +99,7 @@ function Sidebar({ activeView, onSelect, onLogout }) {
       </div>
 
       <nav className="sb__nav">
+
         {/* Panel principal */}
         <button
           className={`sb__link ${
@@ -211,10 +212,11 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 </span>
               </button>
 
-
               <button
                 className={`sb__link sb__link--child ${
-                  activeView === "MantTramites" ? "sb__link--active" : ""
+                  activeView === "MantenimientoTipoTicket"
+                    ? "sb__link--active"
+                    : ""
                 }`}
                 onClick={() => onSelect("MantenimientoTipoTicket")}
               >
@@ -223,7 +225,6 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                   <span>Tipo Ticket</span>
                 </span>
               </button>
-
             </div>
           )}
         </div>
@@ -243,7 +244,6 @@ function Sidebar({ activeView, onSelect, onLogout }) {
 
           {openInventario && (
             <div className="sb__submenu">
-              {/* Inventario (pantalla general) */}
               <button
                 className={`sb__link sb__link--child ${
                   activeView === "inventario" ? "sb__link--active" : ""
@@ -256,7 +256,6 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 </span>
               </button>
 
-              {/* Productos */}
               <button
                 className={`sb__link sb__link--child ${
                   activeView === "mantenimientoproductos"
@@ -271,7 +270,6 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 </span>
               </button>
 
-              {/* Status */}
               <button
                 className={`sb__link sb__link--child ${
                   activeView === "inventariostatus" ? "sb__link--active" : ""
@@ -284,7 +282,6 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 </span>
               </button>
 
-              {/* Kardex */}
               <button
                 className={`sb__link sb__link--child ${
                   activeView === "kardex" ? "sb__link--active" : ""
@@ -297,10 +294,11 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 </span>
               </button>
 
-              {/* Historial Kardex */}
               <button
                 className={`sb__link sb__link--child ${
-                  activeView === "HistorialKardex" ? "sb__link--active" : ""
+                  activeView === "HistorialKardex"
+                    ? "sb__link--active"
+                    : ""
                 }`}
                 onClick={() => onSelect("HistorialKardex")}
               >
@@ -310,10 +308,11 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 </span>
               </button>
 
-              {/* Detalle compra */}
               <button
                 className={`sb__link sb__link--child ${
-                  activeView === "DetalleCompra" ? "sb__link--active" : ""
+                  activeView === "DetalleCompra"
+                    ? "sb__link--active"
+                    : ""
                 }`}
                 onClick={() => onSelect("DetalleCompra")}
               >
@@ -323,10 +322,11 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 </span>
               </button>
 
-              {/* Proveedores */}
               <button
                 className={`sb__link sb__link--child ${
-                  activeView === "proveedores" ? "sb__link--active" : ""
+                  activeView === "proveedores"
+                    ? "sb__link--active"
+                    : ""
                 }`}
                 onClick={() => onSelect("proveedores")}
               >
@@ -365,11 +365,24 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                   <span>Registros</span>
                 </span>
               </button>
+
+              {/* NUEVA OPCIÓN: BACKUP & RESTORE */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "backupRestore" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("backupRestore")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Backup & Restore</span>
+                </span>
+              </button>
             </div>
           )}
         </div>
 
-        {/* Configuración simple */}
+        {/* Configuración */}
         <button
           className={`sb__link ${
             activeView === "settings" ? "sb__link--active" : ""
@@ -383,11 +396,13 @@ function Sidebar({ activeView, onSelect, onLogout }) {
         </button>
 
         <button
-  className={`sb__link ${activeView === "permisos" ? "sb__link--active" : ""}`}
-  onClick={() => onSelect("permisos")}
->
-  <span> Configuracion de permisos </span>
-</button>
+          className={`sb__link ${
+            activeView === "permisos" ? "sb__link--active" : ""
+          }`}
+          onClick={() => onSelect("permisos")}
+        >
+          <span>Configuración de permisos</span>
+        </button>
 
         {/* Cerrar sesión */}
         <button className="sb__link sb__link--logout" onClick={onLogout}>
@@ -396,6 +411,7 @@ function Sidebar({ activeView, onSelect, onLogout }) {
             <span>Cerrar sesión</span>
           </span>
         </button>
+
       </nav>
     </aside>
   );
@@ -633,6 +649,9 @@ const MainPage = () => {
 
       case "bitacora":
         return <Bitacora />;
+
+      case "backupRestore":         
+        return <BackupRestore />;  
 
       case "permisos":                 
         return <MantenimientoPermisos />;
