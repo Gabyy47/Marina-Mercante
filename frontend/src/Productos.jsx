@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import api from './api';
 import './inventario.css';
 import logoDGMM from './imagenes/DGMM-Gobierno.png';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
 
 export default function Productos() {
 
@@ -19,6 +22,8 @@ export default function Productos() {
 
   const [editing, setEditing] = useState(null);
 
+
+  
   // === Obtener lista usando SP_MostrarProductos ===
   const fetchAll = async () => {
     setLoading(true);
@@ -88,6 +93,72 @@ export default function Productos() {
     });
   };
 
+// === GENERAR REPORTE EN PDF ===
+const generarPDF = () => {
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
+
+  // ENCABEZADO
+  doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(14, 42, 59);
+  doc.text("Dirección General de la Marina Mercante", 170, 50);
+
+  doc.setFontSize(14);
+  doc.text("Reporte de Productos", 170, 72);
+
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+  // TABLA
+  const columnas = ["ID", "Nombre", "Min", "Max", "Descripción"];
+  const filas = items.map(p => [
+    p.id_producto,
+    p.nombre_producto,
+    p.cantidad_minima,
+    p.cantidad_maxima,
+    p.descripcion
+  ]);
+
+  autoTable(doc, {
+    startY: 125,
+    head: [columnas],
+    body: filas,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [242, 245, 247] },
+  });
+
+  // PIE DE PÁGINA
+  const pageCount = doc.internal.getNumberOfPages();
+
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+
+    doc.text(
+      "Dirección General de la Marina Mercante – Sistema Interno DGMM ©️ 2025",
+      doc.internal.pageSize.width / 2,
+      doc.internal.pageSize.height - 30,
+      { align: "center" }
+    );
+
+    doc.text(
+      `Página ${i} de ${pageCount}`,
+      40,
+      doc.internal.pageSize.height - 30
+    );
+  }
+
+  // ABRIR PDF
+  const blobUrl = doc.output("bloburl");
+  window.open(blobUrl, "_blank");
+};
+
+
+
   return (
     <div className="inventario-page">
       
@@ -99,6 +170,7 @@ export default function Productos() {
         <span className="topbar-title">Gestión de Productos</span>
 
         <div className="topbar-actions">
+          
           <button className="btn btn-topbar-outline" onClick={() => navigate('/')}>
             ← Menú
           </button>
@@ -117,6 +189,14 @@ export default function Productos() {
           >
             ＋ Nuevo
           </button>
+
+          <button
+            className="btn btn-topbar-outline"
+            onClick={generarPDF}
+            style={{ marginLeft: 8 }}
+>           📄 Exportar PDF
+          </button>
+
         </div>
       </div>
 

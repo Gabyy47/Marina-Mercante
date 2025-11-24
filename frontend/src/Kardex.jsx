@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import api from './api';
 import './inventario.css';
 import logoDGMM from './imagenes/DGMM-Gobierno.png';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
 
 export default function Kardex() {
 
@@ -135,6 +138,83 @@ export default function Kardex() {
       fecha_hora: it.fecha_hora
     });
   };
+
+
+  // === GENERAR REPORTE PDF KARDEX ===
+const generarPDF = () => {
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
+
+  // ENCABEZADO
+  doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(14, 42, 59);
+  doc.text("Dirección General de la Marina Mercante", 170, 50);
+
+  doc.setFontSize(14);
+  doc.text("Kardex de Inventario", 170, 72);
+
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+  // TABLA
+  const columnas = [
+    "ID",
+    "Fecha",
+    "Producto",
+    "Tipo",
+    "Cantidad",
+    "Estado",
+    "Descripción"
+  ];
+
+  const filas = items.map(it => [
+    it.id_kardex,
+    it.fecha_hora || it.fecha || "-",
+    it.id_producto,
+    it.tipo_movimiento,
+    it.cantidad,
+    it.estado,
+    it.descripcion
+  ]);
+
+  autoTable(doc, {
+    startY: 125,
+    head: [columnas],
+    body: filas,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [242, 245, 247] },
+  });
+
+  // PIE DE PÁGINA
+  const pageCount = doc.internal.getNumberOfPages();
+
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+
+    doc.text(
+      "Dirección General de la Marina Mercante – Sistema Interno DGMM ©️ 2025",
+      doc.internal.pageSize.width / 2,
+      doc.internal.pageSize.height - 30,
+      { align: "center" }
+    );
+
+    doc.text(
+      `Página ${i} de ${pageCount}`,
+      40,
+      doc.internal.pageSize.height - 30
+    );
+  }
+
+  // ABRIR PDF
+  const blobUrl = doc.output("bloburl");
+  window.open(blobUrl, "_blank");
+};
+
 
   // ================================
   // UI
@@ -293,6 +373,16 @@ export default function Kardex() {
             >
               Limpiar
             </button>
+
+
+            <button
+            className="btn btn-topbar-outline"
+            onClick={generarPDF}
+            style={{ marginLeft: 8 }}
+>
+            📄 Exportar PDF
+            </button>
+
           </div>
         </div>
 
