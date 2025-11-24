@@ -14,7 +14,6 @@ import Bitacora from "./bitacora.jsx";
 import PerfilModal from "./perfilmodal.jsx";
 import Tramites from "./MantTramites.jsx";
 import Proveedores from "./proveedores.jsx";
-import Inventario from "./inventario.jsx";
 import Inventariostatus from "./inventariostatus.jsx";
 import HistorialKardex from "./HistorialKardex.jsx";
 import DetalleCompra from "./DetalleCompra.jsx";
@@ -22,10 +21,12 @@ import Mantenimientocliente from "./mantenimientocliente.jsx";
 import Kardex from "./Kardex.jsx"; // 
 import Tipo from "./MantenimientoTipoTicket.jsx";
 import MantenimientoPermisos from "./MantenimientoPermisos.jsx";
-
 import BackupRestore from "./BackupRestore.jsx";
-
 import MantenimientoSeguridad from "./MantenimientoSeguridad.jsx";
+import Compra from "./Compra.jsx";
+import Salidas from "./Salidas.jsx";
+import DetalleSalidas from "./DetalleSalidas.jsx";
+
 
 
 
@@ -249,17 +250,9 @@ function Sidebar({ activeView, onSelect, onLogout }) {
 
           {openInventario && (
             <div className="sb__submenu">
-              <button
-                className={`sb__link sb__link--child ${
-                  activeView === "inventario" ? "sb__link--active" : ""
-                }`}
-                onClick={() => onSelect("inventario")}
-              >
-                <span>
-                  <FiDatabase />
-                  <span>Inventario</span>
-                </span>
-              </button>
+              
+
+
 
               <button
                 className={`sb__link sb__link--child ${
@@ -313,6 +306,22 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 </span>
               </button>
 
+
+                            {/* Compra */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "Compra" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("Compra")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Compra</span>
+                </span>
+              </button>
+
+
+              {/* Detalle compra */}
               <button
                 className={`sb__link sb__link--child ${
                   activeView === "DetalleCompra"
@@ -340,6 +349,35 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                   <span>Proveedores</span>
                 </span>
               </button>
+
+                
+              {/* Salidas */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "Salidas" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("Salidas")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Salidas</span>
+                </span>
+              </button>
+
+              {/* Detalle Salidas */}
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "DetalleSalidas" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("DetalleSalidas")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Detalle Salidas</span>
+                </span>
+              </button>
+
+              
             </div>
           )}
         </div>
@@ -641,8 +679,6 @@ const MainPage = () => {
       case "MantenimientoTipoTicket":
         return <Tipo />;
 
-      case "inventario":
-        return <Inventario />;
 
       case "mantenimientoproductos":
         return <MantenimientoProductos />;
@@ -656,8 +692,17 @@ const MainPage = () => {
       case "HistorialKardex":
         return <HistorialKardex />;
 
+      case "Compra":
+      return <Compra/>;  
+      
       case "DetalleCompra":
         return <DetalleCompra />;
+
+      case "Salidas":
+        return <Salidas/>;
+
+      case "DetalleSalidas":
+        return <DetalleSalidas />;
 
       case "proveedores":
         return <Proveedores />;

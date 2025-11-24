@@ -14,10 +14,13 @@ import Bitacora from "./bitacora.jsx";
 import DashboardTickets from "./DashboardTickets.jsx"; 
 import MonitorTv from "./MonitorTv.jsx";
 import Kiosko from "./kiosko.jsx";
-import Inventario from "./inventario.jsx";
 import Inventariostatus from "./inventariostatus.jsx";
 import HistorialKardex from "./HistorialKardex.jsx";
 import DetalleCompra from "./DetalleCompra.jsx";
+import Compra from "./Compra.jsx";
+import Salidas from "./Salidas.jsx";
+import DetalleSalidas from "./DetalleSalidas.jsx";
+
 
 
 
@@ -81,14 +84,7 @@ export default function App() {
     </ProtectedRouteRol>
   }
 />
-<Route
-  path="/guarda/inventario"
-  element={
-    <ProtectedRouteRol allowedRoles={["Guarda Almacén", "Administrador", "Auxiliar de Almacén"]}>
-      <Inventario />
-    </ProtectedRouteRol>
-  }
-/>
+
 <Route
   path="/guarda/inventariostatus"
   element={
@@ -105,11 +101,38 @@ export default function App() {
     </ProtectedRouteRol>
   }
 />
+
+<Route
+  path="/guarda/Compra"
+  element={
+    <ProtectedRouteRol allowedRoles={["Guarda Almacén", "Administrador", "Auxiliar de Almacén"]}>
+      <Compra/>
+    </ProtectedRouteRol>
+  }
+/>
+
 <Route
   path="/guarda/DetalleCompra"
   element={
     <ProtectedRouteRol allowedRoles={["Guarda Almacén", "Administrador", "Auxiliar de Almacén"]}>
       <DetalleCompra />
+    </ProtectedRouteRol>
+  }
+/>
+<Route
+  path="/guarda/Salidas"
+  element={
+    <ProtectedRouteRol allowedRoles={["Guarda Almacén", "Administrador", "Auxiliar de Almacén"]}>
+      <Salidas/>
+    </ProtectedRouteRol>
+  }
+/>
+
+<Route
+  path="/guarda/DetalleSalidas"
+  element={
+    <ProtectedRouteRol allowedRoles={["Guarda Almacén", "Administrador", "Auxiliar de Almacén"]}>
+      <DetalleSalidas />
     </ProtectedRouteRol>
   }
 />
