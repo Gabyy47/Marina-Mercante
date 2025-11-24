@@ -28,6 +28,11 @@ export default function MantenimientoTipoTicket() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+  // Usuario logueado para bitácora
+const usuarioData = JSON.parse(localStorage.getItem("usuarioData") || "{}");
+const id_usuario = usuarioData?.id_usuario || null;
+const usuarioNombre = usuarioData?.nombre_usuario || null;
+
   // PDF
   const generarPDF = () => {
     const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
@@ -65,19 +70,24 @@ export default function MantenimientoTipoTicket() {
     doc.save("TiposTicket_DGMM.pdf");
   };
 
-  // cargar datos
-  const fetchItems = async () => {
-    try {
-      setLoading(true);
-      const { data } = await api.get("/tipo_ticket");
-      setItems(Array.isArray(data) ? data : []);
-    } catch (err) {
-      toast.error("Error al cargar datos");
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+ // cargar datos
+const fetchItems = async () => {
+  try {
+    setLoading(true);
+    const { data } = await api.get("/tipo_ticket", {
+      params: {
+        id_usuario: id_usuario,
+        usuario: usuarioNombre,
+      },
+    });
+    setItems(Array.isArray(data) ? data : []);
+  } catch (err) {
+    toast.error("Error al cargar datos");
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchItems();
@@ -106,58 +116,64 @@ export default function MantenimientoTipoTicket() {
 
   // crear
   const handleCreate = async () => {
-    if (!nuevoTipo.trim() || !nuevoPrefijo.trim()) {
-      toast.error("Completa todos los campos");
-      return;
-    }
+  if (!nuevoTipo.trim() || !nuevoPrefijo.trim()) {
+    toast.error("Completa todos los campos");
+    return;
+  }
 
-    try {
-      await api.post("/tipo_ticket", {
-        tipo_ticket: nuevoTipo.trim(),
-        prefijo: nuevoPrefijo.trim(),
-        estado: nuevoEstado,
-      });
+  try {
+    await api.post("/tipo_ticket", {
+      tipo_ticket: nuevoTipo.trim(),
+      prefijo: nuevoPrefijo.trim(),
+      estado: nuevoEstado,
+      id_usuario   
+    });
 
-      toast.success("Tipo creado correctamente");
-      fetchItems();
-      closeModal();
-    } catch (err) {
-      toast.error("Error al crear");
-      console.error(err);
-    }
-  };
+    toast.success("Tipo creado correctamente");
+    fetchItems();
+    closeModal();
+  } catch (err) {
+    toast.error("Error al crear");
+    console.error(err);
+  }
+};
+
 
   // actualizar
   const handleUpdate = async () => {
-    try {
-      await api.put(`/tipo_ticket/${editItemId}`, {
-        tipo_ticket: nuevoTipo.trim(),
-        prefijo: nuevoPrefijo.trim(),
-        estado: nuevoEstado,
-      });
+  try {
+    await api.put(`/tipo_ticket/${editItemId}`, {
+      tipo_ticket: nuevoTipo.trim(),
+      prefijo: nuevoPrefijo.trim(),
+      estado: nuevoEstado,
+      id_usuario   
+    });
 
-      toast.success("Actualizado correctamente");
-      fetchItems();
-      closeEditModal();
-    } catch (err) {
-      toast.error("Error al actualizar");
-      console.error(err);
-    }
-  };
+    toast.success("Actualizado correctamente");
+    fetchItems();
+    closeEditModal();
+  } catch (err) {
+    toast.error("Error al actualizar");
+    console.error(err);
+  }
+};
 
   // eliminar
   const handleDelete = async (id) => {
-    if (!window.confirm("¿Eliminar este tipo?")) return;
+  if (!window.confirm("¿Eliminar este tipo?")) return;
 
-    try {
-      await api.delete(`/tipo_ticket/${id}`);
-      toast.success("Eliminado correctamente");
-      setItems((prev) => prev.filter((i) => i.id_tipo_ticket !== id));
-    } catch (err) {
-      toast.error("Error al eliminar");
-      console.error(err);
-    }
-  };
+  try {
+    await api.delete(`/tipo_ticket/${id}`, {
+      data: { id_usuario }   
+    });
+
+    toast.success("Eliminado correctamente");
+    setItems((prev) => prev.filter((i) => i.id_tipo_ticket !== id));
+  } catch (err) {
+    toast.error("Error al eliminar");
+    console.error(err);
+  }
+};
 
   return (
     <div className="mm-page">
