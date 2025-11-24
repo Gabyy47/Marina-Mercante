@@ -153,7 +153,6 @@ try {
 // ===== Conexión a la base de datos =====
 
 const conexion = mysql.createConnection(DB_CONFIG);
-// o createPool(DB_CONFIG) si usas pool
 
 conexion.connect((err) => {
   if (err) {
@@ -1793,30 +1792,27 @@ app.delete('/api/visualizaciones/:id', (req, res) => {
 
 // GET /api/bitacora
 app.get('/api/bitacora', (req, res) => {
-  const { id_usuario } = req.query;
+  const sql = `
+    SELECT 
+      b.id_bitacora,
+      b.fecha,
+      b.usuario,
+      b.id_objeto,
+      o.nombre_objeto,
+      b.accion,
+      b.descripcion
+    FROM tbl_bitacora b
+    LEFT JOIN tbl_objeto o ON b.id_objeto = o.id_objeto
+    ORDER BY b.fecha DESC
+  `;
 
-  conexion.query(
-    'SELECT * FROM tbl_bitacora ORDER BY fecha ASC',
-    (err, rows) => {
-      if (err) {
-        console.error('Error al listar la bitácora:', err);
-        return res.status(500).json({ mensaje: 'Error al listar bitácora' });
-      }
-      // Registrar en bitácora
-      if (id_usuario) {
-        conexion.query(
-          'CALL event_bitacora(?, ?, ?, ?)',
-          [id_usuario, 14, 'CONSULTA', 'Se consultó la lista completa de la bitácora del sistema'],
-          (e) => {
-            if (e) console.error('Error bitácora (GET bitácoras):', e);
-            return res.json(rows);
-          }
-        );
-      } else {
-        return res.json(rows);
-      }
+  conexion.query(sql, (err, rows) => {
+    if (err) {
+      console.error("Error listando bitácora:", err);
+      return res.status(500).json({ mensaje: "Error al obtener bitácora" });
     }
-  );
+    res.json(rows);
+  });
 });
 
 // GET /api/bitacora/:id
@@ -2835,13 +2831,25 @@ app.get('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPe
 
 
 
-// =======================================================
+// =======================================================  
 // ============ Estados de Ticket (CRUD) =================
 // =======================================================
-app.get('/api/estado_ticket', (req, res) => {
+
+const ID_OBJETO_ESTADO_TICKET = 12;
+
+app.get('/api/estado_ticket', (req, res) => { 
   const query = "SELECT * FROM tbl_estado_ticket";
   conexion.query(query, (err, rows) => {
     if (err) return res.status(500).json({ error: "ERROR EN LISTADO DE ESTADOS DE TICKET" });
+    
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GETT",
+      descripcion: `Se listó el contenido de estado ticket`,
+      usuario: user.nombre_usuario
+    });
     res.json(rows);
   });
 });
@@ -2850,6 +2858,14 @@ app.get('/api/estado_ticket/:id', (req, res) => {
   const query = "SELECT * FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
   conexion.query(query, [Number(req.params.id)], (err, rows) => {
     if (err) return res.status(500).json({ error: "ERROR EN LISTADO DE ESTADO DE TICKET" });
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `Se consultó el estado_ticket id=${estado}`,
+      usuario: user.nombre_usuario
+    });
     res.json(rows[0] || null);
   });
 });
@@ -2858,6 +2874,14 @@ app.post('/api/estado_ticket', (req, res) => {
   const query = "INSERT INTO tbl_estado_ticket (estado) VALUES (?)";
   conexion.query(query, [req.body.estado], (err, r) => {
     if (err) return res.status(500).json({ error: err.message });
+        // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `Se agregó un nuevo estado de ticket = ${estado}`,
+      usuario: user.nombre_usuario
+    });
     res.json({ message: "INSERT EXITOSO!", id: r.insertId });
   });
 });
@@ -2866,6 +2890,14 @@ app.put('/api/estado_ticket/:id', (req, res) => {
   const query = "UPDATE tbl_estado_ticket SET estado = ? WHERE id_estado_ticket = ?";
   conexion.query(query, [req.body.estado, Number(req.params.id)], (err) => {
     if (err) return res.status(500).json({ error: err.message });
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `Se actualizó el estado de ticket = ${estado}`,
+      usuario: user.nombre_usuario
+    });
     res.json({ message: "UPDATE EXITOSO!" });
   });
 });
@@ -2874,6 +2906,14 @@ app.delete('/api/estado_ticket/:id', (req, res) => {
   const query = "DELETE FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
   conexion.query(query, [Number(req.params.id)], (err) => {
     if (err) return res.status(500).json({ error: err.message });
+        // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `Se eliminó el estado de ticket = ${estado}`,
+      usuario: user.nombre_usuario
+    });
     res.json({ message: "DELETE EXITOSO!" });
   });
 });
@@ -2881,10 +2921,21 @@ app.delete('/api/estado_ticket/:id', (req, res) => {
 // =======================================================
 // ============== Tipo Ticket (CRUD) =====================
 // =======================================================
+
+const ID_OBJETO_TIPO_TICKET = 11;
+
 app.get("/api/tipo_ticket", (req, res) => {
   const sql = "SELECT id_tipo_ticket, tipo_ticket, prefijo FROM tbl_tipo_ticket WHERE estado='ACTIVO'";
   conexion.query(sql, (err, rows) => {
     if (err) return res.status(500).json({ mensaje: "Error al obtener tipos de ticket" });
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `Se consultó la lista de tipo ticket`,
+      usuario: user.nombre_usuario
+    });
     res.json(rows);
   });
 });
@@ -2894,8 +2945,14 @@ app.get('/api/tipo_ticket/:id', (request, response) => {
   const values = [parseInt(request.params.id)];
   conexion.query(query, values, (err, rows) => {
     if (err) return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
-    registrarBitacora("Tipo Ticket", "GET");
-    logger.info("Listado de tipo ticket - OK");
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `Se consultó el tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
     response.json(rows);
   });
 });
@@ -2910,8 +2967,14 @@ app.post('/api/tipo_ticket', (request, response) => {
     const values = [tipo_ticket , estado, prefijo];
     conexion.query(query, values, (err) => {
       if (err) return handleDatabaseError(err, response, "Error en inserción de tipo ticket:");
-      registrarBitacora("Tipo ticket", "POST");
-      logger.info("INSERT de tipo ticket - OK");
+      // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `Se agregó un nuevo tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
       response.json("INSERT EXITOSO!");
     });
   } catch (error) {
@@ -2934,8 +2997,14 @@ app.put('/api/tipo_ticket', (request, response) => {
     const values = [tipo_ticket, estado, prefijo, id_tipo_ticket];
     conexion.query(query, values, (err) => {
       if (err) return handleDatabaseError(err, response, "Error en actualización de tipo ticket:");
-      registrarBitacora("Tipo ticket", "PUT");
-      logger.info("ACTUALIZACIÓN de tipo ticket - OK");
+      // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `Se actualizó el tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
       response.json("UPDATE EXITOSO!");
     });
   } catch (error) {
@@ -2949,8 +3018,14 @@ app.delete('/api/tipo_ticket/:id', (request, response) => {
   const values = [parseInt(request.params.id)];
   conexion.query(query, values, (err) => {
     if (err) return handleDatabaseError(err, response, "Error en eliminación de tipo ticket:");
-    registrarBitacora("tipo ticket", "DELETE");
-    logger.info("DELETE de tipo ticket - OK");
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `Se eliminó el tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
     response.json("DELETE EXITOSO!");
   });
 });
@@ -3066,9 +3141,6 @@ app.get("/api/tramites", (req, res) => {
     res.json(rows);
   });
 });
-
-
-
 
 app.get("/api/tramites/:id", (req, res) => {
   const id = Number(req.params.id);
