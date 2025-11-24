@@ -4596,6 +4596,52 @@ app.get('/api/sp-kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso
   });
 });
 
+app.post("/api/kardex/entrada", verificarToken, async (req, res) => {
+  const { id_compra } = req.body;
+  const user = req.user;
+
+  if (!id_compra) {
+    return res.status(400).json({ error: "El ID de compra es obligatorio" });
+  }
+
+  try {
+    await conexion.query(
+      "CALL SP_RegistrarEntradaCompra(?, ?)",
+      [id_compra, user.id_usuario]
+    );
+
+    res.json({ mensaje: "Entrada registrada y inventario actualizado" });
+  } catch (err) {
+    console.error("Error en entrada:", err);
+    res.status(500).json({ error: "Error registrando entrada" });
+  }
+});
+
+
+app.get('/api/inventario', (req, res) => {
+  const query = `
+    SELECT 
+      i.id_inventario,
+      i.id_producto,
+      p.nombre_producto,
+      i.cantidad AS cantidad_actual,
+      p.cantidad_minima AS stock_minimo,
+      p.cantidad_maxima AS stock_maximo
+    FROM tbl_inventario i
+    JOIN tbl_productos p ON i.id_producto = p.id_producto
+  `;
+
+  conexion.query(query, (err, rows) => {
+    if (err) {
+      console.error("Error al listar el inventario:", err);
+      return res.status(500).json({ error: "Error al listar el inventario" });
+    }
+    res.json(rows);
+  });
+});
+
+
+
 // =============================================================================================
 // ================================ FIN ENDPOINTS CON SP =======================================
 // =============================================================================================
