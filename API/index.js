@@ -1658,68 +1658,7 @@ app.post('/api/auth/verify-code', (req, res) => {
   });
 });
 
-// ====== CRUD PARA tl_compra ======  
-app.get('/api/compra', (req, res) => {  
-  const query = "SELECT * FROM tbl_compra";  
-  conexion.query(query, (err, rows) => {  
-    if (err) {  
-      console.error("Error al listar compras:", err);  
-      res.status(500).json({ error: "Error al listar compras" });  
-      return;  
-    }  
-    res.json(rows);  
-  });  
-});  
-  
-app.get('/api/compra/:id', (req, res) => {  
-  const query = "SELECT * FROM tl_compra WHERE id_compra = ?";  
-  conexion.query(query, [req.params.id], (err, rows) => {  
-    if (err) {  
-      console.error("Error al obtener compra:", err);  
-      res.status(500).json({ error: "Error al obtener compra" });  
-      return;  
-    }  
-    res.json(rows[0]);  
-  });  
-});  
-  
-app.post('/api/compra', (req, res) => {  
-  const { id_proveedor, monto_total, fecha_hora_compra, estado_compra } = req.body;  
-  const query = "INSERT INTO tl_compra (id_proveedor, monto_total, fecha_hora_compra, estado_compra) VALUES (?, ?, ?, ?)";  
-  conexion.query(query, [id_proveedor, monto_total, fecha_hora_compra, estado_compra], (err, result) => {  
-    if (err) {  
-      console.error("Error al insertar compra:", err);  
-      res.status(500).json({ error: "Error al insertar compra" });  
-      return;  
-    }  
-    res.json({ message: "Compra insertada correctamente", id: result.insertId });  
-  });  
-});  
-  
-app.put('/api/compra/:id', (req, res) => {  
-  const { id_proveedor, monto_total, fecha_hora_compra, estado_compra } = req.body;  
-  const query = "UPDATE tl_compra SET id_proveedor = ?, monto_total = ?, fecha_hora_compra = ?, estado_compra = ? WHERE id_compra = ?";  
-  conexion.query(query, [id_proveedor, monto_total, fecha_hora_compra, estado_compra, req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al actualizar compra:", err);  
-      res.status(500).json({ error: "Error al actualizar compra" });  
-      return;  
-    }  
-    res.json({ message: "Compra actualizada correctamente" });  
-  });  
-});  
-  
-app.delete('/api/compra/:id', (req, res) => {  
-  const query = "DELETE FROM tl_compra WHERE id_compra = ?";  
-  conexion.query(query, [req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al eliminar compra:", err);  
-      res.status(500).json({ error: "Error al eliminar compra" });  
-      return;  
-    }  
-    res.json({ message: "Compra eliminada correctamente" });  
-  });  
-});
+
 
 
 // =======================================================
@@ -2083,7 +2022,7 @@ app.get('/api/salidas_productos/:id', (req, res) => {
 app.post('/api/salidas_productos', (req, res) => {
   const { id_usuario } = req.body;
   const query = `
-    INSERT INTO tbl_salida_productos (id_usuario, fecha_salida)
+    INSERT INTO tbl_salida_productos (id_usuario, fecha)
     VALUES (?, NOW())
   `;
   conexion.query(query, [id_usuario], (err, result) => {
@@ -2101,7 +2040,7 @@ app.put('/api/salidas_productos/:id', (req, res) => {
   const { id_usuario } = req.body;
   const query = `
     UPDATE tbl_salida_productos
-    SET id_usuario = ?, fecha_salida = NOW()
+    SET id_usuario = ?, fecha = NOW()
     WHERE id_salida_producto = ?
   `;
   conexion.query(query, [id_usuario, req.params.id], (err) => {
@@ -2128,80 +2067,7 @@ app.delete('/api/salidas_productos/:id', (req, res) => {
 });
 
 
-// ====== CRUD PARA tbl_inventario ======
 
-app.get('/api/inventario', (req, res) => {
-  const query = `
-    SELECT 
-      i.id_inventario,
-      i.id_producto,
-      p.nombre_producto,
-      i.cantidad as cantidad_actual,          
-      i.cantidad_minima as stock_minimo,      
-      i.cantidad_maxima as stock_maximo       
-    FROM tbl_inventario i
-    JOIN tbl_productos p ON i.id_producto = p.id_producto
-  `;
-
-  conexion.query(query, (err, rows) => {
-    if (err) {
-      console.error("Error al listar el inventario:", err);
-      return res.status(500).json({ error: "Error al listar el inventario" });
-    }
-    res.json(rows);
-  });
-});
-
-
-app.get('/api/inventario/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_inventario WHERE id_inventario = ?";
-  conexion.query(query, [req.params.id], (err, rows) => {
-    if (err) {
-      console.error("Error al obtener el inventario:", err);
-      res.status(500).json({ error: "Error al obtener el inventario" });
-      return;
-    }
-    res.json(rows[0]);
-  });
-});
-
-app.post('/api/inventario', (req, res) => {
-  const { estado } = req.body;
-  const query = "INSERT INTO tbl_inventario (estado) VALUES (?)";
-  conexion.query(query, [estado], (err, result) => {
-    if (err) {
-      console.error("Error al insertar el inventario:", err);
-      res.status(500).json({ error: "Error al insertar el inventario" });
-      return;
-    }
-    res.json({ message: "Invetario insertado correctamente", id: result.insertId });
-  });
-});
-
-app.put('/api/inventario/:id', (req, res) => {
-  const { estado } = req.body;
-  const query = "UPDATE tbl_inventario SET estado = ? WHERE id_inventario = ?";
-  conexion.query(query, [estado, req.params.id], (err) => {
-    if (err) {
-      console.error("Error al actualizar el inventario:", err);
-      res.status(500).json({ error: "Error al actualizar el inventario" });
-      return;
-    }
-    res.json({ message: "Inventario actualizado correctamente" });
-  });
-});
-
-app.delete('/api/inventario/:id', (req, res) => {
-  const query = "DELETE FROM tbl_inventario WHERE id_inventario = ?";
-  conexion.query(query, [req.params.id], (err) => {
-    if (err) {
-      console.error("Error al eliminar el Inventario:", err);
-      res.status(500).json({ error: "Error al eliminar el Inventario" });
-      return;
-    }
-    res.json({ message: "Inventario eliminado correctamente" });
-  });
-});
 
 
 // =============== CONFIGURACIÓN BITÁCORA ===============
@@ -2539,31 +2405,32 @@ app.delete('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autoriza
   });
 });
 
+// =======================
+//   MOSTRAR INVENTARIO
+// =======================
+app.get("/api/inventario", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
+  const sql = "CALL SP_MostrarInventario()";
 
-// ==========================
-//  MOSTRAR INVENTARIO (SP)
-// ==========================
-app.get('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
-  const user = req.user;
-  const query = "CALL SP_MostrarInventario()";
-
-  conexion.query(query, (err, results) => {
+  conexion.query(sql, (err, result) => {
     if (err) {
-      console.error("Error al listar inventario:", err);
-      return res.status(500).json({ error: "Error al listar inventario" });
+      console.error("Error al mostrar inventario:", err);
+      return res.status(500).json({ error: err.message });
     }
 
+    const inventario = result[0]; // El SP regresa un arreglo
+
+    // Bitácora
     logBitacora(conexion, {
       id_objeto: ID_OBJETO_INVENTARIO,
-      id_usuario: user.id_usuario,
+      id_usuario: req.user.id_usuario,
       accion: "GET",
-      descripcion: `SP_MostrarInventario: Se consultó inventario`,
-      usuario: user.nombre_usuario
+      descripcion: "Consultó el inventario"
     });
 
-    res.json(results[0]);
+    res.json(inventario);
   });
 });
+
 
 
 // =============================
@@ -2681,62 +2548,77 @@ app.delete('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPer
 });
 
 
+
 // =============================
 //  MOSTRAR KARDEX (SP)
 // =============================
-app.get('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex", "consultar"), (req, res) => {
-  const user = req.user;
+// =======================
+//   KARDEX POR PRODUCTO
+// =======================
+app.get("/api/kardex/producto/:id", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
+  const id = Number(req.params.id);
 
-  const query = "CALL SP_MostrarKardex()";
+  if (!Number.isInteger(id) || id <= 0)
+    return res.status(400).json({ error: "ID inválido" });
 
-  conexion.query(query, (err, results) => {
+  const sql = "CALL SP_KardexPorProducto(?)";
+
+  conexion.query(sql, [id], (err, result) => {
     if (err) {
-      console.error("Error al listar kardex:", err);
-      return res.status(500).json({ error: "Error al listar kardex" });
+      console.error("Error al obtener kardex:", err);
+      return res.status(500).json({ error: err.message });
     }
 
+    const kardex = result[0];
+
+    // Bitácora
     logBitacora(conexion, {
-      id_objeto: ID_OBJETO_KARDEX,
-      id_usuario: user.id_usuario,
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: req.user.id_usuario,
       accion: "GET",
-      descripcion: "SP_MostrarKardex: Consulta del kardex general",
-      usuario: user.nombre_usuario
+      descripcion: `Consultó el kardex del producto ${id}`
     });
 
-    res.json(results[0]);
+    res.json(kardex);
   });
 });
+
 
 
 // =============================
 //  INSERTAR DETALLE DE COMPRA (SP)
 // =============================
-app.post('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "insertar"),(req, res) => {
-  const { id_kardex, id_proveedor, monto_total } = req.body;
-  const user = req.user;
+// ===============================
+//   DETALLE COMPRA (INSERTAR)
+// ===============================
+app.post("/api/compra/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compras", "insertar"), (req, res) => {
+  const { id_compra, id_producto, cantidad, precio_unitario } = req.body;
 
-  if (!id_kardex || !id_proveedor || !monto_total) {
-    return res.status(400).json({ error: "Todos los campos son obligatorios" });
-  }
+  if (!id_compra || !id_producto || !cantidad)
+    return res.status(400).json({ error: "Datos incompletos" });
 
-  const query = "CALL SP_InsertarDetalleCompra(?, ?, ?)";
-  const values = [id_kardex, id_proveedor, monto_total];
+  const sql = `
+    INSERT INTO tbl_detalle_compra (id_compra, id_producto, cantidad, precio_unitario)
+    VALUES (?, ?, ?, ?)
+  `;
 
-  conexion.query(query, values, (err) => {
+  conexion.query(sql, [id_compra, id_producto, cantidad, precio_unitario], (err) => {
     if (err) {
       console.error("Error al insertar detalle compra:", err);
       return res.status(500).json({ error: err.message });
     }
 
+    // El trigger INSERTA en kardex y actualiza inventario
+
+    // Bitácora
     logBitacora(conexion, {
-      id_objeto: ID_OBJETO_DETALLE_COMPRA,
-      id_usuario: user.id_usuario,
-      accion: "POST",
-      descripcion: `SP_InsertarDetalleCompra: Kardex=${id_kardex}, Proveedor=${id_proveedor}`,
-      usuario: user.nombre_usuario
+      id_objeto: ID_OBJETO_COMPRAS,
+      id_usuario: req.user.id_usuario,
+      accion: "INSERT",
+      descripcion: `Insertó detalle a compra #${id_compra}`
     });
 
-    res.json({ mensaje: "Detalle de compra insertado correctamente mediante SP" });
+    res.json({ mensaje: "Detalle agregado correctamente" });
   });
 });
 
@@ -4293,6 +4175,91 @@ app.get('/api/sp-inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPer
     res.json(results[0]);
   });
 });
+// =============================
+//  COMPRAS (CABECERA)
+// =============================
+
+const ID_OBJETO_COMPRAS = 20; // o el ID que uses para Compras en tbl_objeto
+
+// LISTAR COMPRAS
+app.get( "/api/compra", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compras", "consultar"), (req, res) => {
+    const sql = `
+      SELECT 
+        c.id_compra,
+        c.fecha,
+        p.id_proveedor
+        c.total,
+        u.nombre_usuario
+      FROM tbl_compra c
+      JOIN tbl_proveedor p ON p.id_proveedor = c.id_proveedor
+      JOIN tbl_usuario   u ON u.id_usuario   = c.id_usuario
+      ORDER BY c.fecha DESC
+    `;
+
+    conexion.query(sql, (err, rows) => {
+      if (err) {
+        console.error("Error listando compras:", err);
+        return res
+          .status(500)
+          .json({ error: "Error al listar compras" });
+      }
+
+      // Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_COMPRAS,
+        id_usuario: req.user.id_usuario,
+        accion: "GET",
+        descripcion: "Consultó la lista de compras",
+        usuario: req.user.nombre_usuario,
+      });
+
+      res.json(rows);
+    });
+  }
+);
+
+// INSERTAR COMPRA
+app.post(
+  "/api/compra", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compras", "insertar"),(req, res) => {
+    const user = req.user;
+    const { id_proveedor, total } = req.body;
+
+    if (!id_proveedor || !total) {
+      return res
+        .status(400)
+        .json({ error: "Proveedor y total son obligatorios" });
+    }
+
+    const sql = `
+      INSERT INTO tbl_compra (fecha, id_proveedor, total, id_usuario)
+      VALUES (NOW(), ?, ?, ?)
+    `;
+    const values = [id_proveedor, total, user.id_usuario];
+
+    conexion.query(sql, values, (err, result) => {
+      if (err) {
+        console.error("Error al insertar compra:", err);
+        return res
+          .status(500)
+          .json({ error: "Error al insertar compra" });
+      }
+
+      const id_compra = result.insertId;
+
+      // Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_COMPRAS,
+        id_usuario: user.id_usuario,
+        accion: "INSERT",
+        descripcion: `Creó compra #${id_compra} (proveedor ${id_proveedor}, total ${total})`,
+        usuario: user.nombre_usuario,
+      });
+
+      res.json({ id_compra, mensaje: "Compra registrada correctamente" });
+    });
+  }
+);
+
 
 // =====================
 // COMPRAS CON SP
@@ -4447,61 +4414,60 @@ app.post('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermi
 
 const ID_OBJETO_SALIDAS_SP = 17;
 
-// GET: Obtener todas las salidas
-app.get('/api/sp-salidas', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salida de Producto", "consultar"), (req, res) => {
-  const user = req.user;
-  const query = "CALL SP_MostrarSalidas()";
+// =======================
+//   LISTAR SALIDAS
+// =======================
+app.get("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "consultar"), (req, res) => {
+  const sql = `
+    SELECT s.id_salida, s.fecha, s.motivo, u.nombre_usuario
+    FROM tbl_salida s
+    JOIN tbl_usuario u ON u.id_usuario = s.id_usuario
+    ORDER BY s.fecha DESC
+  `;
 
-  conexion.query(query, (err, results) => {
+  conexion.query(sql, (err, rows) => {
     if (err) {
-      console.error("Error en SP_MostrarSalidas:", err);
-      return res.status(500).json({ error: "Error al listar salidas" });
+      console.error("Error listando salidas:", err);
+      return res.status(500).json({ error: err.message });
     }
 
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_SALIDAS_SP,
-      id_usuario: user.id_usuario,
-      accion: "GET",
-      descripcion: "SP_MostrarSalidas: Consulta de salidas",
-      usuario: user.nombre_usuario
-    });
-
-    res.json(results[0]);
+    res.json(rows);
   });
 });
 
-// POST: Crear nueva salida (devuelve id_salida)
-app.post('/api/sp-salidas', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salida de Producto", "insertar"), (req, res) => {
-  const { id_usuario, motivo } = req.body;
-  const user = req.user;
 
-  if (!id_usuario || !motivo) {
-    return res.status(400).json({ error: "Campos requeridos: id_usuario, motivo" });
-  }
+// =======================
+//   CREAR SALIDA
+// =======================
+app.post("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "insertar"), (req, res) => {
+  const id_usuario = req.user.id_usuario;
+  const { motivo } = req.body;
 
-  const query = "CALL SP_InsertarSalida(?, ?)";
-  conexion.query(query, [id_usuario, motivo], (err, results) => {
+  const sql = `
+    INSERT INTO tbl_salida (id_usuario, fecha, motivo)
+    VALUES (?, NOW(), ?)
+  `;
+
+  conexion.query(sql, [id_usuario, motivo || null], (err, result) => {
     if (err) {
-      console.error("Error en SP_InsertarSalida:", err);
-      return res.status(500).json({ error: err.message || "Error al insertar salida" });
+      console.error("Error al crear salida:", err);
+      return res.status(500).json({ error: err.message });
     }
 
-    const id_salida = results[0][0].id_salida;
+    const id_salida = result.insertId;
 
+    // Bitácora
     logBitacora(conexion, {
-      id_objeto: ID_OBJETO_SALIDAS_SP,
-      id_usuario: user.id_usuario,
-      accion: "POST",
-      descripcion: `SP_InsertarSalida: Salida #${id_salida} creada`,
-      usuario: user.nombre_usuario
+      id_objeto: ID_OBJETO_SALIDAS,
+      id_usuario,
+      accion: "INSERT",
+      descripcion: `Creó salida #${id_salida}`
     });
 
-    res.status(201).json({ 
-      mensaje: "Salida creada correctamente", 
-      id_salida 
-    });
+    res.json({ id_salida });
   });
 });
+
 
 // =====================
 // DETALLE SALIDA CON SP
@@ -4533,68 +4499,41 @@ app.get('/api/sp-detalle-salida', verificarToken, SOLO_ALMACEN_O_ADMIN, autoriza
   });
 });
 
-// POST: Agregar detalle a una salida (valida stock, actualiza inventario y kardex)
-app.post('/api/sp-detalle-salida', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Salida de Productos", "insertar"), (req, res) => {
+// ===============================
+//   DETALLE SALIDA (INSERTAR)
+// ===============================
+app.post("/api/salida/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "insertar"), (req, res) => {
   const { id_salida, id_producto, cantidad } = req.body;
-  const user = req.user;
 
-  if (!id_salida || !id_producto || !cantidad) {
-    return res.status(400).json({ error: "Campos requeridos: id_salida, id_producto, cantidad" });
-  }
+  if (!id_salida || !id_producto || !cantidad)
+    return res.status(400).json({ error: "Datos incompletos" });
 
-  const query = "CALL SP_InsertarDetalleSalida(?, ?, ?)";
-  conexion.query(query, [id_salida, id_producto, cantidad], (err) => {
+  const sql = `
+    INSERT INTO tbl_detalle_salida (id_salida, id_producto, cantidad)
+    VALUES (?, ?, ?)
+  `;
+
+  conexion.query(sql, [id_salida, id_producto, cantidad], (err) => {
     if (err) {
-      console.error("Error en SP_InsertarDetalleSalida:", err);
-      
-      // Errores específicos del SP
-      if (err.sqlState === '45000') {
-        return res.status(400).json({ error: err.sqlMessage });
-      }
-      
-      return res.status(500).json({ error: err.message || "Error al insertar detalle de salida" });
+      console.error("Error al insertar detalle salida:", err);
+      return res.status(500).json({ error: err.message });
     }
 
+    // El trigger INSERTA en kardex y actualiza inventario
+
     logBitacora(conexion, {
-      id_objeto: ID_OBJETO_DETALLE_SALIDA_SP,
-      id_usuario: user.id_usuario,
-      accion: "POST",
-      descripcion: `SP_InsertarDetalleSalida: Detalle agregado a salida #${id_salida}`,
-      usuario: user.nombre_usuario
+      id_objeto: ID_OBJETO_SALIDAS,
+      id_usuario: req.user.id_usuario,
+      accion: "INSERT",
+      descripcion: `Insertó detalle salida #${id_salida}`
     });
 
-    res.status(201).json({ 
-      mensaje: "Detalle de salida agregado. Inventario y kardex actualizados." 
-    });
+    res.json({ mensaje: "Salida registrada correctamente" });
   });
 });
 
-// =====================
-// KARDEX CON SP
-// =====================
 
-// GET: Obtener kardex completo con información detallada
-app.get('/api/sp-kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex", "consultar"), (req, res) => {
-  const user = req.user;
-  const query = "CALL SP_MostrarKardex()";
 
-  conexion.query(query, (err, results) => {
-    if (err) {
-      console.error("Error en SP_MostrarKardex:", err);
-      return res.status(500).json({ error: "Error al listar kardex" });
-    }
-
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_KARDEX,
-      id_usuario: user.id_usuario,
-      accion: "GET",
-      descripcion: "SP_MostrarKardex: Consulta de kardex",
-      usuario: user.nombre_usuario
-    });
-
-    res.json(results[0]);
-  });
-});
 
 app.post("/api/kardex/entrada", verificarToken, async (req, res) => {
   const { id_compra } = req.body;
@@ -4617,28 +4556,24 @@ app.post("/api/kardex/entrada", verificarToken, async (req, res) => {
   }
 });
 
-
-app.get('/api/inventario', (req, res) => {
-  const query = `
-    SELECT 
-      i.id_inventario,
-      i.id_producto,
-      p.nombre_producto,
-      i.cantidad AS cantidad_actual,
-      p.cantidad_minima AS stock_minimo,
-      p.cantidad_maxima AS stock_maximo
-    FROM tbl_inventario i
-    JOIN tbl_productos p ON i.id_producto = p.id_producto
+app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex","consultar"), (req,res)=>{
+  const sql = `
+    SELECT k.*, u.nombre_usuario
+    FROM tbl_kardex k
+    LEFT JOIN tbl_usuario u ON u.id_usuario = k.id_usuario
+    ORDER BY k.fecha DESC
   `;
 
-  conexion.query(query, (err, rows) => {
-    if (err) {
-      console.error("Error al listar el inventario:", err);
-      return res.status(500).json({ error: "Error al listar el inventario" });
+  conexion.query(sql,(err,rows)=>{
+    if(err){
+      console.error("Error al mostrar kardex:", err);
+      return res.status(500).json({ mensaje:"Error al obtener kardex" });
     }
     res.json(rows);
   });
 });
+
+
 
 
 

@@ -90,7 +90,7 @@ export default function DetalleCompra() {
     setError(null);
 
     try {
-      const res = await api.get("/sp-detalle-compra");
+      const res = await api.get("/compra/detalle");
       setDetalles(res.data || []);
     } catch (e) {
       setError(e.message || "Error al cargar datos");
@@ -128,7 +128,7 @@ export default function DetalleCompra() {
       return alert("Todos los campos son obligatorios");
 
     try {
-      await api.post("/sp-detalle-compra", {
+      await api.post("/compra/detalle", {
         id_compra: form.id_compra,
         id_producto: form.id_producto,
         cantidad: form.cantidad,

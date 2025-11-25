@@ -14,7 +14,7 @@ import Bitacora from "./bitacora.jsx";
 import PerfilModal from "./perfilmodal.jsx";
 import Tramites from "./MantTramites.jsx";
 import Proveedores from "./proveedores.jsx";
-import Inventariostatus from "./inventariostatus.jsx";
+import Inventario from "./inventario.jsx";
 import DetalleCompra from "./DetalleCompra.jsx";
 import Mantenimientocliente from "./mantenimientocliente.jsx";
 import Kardex from "./Kardex.jsx"; // 
@@ -269,13 +269,13 @@ function Sidebar({ activeView, onSelect, onLogout }) {
 
               <button
                 className={`sb__link sb__link--child ${
-                  activeView === "inventariostatus" ? "sb__link--active" : ""
+                  activeView === "inventario" ? "sb__link--active" : ""
                 }`}
-                onClick={() => onSelect("inventariostatus")}
+                onClick={() => onSelect("inventario")}
               >
                 <span>
                   <FiList />
-                  <span>Status</span>
+                  <span>Inventario</span>
                 </span>
               </button>
 
@@ -668,8 +668,8 @@ const MainPage = () => {
       case "mantenimientoproductos":
         return <MantenimientoProductos />;
 
-      case "inventariostatus":
-        return <Inventariostatus />;
+      case "inventario":
+        return <Inventario />;
 
       case "kardex":
         return <Kardex />;

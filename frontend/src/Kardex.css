@@ -1,0 +1,45 @@
+/* ===== Estilo DGMM para el Kardex ===== */
+
+.mov-entrada {
+  color: #0b7d45;
+  font-weight: bold;
+}
+
+.mov-salida {
+  color: #b30d0d;
+  font-weight: bold;
+}
+
+.inventario-page {
+  padding-bottom: 40px;
+}
+
+.inventario-card {
+  margin-top: 20px;
+}
+
+.no-data {
+  text-align: center;
+  padding: 18px;
+  color: #6b7a85;
+}
+
+/* Filtros */
+.inventario-filtros input,
+.inventario-filtros select {
+  border: 1px solid #c7e0e4;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+/* Tabla */
+.inventario-table th {
+  background: #0b3a43;
+  color: #fff;
+  font-weight: bold;
+}
+
+.inventario-table tr:hover {
+  background: #eef8f9;
+}

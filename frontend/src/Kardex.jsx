@@ -1,14 +1,21 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "./api";
+
+// Estilos institucionales
 import "./inventario.css";
+import "./Kardex.css";
+
+// Logo DGMM
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
+
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 export default function Kardex() {
   const navigate = useNavigate();
 
+  // Estados
   const [kardex, setKardex] = useState([]);
   const [productos, setProductos] = useState([]);
   const [error, setError] = useState(null);
@@ -17,8 +24,8 @@ export default function Kardex() {
   const [filtros, setFiltros] = useState({
     producto: "",
     tipo: "",
+    usuario: "",
     fecha: "",
-    usuario: ""
   });
 
   // =======================
@@ -30,8 +37,8 @@ export default function Kardex() {
 
     try {
       const [rKardex, rProductos] = await Promise.all([
-        api.get("/kardex"),
-        api.get("/productos")
+        api.get("/kardex"), // Backend ya corregido
+        api.get("/productos"),
       ]);
 
       setKardex(rKardex.data || []);
@@ -42,7 +49,7 @@ export default function Kardex() {
         message: e.message,
         status: e.response?.status,
         data: e.response?.data,
-        url: e.config?.url
+        url: e.config?.url,
       });
     }
 
@@ -61,13 +68,15 @@ export default function Kardex() {
   //   Filtrado
   // =======================
   const aplicarFiltro = (item) => {
-    const { producto, tipo, fecha, usuario } = filtros;
+    const { producto, tipo, usuario, fecha } = filtros;
 
     return (
-      (!producto || item.producto?.toLowerCase().includes(producto.toLowerCase())) &&
+      (!producto ||
+        item.producto?.toLowerCase().includes(producto.toLowerCase())) &&
       (!tipo || item.tipo_movimiento === tipo) &&
       (!usuario || String(item.id_usuario).includes(usuario)) &&
-      (!fecha || new Date(item.fecha).toDateString() === new Date(fecha).toDateString())
+      (!fecha ||
+        new Date(item.fecha).toDateString() === new Date(fecha).toDateString())
     );
   };
 
@@ -77,53 +86,40 @@ export default function Kardex() {
   //   Generar PDF
   // =======================
   const generarPDF = () => {
-    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
+    const doc = new jsPDF();
 
-    // ENCABEZADO
-    doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+    // Encabezado DGMM
+    doc.addImage(logoDGMM, "PNG", 20, 15, 110, 55);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
-    doc.setTextColor(14, 42, 59);
-    doc.text("Dirección General de la Marina Mercante", 170, 50);
+    doc.text("Dirección General de la Marina Mercante", 150, 40);
 
     doc.setFontSize(14);
-    doc.text("Reporte de Kardex", 170, 72);
+    doc.text("Reporte de Kardex", 150, 65);
 
     doc.setFontSize(10);
-    doc.setTextColor(80);
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+    doc.text(`Generado: ${new Date().toLocaleString()}`, 20, 85);
 
-    // TABLA
+    // Datos tabla
     const columnas = ["Fecha", "Producto", "Tipo", "Cantidad", "Usuario", "Motivo"];
 
-    const filas = kardexFiltrado.map(k => [
+    const filas = kardexFiltrado.map((k) => [
       new Date(k.fecha).toLocaleString(),
       k.producto,
       k.tipo_movimiento,
       k.cantidad,
       k.id_usuario,
-      k.motivo || ""
+      k.motivo || "",
     ]);
 
     autoTable(doc, {
-      startY: 125,
+      startY: 100,
       head: [columnas],
       body: filas,
       styles: { fontSize: 9, cellPadding: 5 },
-      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
-      alternateRowStyles: { fillColor: [242, 245, 247] }
+      headStyles: { fillColor: [11, 58, 67], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [245, 248, 249] },
     });
-
-    // PIE DE PÁGINA
-    const h = doc.internal.pageSize.height;
-    doc.setFontSize(9);
-    doc.setTextColor(100);
-    doc.text(
-      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
-      doc.internal.pageSize.width / 2,
-      h - 30,
-      { align: "center" }
-    );
 
     doc.save("Kardex_DGMM.pdf");
   };
@@ -133,10 +129,12 @@ export default function Kardex() {
   // =======================
   return (
     <div className="inventario-page">
+      {/* Logo DGMM */}
       <div className="inventario-logo-wrap">
         <img src={logoDGMM} alt="DGMM" />
       </div>
 
+      {/* Topbar */}
       <div className="inventario-topbar">
         <span className="topbar-title">Inventario – Kardex</span>
 
@@ -155,17 +153,16 @@ export default function Kardex() {
         </div>
       </div>
 
+      {/* Card */}
       <div className="inventario-card">
-
-        {/* ERROR */}
         {error && (
-          <div className="inventario-error" style={{ padding: 12 }}>
+          <div className="inventario-error">
             <strong>Error cargando datos:</strong>
             <pre>{JSON.stringify(error, null, 2)}</pre>
           </div>
         )}
 
-        {/* FILTROS */}
+        {/* Filtros */}
         <div className="inventario-filtros">
           <input
             placeholder="Filtrar por producto"
@@ -195,7 +192,7 @@ export default function Kardex() {
           />
         </div>
 
-        {/* TABLA */}
+        {/* Tabla */}
         <table className="inventario-table">
           <thead>
             <tr>
@@ -214,7 +211,7 @@ export default function Kardex() {
                 <tr key={k.id_kardex}>
                   <td>{new Date(k.fecha).toLocaleString()}</td>
                   <td>{k.producto}</td>
-                  <td>{k.tipo_movimiento}</td>
+                  <td className={`mov-${k.tipo_movimiento}`}>{k.tipo_movimiento}</td>
                   <td>{k.cantidad}</td>
                   <td>{k.id_usuario}</td>
                   <td>{k.motivo || "-"}</td>
@@ -222,13 +219,13 @@ export default function Kardex() {
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="no-data">No hay registros que coincidan.</td>
+                <td colSpan={6} className="no-data">No hay registros.</td>
               </tr>
             )}
           </tbody>
         </table>
-
       </div>
     </div>
   );
 }
+

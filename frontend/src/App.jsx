@@ -14,11 +14,12 @@ import Bitacora from "./bitacora.jsx";
 import DashboardTickets from "./DashboardTickets.jsx"; 
 import MonitorTv from "./MonitorTv.jsx";
 import Kiosko from "./kiosko.jsx";
-import Inventariostatus from "./inventariostatus.jsx";
+
 import DetalleCompra from "./DetalleCompra.jsx";
 import Compra from "./Compra.jsx";
 import Salidas from "./Salidas.jsx";
 import DetalleSalidas from "./DetalleSalidas.jsx";
+import Inventario from "./inventario.jsx";
 
 
 
@@ -85,10 +86,10 @@ export default function App() {
 />
 
 <Route
-  path="/guarda/inventariostatus"
+  path="/guarda/inventario"
   element={
     <ProtectedRouteRol allowedRoles={["Guarda almacen", "Administrador", "Auxiliar de almacen"]}>
-      <Inventariostatus />
+      <Inventario />
     </ProtectedRouteRol>
   }
 />
