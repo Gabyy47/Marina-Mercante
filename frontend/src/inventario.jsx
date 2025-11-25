@@ -1,322 +1,465 @@
-import { useEffect, useState, useRef } from "react";
-import { useNavigate } from 'react-router-dom';
+// src/Inventario.jsx
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "./api";
 import "./inventario.css";
 import { FaSyncAlt } from "react-icons/fa";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
-import { Pie } from "react-chartjs-2";
-import Chart from 'chart.js/auto';
-import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import 'jspdf-autotable';
+import "jspdf-autotable";
+
+const U = (s = "") => String(s).trim().toUpperCase();
 
 export default function Inventario() {
   const navigate = useNavigate();
-  const [kardex, setKardex] = useState([]);
+
   const [inventario, setInventario] = useState([]);
-  const [productos, setProductos] = useState([]);
-  const [proveedor, setProveedor] = useState([]);
-  const [detalleCompra, setDetalleCompra] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Filtros
   const [filtros, setFiltros] = useState({
-    
     producto: "",
-    proveedor: "",
-    tipo: "",
-    estado: "",
-    fecha: ""
+    soloAlertas: false, // BAJO / ALTO
   });
 
-const usuarioData = JSON.parse(localStorage.getItem("usuarioData") || "{}");
+  // Modal Kardex
+  const [showModal, setShowModal] = useState(false);
+  const [productoSel, setProductoSel] = useState(null);
+  const [movimientos, setMovimientos] = useState([]);
+  const [loadingMovs, setLoadingMovs] = useState(false);
 
-const cargarTodo = async () => {
-  setLoading(true);
-  setError(null);
+  const usuarioData = JSON.parse(localStorage.getItem("usuarioData") || "{}");
 
-  try {
-    const params = {
-      id_usuario: usuarioData.id_usuario,
-      usuario: usuarioData.nombre_usuario
-    };
+  // ==========================
+  //   CARGAR INVENTARIO
+  // ==========================
+  const cargarInventario = async () => {
+    setLoading(true);
+    setError(null);
 
-    const [rKardex, rInv, rProd, rProv, rDet] = await Promise.all([
-      api.get("/kardex", { params }),            // GET → bitácora
-      api.get("/inventario", { params }),        // GET → bitácora
-      api.get("/productos", { params }),         // GET → bitácora
-      api.get("/proveedor", { params }),         // GET → bitácora
-      api.get("/detalle_compra", { params })     // GET → bitácora
-    ]);
+    try {
+      const params = {
+        id_usuario: usuarioData.id_usuario,
+        usuario: usuarioData.nombre_usuario,
+      };
 
-    setKardex(rKardex.data || []);
-    setInventario(rInv.data || []);
-    setProductos(rProd.data || []);
-    setProveedor(rProv.data || []);
-    setDetalleCompra(rDet.data || []);
+      const res = await api.get("/inventario", { params });
+      setInventario(res.data || []);
+    } catch (e) {
+      console.error("Error cargando inventario:", e);
+      setError({
+        message: e.message,
+        status: e.response?.status,
+        data: e.response?.data,
+        url: e.config?.url,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  } catch (e) {
-    console.error("Error cargando datos de inventario:", e);
-
-    setError({
-      message: e.message,
-      status: e.response?.status,
-      data: e.response?.data,
-      url: e.config?.url
-    });
-
-  } finally {
-    setLoading(false);
-  }
-};
-
-  useEffect(() => { cargarTodo(); }, []);
-  // Escuchar eventos globales para refrescar datos cuando otras pantallas hagan cambios
   useEffect(() => {
-    const handler = () => { cargarTodo(); };
-    window.addEventListener('dataChanged', handler);
-    return () => window.removeEventListener('dataChanged', handler);
+    cargarInventario();
   }, []);
 
-  // Construir vista combinada
-  const construyeFilas = () =>
-    (kardex || []).map(k => {
-      const prod = productos.find(p => p.id_producto === k.id_producto) || {};
-      const inv = inventario.find(i => i.id_producto === k.id_producto) || {};
-      const det = detalleCompra.find(d => d.id_kardex === k.id_kardex) || null;
-      const prov = det ? (proveedor.find(pv => pv.id_proveedor === det.id_proveedor) || {}) : null;
-      return {
-        id: k.id_kardex,
-        fecha: k.fecha_hora || k.fecha || null,
-        producto: prod.nombre_producto || `#${k.id_producto}`,
-        proveedor: prov ? prov.nombre : (det ? "Proveedor desconocido" : "-"),
-        tipo: k.tipo_movimiento,
-        cantidad: k.cantidad,
-        estado: k.estado,
-        descripcion: k.descripcion,
-        stock_actual: inv.cantidad ?? "-"
+  useEffect(() => {
+    const handler = () => cargarInventario();
+    window.addEventListener("dataChanged", handler);
+    return () => window.removeEventListener("dataChanged", handler);
+  }, []);
+
+  // ==========================
+  //   VER MÁS (KÁRDEX)
+  // ==========================
+  const abrirKardex = async (row) => {
+    setProductoSel(row);
+    setShowModal(true);
+    setLoadingMovs(true);
+    setMovimientos([]);
+
+    try {
+      const params = {
+        id_usuario: usuarioData.id_usuario,
+        usuario: usuarioData.nombre_usuario,
       };
-    }).sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
 
-  const filas = construyeFilas();
-
-  // ref para capturar la sección que irá al PDF
-  const reportRef = useRef(null);
-  const tipoChartRef = useRef(null);
-  const estadoChartRef = useRef(null);
-
-  // construir datos para gráficos (tipo movimiento y estado)
-  const buildCounts = (items, key) => {
-    const map = {};
-    (items || []).forEach((it) => {
-      const v = it[key] ?? "-";
-      map[v] = (map[v] || 0) + 1;
-    });
-    return map;
-  };
-
-  const tipoCounts = buildCounts(filas, "tipo");
-  const estadoCounts = buildCounts(filas, "estado");
-
-  const palette = ["#0b3540", "#1b90b8", "#ffd166", "#ef476f", "#8ecae6", "#6b705c"];
-
-  const chartFromCounts = (counts) => {
-    const labels = Object.keys(counts);
-    const data = labels.map((l) => counts[l]);
-    const colors = labels.map((_, i) => palette[i % palette.length]);
-    return { labels, datasets: [{ data, backgroundColor: colors, hoverOffset: 6 }] };
-  };
-
-  const tipoData = chartFromCounts(tipoCounts);
-  const estadoData = chartFromCounts(estadoCounts);
-
-  const generatePDF = async () => {
-  try {
-    const pdf = new jsPDF('landscape', 'pt', 'a4');
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 40;
-    let y = 40;
-
-    // === ENCABEZADO ===
-    pdf.setFontSize(18);
-    pdf.text('Reporte de Inventario', pageWidth / 2, y, { align: 'center' });
-    pdf.setFontSize(10);
-    pdf.text(`Generado: ${new Date().toLocaleString()}`, pageWidth - margin, y, { align: 'right' });
-    y += 20;
-
-    // === GRÁFICOS ===
-    const charts = [tipoChartRef, estadoChartRef];
-    const chartWidth = (pageWidth - margin * 2) / 2 - 10;
-    const chartHeight = 140;
-    let chartX = margin;
-
-    for (const ref of charts) {
-      if (ref.current) {
-        const canvas = ref.current.canvas || ref.current.ctx?.canvas;
-        if (canvas) {
-          const imgData = await html2canvas(canvas).then(c => c.toDataURL('image/png'));
-          pdf.addImage(imgData, 'PNG', chartX, y, chartWidth, chartHeight);
-          chartX += chartWidth + 20;
-        }
-      }
-    }
-    y += chartHeight + 30;
-
-    // === TABLA ===
-    const rows = filas.filter(aplicarFiltro).map(r => ([
-      r.fecha ? new Date(r.fecha).toLocaleString() : '-',
-      String(r.producto || '-'),
-      String(r.proveedor || '-'),
-      String(r.tipo || '-'),
-      String(r.cantidad ?? '-'),
-      String(r.estado || '-'),
-      String(r.stock_actual ?? '-'),
-      String(r.descripcion || '')
-    ]));
-
-    const head = [['Fecha', 'Producto', 'Proveedor', 'Tipo', 'Cantidad', 'Estado', 'Stock', 'Descripción']];
-
-    if (rows.length > 0) {
-      pdf.autoTable({
-        startY: y,
-        head,
-        body: rows,
-        theme: 'striped',
-        headStyles: { fillColor: [27, 144, 184], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 9, cellPadding: 4, lineColor: [200, 200, 200], lineWidth: 0.1 },
-        columnStyles: {
-          0: { cellWidth: 75 },
-          1: { cellWidth: 90 },
-          2: { cellWidth: 80 },
-          7: { cellWidth: 160 }
-        },
-        showHead: 'everyPage',
-        margin: { left: margin, right: margin },
+      const res = await api.get(`/kardex/producto/${row.id_producto}`, {
+        params,
       });
-    } else {
-      pdf.setFontSize(11);
-      pdf.text('No hay registros para los filtros actuales.', margin, y + 12);
+      setMovimientos(res.data || []);
+    } catch (e) {
+      console.error("Error cargando kardex del producto:", e);
+    } finally {
+      setLoadingMovs(false);
     }
-
-    // === PIE DE PÁGINA ===
-    const pageCount = pdf.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      pdf.setPage(i);
-      pdf.setFontSize(8);
-      pdf.text(`Página ${i} de ${pageCount}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
-    }
-
-    pdf.save('inventario-report.pdf');
-  } catch (e) {
-    console.error('Error generando PDF:', e);
-    alert('Error al generar PDF. Revisa la consola.');
-  }
-};
-
-
-  const aplicarFiltro = f => {
-    const { producto, proveedor, tipo, estado, fecha } = filtros;
-    return (!producto || f.producto?.toLowerCase().includes(producto.toLowerCase())) &&
-           (!proveedor || (f.proveedor || "").toLowerCase().includes(proveedor.toLowerCase())) &&
-           (!tipo || f.tipo === tipo) &&
-           (!estado || (f.estado || "").toLowerCase() === estado.toLowerCase()) &&
-           (!fecha || (f.fecha && new Date(f.fecha).toDateString() === new Date(fecha).toDateString()));
   };
 
+  const cerrarModal = () => {
+    setShowModal(false);
+    setProductoSel(null);
+    setMovimientos([]);
+  };
+
+  // ==========================
+  //   MENSAJE + PROGRESO
+  // ==========================
+  function buildRowWithInfo(row) {
+    const cant = Number(row.cantidad ?? 0);
+    const min = Number(row.cantidad_minima ?? 0);
+    const max = Number(row.cantidad_maxima ?? 0);
+    const estado = U(row.estado || "");
+
+    let mensaje = "";
+    if (cant < min) {
+      mensaje = `Bajo stock: ${cant} < mínimo (${min}).`;
+    } else if (cant > max) {
+      mensaje = `Stock al tope o superior: ${cant} ≥ máximo (${max}).`;
+    } else {
+      mensaje = `Dentro del rango (${min}–${max}).`;
+    }
+
+    let porcentaje = 0;
+    if (max > 0) {
+      porcentaje = Math.round((cant / max) * 100);
+      if (porcentaje < 0) porcentaje = 0;
+      if (porcentaje > 100) porcentaje = 100;
+    }
+
+    return {
+      ...row,
+      estadoUpper: estado,
+      mensaje,
+      porcentaje,
+    };
+  }
+
+  // Construir filas con info extra
+  const filasBase = (inventario || []).map(buildRowWithInfo);
+
+  // ==========================
+  //   FILTROS
+  // ==========================
+  const aplicarFiltro = (row) => {
+    const { producto, soloAlertas } = filtros;
+
+    if (
+      producto &&
+      !String(row.nombre_producto || "")
+        .toLowerCase()
+        .includes(producto.toLowerCase())
+    ) {
+      return false;
+    }
+
+    if (
+      soloAlertas &&
+      row.estadoUpper !== "BAJO" &&
+      row.estadoUpper !== "ALTO"
+    ) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const filas = filasBase.filter(aplicarFiltro);
+
+  // ==========================
+  //   PDF INVENTARIO
+  // ==========================
+  const generatePDF = () => {
+    try {
+      const pdf = new jsPDF("landscape", "pt", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 40;
+      let y = 40;
+
+      pdf.setFontSize(18);
+      pdf.text("Reporte de Inventario", pageWidth / 2, y, {
+        align: "center",
+      });
+      pdf.setFontSize(10);
+      pdf.text(
+        `Generado: ${new Date().toLocaleString()}`,
+        pageWidth - margin,
+        y,
+        { align: "right" }
+      );
+      y += 25;
+
+      const body = filas.map((r) => [
+        String(r.nombre_producto ?? ""),
+        String(r.cantidad ?? ""),
+        String(r.cantidad_minima ?? ""),
+        String(r.cantidad_maxima ?? ""),
+        String(r.estadoUpper ?? ""),
+        String(r.mensaje ?? ""),
+      ]);
+
+      const head = [
+        ["Producto", "Cantidad", "Mínimo", "Máximo", "Estado", "Mensaje"],
+      ];
+
+      if (body.length > 0) {
+        pdf.autoTable({
+          startY: y,
+          head,
+          body,
+          theme: "striped",
+          headStyles: {
+            fillColor: [27, 144, 184],
+            textColor: 255,
+            fontStyle: "bold",
+          },
+          styles: {
+            fontSize: 9,
+            cellPadding: 4,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.1,
+          },
+          showHead: "everyPage",
+          margin: { left: margin, right: margin },
+        });
+      } else {
+        pdf.setFontSize(11);
+        pdf.text(
+          "No hay registros para los filtros actuales.",
+          margin,
+          y + 12
+        );
+      }
+
+      const pageCount = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.text(
+          `Página ${i} de ${pageCount}`,
+          pageWidth - margin,
+          pageHeight - 10,
+          { align: "right" }
+        );
+      }
+
+      pdf.save("inventario.pdf");
+    } catch (e) {
+      console.error("Error generando PDF:", e);
+      alert("Error al generar PDF. Revisa la consola.");
+    }
+  };
+
+  // ==========================
+  //   RENDER
+  // ==========================
   return (
     <div className="inventario-page">
-      <div className="inventario-logo-wrap"><img src={logoDGMM} alt="DGMM" /></div>
+      <div className="inventario-logo-wrap">
+        <img src={logoDGMM} alt="DGMM" />
+      </div>
 
       <div className="inventario-topbar">
-        <span className="topbar-title">Dashboard de Inventario</span>
+        <span className="topbar-title">Inventario</span>
         <div className="topbar-actions">
-          <button className="btn btn-topbar-outline" onClick={()=>navigate('/')}>← Menú</button>
-          <button className="btn btn-topbar-outline" onClick={cargarTodo} style={{marginLeft:8}}><FaSyncAlt/> Refrescar</button>
-          <button className="btn btn-topbar-outline" onClick={generatePDF} style={{marginLeft:8}}>📄 Generar PDF</button>
+          <button
+            className="btn btn-topbar-outline"
+            onClick={() => navigate("/dashboard")}
+          >
+            ← Menú
+          </button>
+          <button
+            className="btn btn-topbar-outline"
+            onClick={cargarInventario}
+            style={{ marginLeft: 8 }}
+          >
+            <FaSyncAlt /> Refrescar
+          </button>
+          <button
+            className="btn btn-topbar-outline"
+            onClick={generatePDF}
+            style={{ marginLeft: 8 }}
+          >
+            📄 Generar PDF
+          </button>
         </div>
       </div>
 
       <div className="inventario-card">
-        {/* sección que se captura en PDF */}
-        <div ref={reportRef}>
+        {/* Leyenda de colores */}
+        <div className="inv-legend">
+          <strong>Rango de colores:</strong>{" "}
+          <span className="legend-rojo">Rojo = Bajo</span>,{" "}
+          <span className="legend-verde">Verde = Alto</span>,{" "}
+          <span className="legend-ambar">Ámbar = Normal</span>.
+        </div>
+
         {error && (
-          <div className="inventario-error" style={{marginBottom:12, padding:12, borderRadius:6, background:'#fdecea', color:'#611a15'}}>
+          <div className="inventario-error">
             <strong>Error cargando datos:</strong>
             <div>Mensaje: {String(error.message)}</div>
             <div>URL: {error.url || "-"}</div>
             <div>Estado: {error.status || "-"}</div>
-            <div style={{marginTop:6}}>Respuesta: <pre style={{whiteSpace:'pre-wrap'}}>{JSON.stringify(error.data,null,2)}</pre></div>
+            <div className="inventario-error-json">
+              {JSON.stringify(error.data, null, 2)}
+            </div>
           </div>
         )}
+
+        {/* Filtros */}
         <div className="inventario-filtros">
-          <input placeholder="Filtrar por producto" value={filtros.producto}
-                 onChange={e=>setFiltros({...filtros, producto: e.target.value})}/>
-          <input placeholder="Filtrar por proveedor" value={filtros.proveedor}
-                 onChange={e=>setFiltros({...filtros, proveedor: e.target.value})}/>
-          <select value={filtros.tipo} onChange={e=>setFiltros({...filtros, tipo: e.target.value})}>
-            <option value="">Tipo movimiento (Todos)</option>
-            <option value="entrada">Entrada</option>
-            <option value="salida">Salida</option>
-          </select>
-          <select value={filtros.estado} onChange={e=>setFiltros({...filtros, estado: e.target.value})}>
-            <option value="">Estado (Todos)</option>
-            <option value="Pendiente">Pendiente</option>
-            <option value="En proceso">En proceso</option>
-            <option value="Completado">Completado</option>
-            <option value="Cancelado">Cancelado</option>
-          </select>
-          <input type="date" value={filtros.fecha} onChange={e=>setFiltros({...filtros, fecha: e.target.value})}/>
+          <input
+            placeholder="Buscar producto..."
+            value={filtros.producto}
+            onChange={(e) =>
+              setFiltros({ ...filtros, producto: e.target.value })
+            }
+          />
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={filtros.soloAlertas}
+              onChange={(e) =>
+                setFiltros({ ...filtros, soloAlertas: e.target.checked })
+              }
+            />
+            <span>Solo alertas (BAJO/ALTO)</span>
+          </label>
         </div>
 
         {loading ? (
-          <p className="loading">Cargando dashboard...</p>
+          <p className="loading">Cargando inventario...</p>
         ) : (
-          <>
-          <table className="inventario-table">
+          <table className="inventario-table inv-style2">
             <thead>
               <tr>
-                <th>Fecha</th>
                 <th>Producto</th>
-                <th>Proveedor</th>
-                <th>Tipo</th>
-                <th>Cant.</th>
+                <th>Cantidad</th>
+                <th>Mín</th>
+                <th>Máx</th>
                 <th>Estado</th>
-                <th>Stock actual</th>
-                <th>Descripción</th>
+                <th>Mensaje</th>
+                <th>Progreso</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {filas.filter(aplicarFiltro).map(f => (
-                <tr key={f.id}>
-                  <td>{f.fecha ? new Date(f.fecha).toLocaleString() : "-"}</td>
-                  <td>{f.producto}</td>
-                  <td>{f.proveedor}</td>
-                  <td className={`mov-${f.tipo}`}>{f.tipo}</td>
+              {filas.map((f) => (
+                <tr
+                  key={f.id_inventario}
+                  className={`row-estado-${
+                    f.estadoUpper ? f.estadoUpper.toLowerCase() : "normal"
+                  }`}
+                >
+                  <td>{f.nombre_producto}</td>
                   <td>{f.cantidad}</td>
-                  <td className={`status status-${String(f.estado).toLowerCase().replace(/\s/g,"-")}`}>{f.estado}</td>
-                  <td>{f.stock_actual}</td>
-                  <td>{f.descripcion}</td>
+                  <td>{f.cantidad_minima}</td>
+                  <td>{f.cantidad_maxima}</td>
+                  <td>
+                    <span
+                      className={`estado-chip estado-${f.estadoUpper.toLowerCase()}`}
+                    >
+                      {f.estadoUpper}
+                    </span>
+                  </td>
+                  <td>{f.mensaje}</td>
+                  <td>
+                    <div className="inv-progress">
+                      <div
+                        className={`inv-progress-bar estado-${f.estadoUpper.toLowerCase()}`}
+                        style={{ width: `${f.porcentaje}%` }}
+                      />
+                    </div>
+                  </td>
+                  <td>
+                    <button
+                      className="btn btn-topbar-outline btn-sm"
+                      onClick={() => abrirKardex(f)}
+                    >
+                      Ver más
+                    </button>
+                  </td>
                 </tr>
               ))}
-              {filas.filter(aplicarFiltro).length === 0 && (
-                <tr><td colSpan={8} className="no-data">No hay registros que coincidan</td></tr>
+              {!loading && filas.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="no-data">
+                    No hay registros de inventario.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
-          <div className="inventario-charts">
-            <div className="chart-card">
-              <h4>Por tipo de movimiento</h4>
-              <Pie data={tipoData} ref={tipoChartRef} />
+        )}
+      </div>
+
+      {/* MODAL KÁRDEX POR PRODUCTO */}
+      {showModal && (
+        <div
+          className="inv-modal-overlay"
+          onClick={cerrarModal}
+        >
+          <div
+            className="inv-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="inv-modal-header">
+              <h3>
+                Movimientos de:{" "}
+                {productoSel ? productoSel.nombre_producto : ""}
+              </h3>
+              <button className="inv-modal-close" onClick={cerrarModal}>
+                ✕
+              </button>
             </div>
-            <div className="chart-card">
-              <h4>Por estado</h4>
-              <Pie data={estadoData} ref={estadoChartRef} />
+
+            <div className="inv-modal-body">
+              {loadingMovs ? (
+                <p>Cargando movimientos...</p>
+              ) : movimientos.length === 0 ? (
+                <p>No hay movimientos en el Kardex para este producto.</p>
+              ) : (
+                <table className="inventario-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Usuario</th>
+                      <th>Movimiento</th>
+                      <th>Cantidad</th>
+                      <th>Motivo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movimientos.map((m) => (
+                      <tr key={m.id_kardex}>
+                        <td>
+                          {m.fecha
+                            ? new Date(m.fecha).toLocaleString("es-HN")
+                            : ""}
+                        </td>
+                        <td>{m.usuario || m.nombre_usuario || m.id_usuario}</td>
+                        <td>{U(m.tipo_movimiento)}</td>
+                        <td>{m.cantidad}</td>
+                        <td>{m.motivo}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="inv-modal-footer">
+              <button
+                className="btn btn-topbar-outline"
+                onClick={cerrarModal}
+              >
+                Cerrar
+              </button>
             </div>
           </div>
-          </>
-        )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
+

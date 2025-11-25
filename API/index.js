@@ -8,6 +8,15 @@ var cookieParser = require("cookie-parser");
 var speakeasy = require("speakeasy");
 var QRCode = require("qrcode"); 
 
+//Importar ruta para conexión de BD
+const DB_CONFIG = require("./dbConfig");
+
+//Importar rutas para backup
+const backupRoutes = require("./backupRoutes"); 
+
+// ===== Inicio de Express.js =====
+var app = Express();
+
 // ===== CONFIGURACIÓN Y ENVÍO DE CORREOS =====
 require('dotenv').config({
   path: __dirname + '/.env',
@@ -143,17 +152,16 @@ try {
 
 // ===== Conexión a la base de datos =====
 
-const conexion = mysql.createPool({
-  host: "localhost",
-  port: 3306,
-  user: "root",
-  password: "1984",
-  database: "marina_mercante",
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  charset: "utf8mb4",
+const conexion = mysql.createConnection(DB_CONFIG);
+
+conexion.connect((err) => {
+  if (err) {
+    console.error("Error de conexión a BD:", err);
+  } else {
+    console.log("Conectado a BD");
+  }
 });
+
 
 // ====== Helper de permisos por rol/objeto ======
 function autorizarPermiso(nombreObjeto, accion) {
@@ -210,10 +218,6 @@ function autorizarPermiso(nombreObjeto, accion) {
   };
 }
 
-
-// ===== Inicio de Express.js =====
-var app = Express();
-
 // ===== Configuración de CORS =====
 app.use(
   cors({
@@ -245,6 +249,9 @@ app.use("/api", meRoutes(conexion, { verificarToken, bloquearCambioRolSiNoAdmin 
 const PORT = 49146;
 const SECRET_KEY = process.env.JWT_SECRET || "1984";
 
+// === usar las rutas de backup 
+app.use("/api", backupRoutes); 
+
 app.listen(PORT, () => {
   conexion.query("SELECT 1", (err, results) => {
     if (err) {
@@ -256,6 +263,7 @@ app.listen(PORT, () => {
     }
   });
 });
+
 
 // ===== Utilidades =====
 function handleDatabaseError(err, res, message) {
@@ -1650,68 +1658,7 @@ app.post('/api/auth/verify-code', (req, res) => {
   });
 });
 
-// ====== CRUD PARA tl_compra ======  
-app.get('/api/compra', (req, res) => {  
-  const query = "SELECT * FROM tbl_compra";  
-  conexion.query(query, (err, rows) => {  
-    if (err) {  
-      console.error("Error al listar compras:", err);  
-      res.status(500).json({ error: "Error al listar compras" });  
-      return;  
-    }  
-    res.json(rows);  
-  });  
-});  
-  
-app.get('/api/compra/:id', (req, res) => {  
-  const query = "SELECT * FROM tl_compra WHERE id_compra = ?";  
-  conexion.query(query, [req.params.id], (err, rows) => {  
-    if (err) {  
-      console.error("Error al obtener compra:", err);  
-      res.status(500).json({ error: "Error al obtener compra" });  
-      return;  
-    }  
-    res.json(rows[0]);  
-  });  
-});  
-  
-app.post('/api/compra', (req, res) => {  
-  const { id_proveedor, monto_total, fecha_hora_compra, estado_compra } = req.body;  
-  const query = "INSERT INTO tl_compra (id_proveedor, monto_total, fecha_hora_compra, estado_compra) VALUES (?, ?, ?, ?)";  
-  conexion.query(query, [id_proveedor, monto_total, fecha_hora_compra, estado_compra], (err, result) => {  
-    if (err) {  
-      console.error("Error al insertar compra:", err);  
-      res.status(500).json({ error: "Error al insertar compra" });  
-      return;  
-    }  
-    res.json({ message: "Compra insertada correctamente", id: result.insertId });  
-  });  
-});  
-  
-app.put('/api/compra/:id', (req, res) => {  
-  const { id_proveedor, monto_total, fecha_hora_compra, estado_compra } = req.body;  
-  const query = "UPDATE tl_compra SET id_proveedor = ?, monto_total = ?, fecha_hora_compra = ?, estado_compra = ? WHERE id_compra = ?";  
-  conexion.query(query, [id_proveedor, monto_total, fecha_hora_compra, estado_compra, req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al actualizar compra:", err);  
-      res.status(500).json({ error: "Error al actualizar compra" });  
-      return;  
-    }  
-    res.json({ message: "Compra actualizada correctamente" });  
-  });  
-});  
-  
-app.delete('/api/compra/:id', (req, res) => {  
-  const query = "DELETE FROM tl_compra WHERE id_compra = ?";  
-  conexion.query(query, [req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al eliminar compra:", err);  
-      res.status(500).json({ error: "Error al eliminar compra" });  
-      return;  
-    }  
-    res.json({ message: "Compra eliminada correctamente" });  
-  });  
-});
+
 
 
 // =======================================================
@@ -1784,30 +1731,27 @@ app.delete('/api/visualizaciones/:id', (req, res) => {
 
 // GET /api/bitacora
 app.get('/api/bitacora', (req, res) => {
-  const { id_usuario } = req.query;
+  const sql = `
+    SELECT 
+      b.id_bitacora,
+      b.fecha,
+      b.usuario,
+      b.id_objeto,
+      o.nombre_objeto,
+      b.accion,
+      b.descripcion
+    FROM tbl_bitacora b
+    LEFT JOIN tbl_objeto o ON b.id_objeto = o.id_objeto
+    ORDER BY b.fecha DESC
+  `;
 
-  conexion.query(
-    'SELECT * FROM tbl_bitacora ORDER BY fecha ASC',
-    (err, rows) => {
-      if (err) {
-        console.error('Error al listar la bitácora:', err);
-        return res.status(500).json({ mensaje: 'Error al listar bitácora' });
-      }
-      // Registrar en bitácora
-      if (id_usuario) {
-        conexion.query(
-          'CALL event_bitacora(?, ?, ?, ?)',
-          [id_usuario, 14, 'CONSULTA', 'Se consultó la lista completa de la bitácora del sistema'],
-          (e) => {
-            if (e) console.error('Error bitácora (GET bitácoras):', e);
-            return res.json(rows);
-          }
-        );
-      } else {
-        return res.json(rows);
-      }
+  conexion.query(sql, (err, rows) => {
+    if (err) {
+      console.error("Error listando bitácora:", err);
+      return res.status(500).json({ mensaje: "Error al obtener bitácora" });
     }
-  );
+    res.json(rows);
+  });
 });
 
 // GET /api/bitacora/:id
@@ -2078,7 +2022,7 @@ app.get('/api/salidas_productos/:id', (req, res) => {
 app.post('/api/salidas_productos', (req, res) => {
   const { id_usuario } = req.body;
   const query = `
-    INSERT INTO tbl_salida_productos (id_usuario, fecha_salida)
+    INSERT INTO tbl_salida_productos (id_usuario, fecha)
     VALUES (?, NOW())
   `;
   conexion.query(query, [id_usuario], (err, result) => {
@@ -2096,7 +2040,7 @@ app.put('/api/salidas_productos/:id', (req, res) => {
   const { id_usuario } = req.body;
   const query = `
     UPDATE tbl_salida_productos
-    SET id_usuario = ?, fecha_salida = NOW()
+    SET id_usuario = ?, fecha = NOW()
     WHERE id_salida_producto = ?
   `;
   conexion.query(query, [id_usuario, req.params.id], (err) => {
@@ -2123,80 +2067,7 @@ app.delete('/api/salidas_productos/:id', (req, res) => {
 });
 
 
-// ====== CRUD PARA tbl_inventario ======
 
-app.get('/api/inventario', (req, res) => {
-  const query = `
-    SELECT 
-      i.id_inventario,
-      i.id_producto,
-      p.nombre_producto,
-      i.cantidad as cantidad_actual,          
-      i.cantidad_minima as stock_minimo,      
-      i.cantidad_maxima as stock_maximo       
-    FROM tbl_inventario i
-    JOIN tbl_productos p ON i.id_producto = p.id_producto
-  `;
-
-  conexion.query(query, (err, rows) => {
-    if (err) {
-      console.error("Error al listar el inventario:", err);
-      return res.status(500).json({ error: "Error al listar el inventario" });
-    }
-    res.json(rows);
-  });
-});
-
-
-app.get('/api/inventario/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_inventario WHERE id_inventario = ?";
-  conexion.query(query, [req.params.id], (err, rows) => {
-    if (err) {
-      console.error("Error al obtener el inventario:", err);
-      res.status(500).json({ error: "Error al obtener el inventario" });
-      return;
-    }
-    res.json(rows[0]);
-  });
-});
-
-app.post('/api/inventario', (req, res) => {
-  const { estado } = req.body;
-  const query = "INSERT INTO tbl_inventario (estado) VALUES (?)";
-  conexion.query(query, [estado], (err, result) => {
-    if (err) {
-      console.error("Error al insertar el inventario:", err);
-      res.status(500).json({ error: "Error al insertar el inventario" });
-      return;
-    }
-    res.json({ message: "Invetario insertado correctamente", id: result.insertId });
-  });
-});
-
-app.put('/api/inventario/:id', (req, res) => {
-  const { estado } = req.body;
-  const query = "UPDATE tbl_inventario SET estado = ? WHERE id_inventario = ?";
-  conexion.query(query, [estado, req.params.id], (err) => {
-    if (err) {
-      console.error("Error al actualizar el inventario:", err);
-      res.status(500).json({ error: "Error al actualizar el inventario" });
-      return;
-    }
-    res.json({ message: "Inventario actualizado correctamente" });
-  });
-});
-
-app.delete('/api/inventario/:id', (req, res) => {
-  const query = "DELETE FROM tbl_inventario WHERE id_inventario = ?";
-  conexion.query(query, [req.params.id], (err) => {
-    if (err) {
-      console.error("Error al eliminar el Inventario:", err);
-      res.status(500).json({ error: "Error al eliminar el Inventario" });
-      return;
-    }
-    res.json({ message: "Inventario eliminado correctamente" });
-  });
-});
 
 
 // =============== CONFIGURACIÓN BITÁCORA ===============
@@ -2534,31 +2405,32 @@ app.delete('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autoriza
   });
 });
 
+// =======================
+//   MOSTRAR INVENTARIO
+// =======================
+app.get("/api/inventario", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
+  const sql = "CALL SP_MostrarInventario()";
 
-// ==========================
-//  MOSTRAR INVENTARIO (SP)
-// ==========================
-app.get('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
-  const user = req.user;
-  const query = "CALL SP_MostrarInventario()";
-
-  conexion.query(query, (err, results) => {
+  conexion.query(sql, (err, result) => {
     if (err) {
-      console.error("Error al listar inventario:", err);
-      return res.status(500).json({ error: "Error al listar inventario" });
+      console.error("Error al mostrar inventario:", err);
+      return res.status(500).json({ error: err.message });
     }
 
+    const inventario = result[0]; // El SP regresa un arreglo
+
+    // Bitácora
     logBitacora(conexion, {
       id_objeto: ID_OBJETO_INVENTARIO,
-      id_usuario: user.id_usuario,
+      id_usuario: req.user.id_usuario,
       accion: "GET",
-      descripcion: `SP_MostrarInventario: Se consultó inventario`,
-      usuario: user.nombre_usuario
+      descripcion: "Consultó el inventario"
     });
 
-    res.json(results[0]);
+    res.json(inventario);
   });
 });
+
 
 
 // =============================
@@ -2676,61 +2548,77 @@ app.delete('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPer
 });
 
 
+
 // =============================
 //  MOSTRAR KARDEX (SP)
 // =============================
-app.get('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex", "consultar"), (req, res) => {
-  const user = req.user;
+// =======================
+//   KARDEX POR PRODUCTO
+// =======================
+app.get("/api/kardex/producto/:id", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
+  const id = Number(req.params.id);
 
-  const query = "CALL SP_MostrarKardex()";
+  if (!Number.isInteger(id) || id <= 0)
+    return res.status(400).json({ error: "ID inválido" });
 
-  conexion.query(query, (err, results) => {
+  const sql = "CALL SP_KardexPorProducto(?)";
+
+  conexion.query(sql, [id], (err, result) => {
     if (err) {
-      console.error("Error al listar kardex:", err);
-      return res.status(500).json({ error: "Error al listar kardex" });
+      console.error("Error al obtener kardex:", err);
+      return res.status(500).json({ error: err.message });
     }
 
+    const kardex = result[0];
+
+    // Bitácora
     logBitacora(conexion, {
-      id_objeto: ID_OBJETO_KARDEX,
-      id_usuario: user.id_usuario,
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: req.user.id_usuario,
       accion: "GET",
-      descripcion: "SP_MostrarKardex: Consulta del kardex general",
-      usuario: user.nombre_usuario
+      descripcion: `Consultó el kardex del producto ${id}`
     });
 
-    res.json(results[0]);
+    res.json(kardex);
   });
 });
+
+
 
 // =============================
 //  INSERTAR DETALLE DE COMPRA (SP)
 // =============================
-app.post('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de compra", "insertar"),(req, res) => {
-  const { id_kardex, id_proveedor, monto_total } = req.body;
-  const user = req.user;
+// ===============================
+//   DETALLE COMPRA (INSERTAR)
+// ===============================
+app.post("/api/compra/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compras", "insertar"), (req, res) => {
+  const { id_compra, id_producto, cantidad, precio_unitario } = req.body;
 
-  if (!id_kardex || !id_proveedor || !monto_total) {
-    return res.status(400).json({ error: "Todos los campos son obligatorios" });
-  }
+  if (!id_compra || !id_producto || !cantidad)
+    return res.status(400).json({ error: "Datos incompletos" });
 
-  const query = "CALL SP_InsertarDetalleCompra(?, ?, ?)";
-  const values = [id_kardex, id_proveedor, monto_total];
+  const sql = `
+    INSERT INTO tbl_detalle_compra (id_compra, id_producto, cantidad, precio_unitario)
+    VALUES (?, ?, ?, ?)
+  `;
 
-  conexion.query(query, values, (err) => {
+  conexion.query(sql, [id_compra, id_producto, cantidad, precio_unitario], (err) => {
     if (err) {
       console.error("Error al insertar detalle compra:", err);
       return res.status(500).json({ error: err.message });
     }
 
+    // El trigger INSERTA en kardex y actualiza inventario
+
+    // Bitácora
     logBitacora(conexion, {
-      id_objeto: ID_OBJETO_DETALLE_COMPRA,
-      id_usuario: user.id_usuario,
-      accion: "POST",
-      descripcion: `SP_InsertarDetalleCompra: Kardex=${id_kardex}, Proveedor=${id_proveedor}`,
-      usuario: user.nombre_usuario
+      id_objeto: ID_OBJETO_COMPRAS,
+      id_usuario: req.user.id_usuario,
+      accion: "INSERT",
+      descripcion: `Insertó detalle a compra #${id_compra}`
     });
 
-    res.json({ mensaje: "Detalle de compra insertado correctamente mediante SP" });
+    res.json({ mensaje: "Detalle agregado correctamente" });
   });
 });
 
@@ -2738,7 +2626,7 @@ app.post('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarP
 // =============================
 //  ACTUALIZAR DETALLE DE COMPRA (SP)
 // =============================
-app.put('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de compra", "actualizar"), (req, res) => {
+app.put('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "actualizar"), (req, res) => {
   const { monto_total } = req.body;
   const id_detalle = parseInt(req.params.id);
   const user = req.user;
@@ -2772,7 +2660,7 @@ app.put('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autoriz
 // =============================
 //  ELIMINAR DETALLE DE COMPRA (SP)
 // =============================
-app.delete('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de compra", "eliminar"), (req, res) => {
+app.delete('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "eliminar"), (req, res) => {
   const id_detalle = parseInt(req.params.id);
   const user = req.user;
 
@@ -2800,7 +2688,7 @@ app.delete('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, auto
 // =============================
 //  MOSTRAR DETALLE DE COMPRA (SP)
 // =============================
-app.get('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de compra", "consultar"), (req, res) => {
+app.get('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "consultar"), (req, res) => {
   const user = req.user;
 
   const query = "CALL SP_MostrarDetalleCompra()";
@@ -2825,13 +2713,25 @@ app.get('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPe
 
 
 
-// =======================================================
+// =======================================================  
 // ============ Estados de Ticket (CRUD) =================
 // =======================================================
-app.get('/api/estado_ticket', (req, res) => {
+
+const ID_OBJETO_ESTADO_TICKET = 12;
+
+app.get('/api/estado_ticket', (req, res) => { 
   const query = "SELECT * FROM tbl_estado_ticket";
   conexion.query(query, (err, rows) => {
     if (err) return res.status(500).json({ error: "ERROR EN LISTADO DE ESTADOS DE TICKET" });
+    
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GETT",
+      descripcion: `Se listó el contenido de estado ticket`,
+      usuario: user.nombre_usuario
+    });
     res.json(rows);
   });
 });
@@ -2840,6 +2740,14 @@ app.get('/api/estado_ticket/:id', (req, res) => {
   const query = "SELECT * FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
   conexion.query(query, [Number(req.params.id)], (err, rows) => {
     if (err) return res.status(500).json({ error: "ERROR EN LISTADO DE ESTADO DE TICKET" });
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `Se consultó el estado_ticket id=${estado}`,
+      usuario: user.nombre_usuario
+    });
     res.json(rows[0] || null);
   });
 });
@@ -2848,6 +2756,14 @@ app.post('/api/estado_ticket', (req, res) => {
   const query = "INSERT INTO tbl_estado_ticket (estado) VALUES (?)";
   conexion.query(query, [req.body.estado], (err, r) => {
     if (err) return res.status(500).json({ error: err.message });
+        // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `Se agregó un nuevo estado de ticket = ${estado}`,
+      usuario: user.nombre_usuario
+    });
     res.json({ message: "INSERT EXITOSO!", id: r.insertId });
   });
 });
@@ -2856,6 +2772,14 @@ app.put('/api/estado_ticket/:id', (req, res) => {
   const query = "UPDATE tbl_estado_ticket SET estado = ? WHERE id_estado_ticket = ?";
   conexion.query(query, [req.body.estado, Number(req.params.id)], (err) => {
     if (err) return res.status(500).json({ error: err.message });
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `Se actualizó el estado de ticket = ${estado}`,
+      usuario: user.nombre_usuario
+    });
     res.json({ message: "UPDATE EXITOSO!" });
   });
 });
@@ -2864,6 +2788,14 @@ app.delete('/api/estado_ticket/:id', (req, res) => {
   const query = "DELETE FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
   conexion.query(query, [Number(req.params.id)], (err) => {
     if (err) return res.status(500).json({ error: err.message });
+        // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `Se eliminó el estado de ticket = ${estado}`,
+      usuario: user.nombre_usuario
+    });
     res.json({ message: "DELETE EXITOSO!" });
   });
 });
@@ -2871,10 +2803,21 @@ app.delete('/api/estado_ticket/:id', (req, res) => {
 // =======================================================
 // ============== Tipo Ticket (CRUD) =====================
 // =======================================================
+
+const ID_OBJETO_TIPO_TICKET = 11;
+
 app.get("/api/tipo_ticket", (req, res) => {
   const sql = "SELECT id_tipo_ticket, tipo_ticket, prefijo FROM tbl_tipo_ticket WHERE estado='ACTIVO'";
   conexion.query(sql, (err, rows) => {
     if (err) return res.status(500).json({ mensaje: "Error al obtener tipos de ticket" });
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `Se consultó la lista de tipo ticket`,
+      usuario: user.nombre_usuario
+    });
     res.json(rows);
   });
 });
@@ -2884,8 +2827,14 @@ app.get('/api/tipo_ticket/:id', (request, response) => {
   const values = [parseInt(request.params.id)];
   conexion.query(query, values, (err, rows) => {
     if (err) return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
-    registrarBitacora("Tipo Ticket", "GET");
-    logger.info("Listado de tipo ticket - OK");
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `Se consultó el tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
     response.json(rows);
   });
 });
@@ -2900,8 +2849,14 @@ app.post('/api/tipo_ticket', (request, response) => {
     const values = [tipo_ticket , estado, prefijo];
     conexion.query(query, values, (err) => {
       if (err) return handleDatabaseError(err, response, "Error en inserción de tipo ticket:");
-      registrarBitacora("Tipo ticket", "POST");
-      logger.info("INSERT de tipo ticket - OK");
+      // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `Se agregó un nuevo tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
       response.json("INSERT EXITOSO!");
     });
   } catch (error) {
@@ -2924,8 +2879,14 @@ app.put('/api/tipo_ticket', (request, response) => {
     const values = [tipo_ticket, estado, prefijo, id_tipo_ticket];
     conexion.query(query, values, (err) => {
       if (err) return handleDatabaseError(err, response, "Error en actualización de tipo ticket:");
-      registrarBitacora("Tipo ticket", "PUT");
-      logger.info("ACTUALIZACIÓN de tipo ticket - OK");
+      // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `Se actualizó el tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
       response.json("UPDATE EXITOSO!");
     });
   } catch (error) {
@@ -2939,8 +2900,14 @@ app.delete('/api/tipo_ticket/:id', (request, response) => {
   const values = [parseInt(request.params.id)];
   conexion.query(query, values, (err) => {
     if (err) return handleDatabaseError(err, response, "Error en eliminación de tipo ticket:");
-    registrarBitacora("tipo ticket", "DELETE");
-    logger.info("DELETE de tipo ticket - OK");
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `Se eliminó el tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
     response.json("DELETE EXITOSO!");
   });
 });
@@ -3056,9 +3023,6 @@ app.get("/api/tramites", (req, res) => {
     res.json(rows);
   });
 });
-
-
-
 
 app.get("/api/tramites/:id", (req, res) => {
   const id = Number(req.params.id);
@@ -4123,6 +4087,499 @@ app.delete("/api/tipo_ticket/:id", async (req, res) => {
     handleDatabaseError(err, res, "Error al eliminar tipo_ticket:");
   }
 });
+
+// =============================================================================================
+// ============ ENDPOINTS COMPLETOS PARA PROCEDIMIENTOS ALMACENADOS DE INVENTARIO =============
+// =============================================================================================
+
+// =====================
+// PRODUCTOS CON SP
+// =====================
+
+// GET: Obtener todos los productos
+app.get('/api/sp-productos', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarProductos()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error en SP_MostrarProductos:", err);
+      return res.status(500).json({ error: "Error al listar productos" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarProductos: Consulta de productos",
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);
+  });
+});
+
+// POST: Insertar nuevo producto
+app.post('/api/sp-productos', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "insertar"), (req, res) => {
+  const { nombre, min, max, descripcion } = req.body;
+  const user = req.user;
+
+  if (!nombre) {
+    return res.status(400).json({ error: "El nombre del producto es obligatorio" });
+  }
+
+  const query = "CALL SP_InsertarProducto(?, ?, ?, ?)";
+  const values = [nombre, min || 0, max || 0, descripcion || null];
+
+  conexion.query(query, values, (err) => {
+    if (err) {
+      console.error("Error en SP_InsertarProducto:", err);
+      return res.status(500).json({ error: err.message || "Error al insertar producto" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarProducto: Producto "${nombre}" creado`,
+      usuario: user.nombre_usuario
+    });
+
+    res.status(201).json({ mensaje: "Producto insertado correctamente" });
+  });
+});
+
+// =====================
+// INVENTARIO CON SP
+// =====================
+
+// GET: Obtener inventario completo con nombre de producto
+app.get('/api/sp-inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarInventario()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error en SP_MostrarInventario:", err);
+      return res.status(500).json({ error: "Error al listar inventario" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarInventario: Consulta de inventario",
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);
+  });
+});
+// =============================
+//  COMPRAS (CABECERA)
+// =============================
+
+const ID_OBJETO_COMPRAS = 20; // o el ID que uses para Compras en tbl_objeto
+
+// LISTAR COMPRAS
+app.get( "/api/compra", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compras", "consultar"), (req, res) => {
+    const sql = `
+      SELECT 
+        c.id_compra,
+        c.fecha,
+        p.id_proveedor
+        c.total,
+        u.nombre_usuario
+      FROM tbl_compra c
+      JOIN tbl_proveedor p ON p.id_proveedor = c.id_proveedor
+      JOIN tbl_usuario   u ON u.id_usuario   = c.id_usuario
+      ORDER BY c.fecha DESC
+    `;
+
+    conexion.query(sql, (err, rows) => {
+      if (err) {
+        console.error("Error listando compras:", err);
+        return res
+          .status(500)
+          .json({ error: "Error al listar compras" });
+      }
+
+      // Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_COMPRAS,
+        id_usuario: req.user.id_usuario,
+        accion: "GET",
+        descripcion: "Consultó la lista de compras",
+        usuario: req.user.nombre_usuario,
+      });
+
+      res.json(rows);
+    });
+  }
+);
+
+// INSERTAR COMPRA
+app.post(
+  "/api/compra", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compras", "insertar"),(req, res) => {
+    const user = req.user;
+    const { id_proveedor, total } = req.body;
+
+    if (!id_proveedor || !total) {
+      return res
+        .status(400)
+        .json({ error: "Proveedor y total son obligatorios" });
+    }
+
+    const sql = `
+      INSERT INTO tbl_compra (fecha, id_proveedor, total, id_usuario)
+      VALUES (NOW(), ?, ?, ?)
+    `;
+    const values = [id_proveedor, total, user.id_usuario];
+
+    conexion.query(sql, values, (err, result) => {
+      if (err) {
+        console.error("Error al insertar compra:", err);
+        return res
+          .status(500)
+          .json({ error: "Error al insertar compra" });
+      }
+
+      const id_compra = result.insertId;
+
+      // Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_COMPRAS,
+        id_usuario: user.id_usuario,
+        accion: "INSERT",
+        descripcion: `Creó compra #${id_compra} (proveedor ${id_proveedor}, total ${total})`,
+        usuario: user.nombre_usuario,
+      });
+
+      res.json({ id_compra, mensaje: "Compra registrada correctamente" });
+    });
+  }
+);
+
+
+// =====================
+// COMPRAS CON SP
+// =====================
+
+const ID_OBJETO_COMPRAS_SP = 18; // Asignar un ID único para el objeto "Compras con SP"
+// GET: Obtener todas las compras
+app.get('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compra de producto", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarCompras()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error en SP_MostrarCompras:", err);
+      return res.status(500).json({ error: "Error al listar compras" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_COMPRAS_SP,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarCompras: Consulta de compras",
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);
+  });
+});
+
+// POST: Crear nueva compra (devuelve id_compra)
+app.post('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compra de producto", "insertar"), (req, res) => {
+  const { id_proveedor, total, id_usuario } = req.body;
+  const user = req.user;
+
+  if (!id_proveedor || !total || !id_usuario) {
+    return res.status(400).json({ error: "Campos requeridos: id_proveedor, total, id_usuario" });
+  }
+
+  const query = "CALL SP_InsertarCompra(?, ?, ?)";
+  conexion.query(query, [id_proveedor, total, id_usuario], (err, results) => {
+    if (err) {
+      console.error("Error en SP_InsertarCompra:", err);
+      return res.status(500).json({ error: err.message || "Error al insertar compra" });
+    }
+
+    const id_compra = results[0][0].id_compra;
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_COMPRAS_SP,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarCompra: Compra #${id_compra} creada`,
+      usuario: user.nombre_usuario
+    });
+
+    res.status(201).json({ 
+      mensaje: "Compra creada correctamente", 
+      id_compra 
+    });
+  });
+});
+
+// =====================
+// DETALLE COMPRA CON SP
+// =====================
+
+// GET: Obtener todos los detalles de compras con nombre de producto
+  app.get('/api/sp-detalle-compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "consultar"), (req, res) => {
+    const user = req.user;
+    const query = "CALL SP_MostrarDetalleCompra()";
+
+    conexion.query(query, (err, results) => {
+      if (err) {
+        console.error("Error en SP_MostrarDetalleCompra:", err);
+        return res.status(500).json({ error: "Error al listar detalle de compras" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_DETALLE_COMPRA,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: "SP_MostrarDetalleCompra: Consulta de detalle de compras",
+        usuario: user.nombre_usuario
+      });
+
+      res.json(results[0]);
+    });
+  });
+
+  // POST: Agregar detalle a una compra
+  app.post('/api/sp-detalle-compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "insertar"), (req, res) => {
+    const { id_compra, id_producto, cantidad, precio } = req.body;
+    const user = req.user;
+
+    if (!id_compra || !id_producto || !cantidad || !precio) {
+      return res.status(400).json({ error: "Campos requeridos: id_compra, id_producto, cantidad, precio" });
+    }
+
+    const query = "CALL SP_InsertarDetalleCompra(?, ?, ?, ?)";
+    conexion.query(query, [id_compra, id_producto, cantidad, precio], (err) => {
+      if (err) {
+        console.error("Error en SP_InsertarDetalleCompra:", err);
+        return res.status(500).json({ error: err.message || "Error al insertar detalle de compra" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_DETALLE_COMPRA,
+        id_usuario: user.id_usuario,
+        accion: "POST",
+        descripcion: `SP_InsertarDetalleCompra: Detalle agregado a compra #${id_compra}`,
+        usuario: user.nombre_usuario
+      });
+
+      res.status(201).json({ mensaje: "Detalle de compra agregado correctamente" });
+    });
+  });
+
+  // POST: Registrar entrada de compra al inventario (actualiza stock + kardex)
+  app.post('/api/sp-registrar-entrada/:id_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "insertar"), (req, res) => {
+    const id_compra = parseInt(req.params.id_compra);
+    const user = req.user;
+    const id_usuario = user.id_usuario;
+
+    if (!id_usuario) {
+      return res.status(400).json({ error: "Usuario no identificado" });
+    }
+
+    const query = "CALL SP_RegistrarEntradaCompra(?, ?)";
+    conexion.query(query, [id_compra, id_usuario], (err) => {
+      if (err) {
+        console.error("Error en SP_RegistrarEntradaCompra:", err);
+        return res.status(500).json({ error: err.message || "Error al registrar entrada" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_COMPRAS_SP,
+        id_usuario: user.id_usuario,
+        accion: "POST",
+        descripcion: `SP_RegistrarEntradaCompra: Entrada registrada para compra #${id_compra}`,
+        usuario: user.nombre_usuario
+      });
+
+      res.json({ 
+        mensaje: "Entrada registrada correctamente. Inventario y kardex actualizados." 
+      });
+    });
+  });
+
+// =====================
+// SALIDAS CON SP
+// =====================
+
+const ID_OBJETO_SALIDAS_SP = 17;
+
+// =======================
+//   LISTAR SALIDAS
+// =======================
+app.get("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "consultar"), (req, res) => {
+  const sql = `
+    SELECT s.id_salida, s.fecha, s.motivo, u.nombre_usuario
+    FROM tbl_salida s
+    JOIN tbl_usuario u ON u.id_usuario = s.id_usuario
+    ORDER BY s.fecha DESC
+  `;
+
+  conexion.query(sql, (err, rows) => {
+    if (err) {
+      console.error("Error listando salidas:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json(rows);
+  });
+});
+
+
+// =======================
+//   CREAR SALIDA
+// =======================
+app.post("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "insertar"), (req, res) => {
+  const id_usuario = req.user.id_usuario;
+  const { motivo } = req.body;
+
+  const sql = `
+    INSERT INTO tbl_salida (id_usuario, fecha, motivo)
+    VALUES (?, NOW(), ?)
+  `;
+
+  conexion.query(sql, [id_usuario, motivo || null], (err, result) => {
+    if (err) {
+      console.error("Error al crear salida:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    const id_salida = result.insertId;
+
+    // Bitácora
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_SALIDAS,
+      id_usuario,
+      accion: "INSERT",
+      descripcion: `Creó salida #${id_salida}`
+    });
+
+    res.json({ id_salida });
+  });
+});
+
+
+// =====================
+// DETALLE SALIDA CON SP
+// =====================
+
+const ID_OBJETO_DETALLE_SALIDA_SP = 9;
+
+
+// GET: Obtener todos los detalles de salidas con nombre de producto
+app.get('/api/sp-detalle-salida', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Salida de Productos", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarDetalleSalida()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error en SP_MostrarDetalleSalida:", err);
+      return res.status(500).json({ error: "Error al listar detalle de salidas" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_DETALLE_SALIDA_SP,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarDetalleSalida: Consulta de detalle de salidas",
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);
+  });
+});
+
+// ===============================
+//   DETALLE SALIDA (INSERTAR)
+// ===============================
+app.post("/api/salida/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "insertar"), (req, res) => {
+  const { id_salida, id_producto, cantidad } = req.body;
+
+  if (!id_salida || !id_producto || !cantidad)
+    return res.status(400).json({ error: "Datos incompletos" });
+
+  const sql = `
+    INSERT INTO tbl_detalle_salida (id_salida, id_producto, cantidad)
+    VALUES (?, ?, ?)
+  `;
+
+  conexion.query(sql, [id_salida, id_producto, cantidad], (err) => {
+    if (err) {
+      console.error("Error al insertar detalle salida:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    // El trigger INSERTA en kardex y actualiza inventario
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_SALIDAS,
+      id_usuario: req.user.id_usuario,
+      accion: "INSERT",
+      descripcion: `Insertó detalle salida #${id_salida}`
+    });
+
+    res.json({ mensaje: "Salida registrada correctamente" });
+  });
+});
+
+
+
+
+app.post("/api/kardex/entrada", verificarToken, async (req, res) => {
+  const { id_compra } = req.body;
+  const user = req.user;
+
+  if (!id_compra) {
+    return res.status(400).json({ error: "El ID de compra es obligatorio" });
+  }
+
+  try {
+    await conexion.query(
+      "CALL SP_RegistrarEntradaCompra(?, ?)",
+      [id_compra, user.id_usuario]
+    );
+
+    res.json({ mensaje: "Entrada registrada y inventario actualizado" });
+  } catch (err) {
+    console.error("Error en entrada:", err);
+    res.status(500).json({ error: "Error registrando entrada" });
+  }
+});
+
+app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex","consultar"), (req,res)=>{
+  const sql = `
+    SELECT k.*, u.nombre_usuario
+    FROM tbl_kardex k
+    LEFT JOIN tbl_usuario u ON u.id_usuario = k.id_usuario
+    ORDER BY k.fecha DESC
+  `;
+
+  conexion.query(sql,(err,rows)=>{
+    if(err){
+      console.error("Error al mostrar kardex:", err);
+      return res.status(500).json({ mensaje:"Error al obtener kardex" });
+    }
+    res.json(rows);
+  });
+});
+
+
+
+
+
+// =============================================================================================
+// ================================ FIN ENDPOINTS CON SP =======================================
+// =============================================================================================
 
 
 // =============================================================================================

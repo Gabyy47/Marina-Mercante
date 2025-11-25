@@ -34,7 +34,7 @@ export default function Proveedores() {
     doc.text("Dirección General de la Marina Mercante", 170, 50);
 
     doc.setFontSize(14);
-    doc.text("Reporte de Proveedores", 170, 72);
+    doc.text("Reporte de Proveedores", 170, 72); 
 
     doc.setFontSize(10);
     doc.setTextColor(80);
@@ -87,6 +87,7 @@ export default function Proveedores() {
 
     setLoading(false);
   };
+
 
   useEffect(() => { fetchAll(); }, []);
   useEffect(() => {
