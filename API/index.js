@@ -1,12 +1,146 @@
 // ===== Dependencias =====
 var Express = require("express");
-var bodyParser = require("body-parser");
+var bodyParser = require("body-parser"); 
 var cors = require("cors");
-var mysql = require("mysql2");
+const mysql = require('mysql2');
 var jwt = require("jsonwebtoken");
 var cookieParser = require("cookie-parser");
 var speakeasy = require("speakeasy");
-var QRCode = require("qrcode"); // si luego quieres enrolar 2FA con QR
+var QRCode = require("qrcode"); 
+
+//Importar ruta para conexión de BD
+const DB_CONFIG = require("./dbConfig");
+
+//Importar rutas para backup
+const backupRoutes = require("./backupRoutes"); 
+
+// ===== Inicio de Express.js =====
+var app = Express();
+
+// ===== CONFIGURACIÓN Y ENVÍO DE CORREOS =====
+require('dotenv').config({
+  path: __dirname + '/.env',
+});
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
+const dns = require('dns');
+
+// URL base del sistema (para enlaces en correos)
+const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
+
+// Variables de entorno
+const {
+  SMTP_HOST,
+  SMTP_PORT,
+  SMTP_SECURE,
+  SMTP_USER,
+  SMTP_PASS,
+  MAIL_FROM
+} = process.env;
+
+// Log de configuración
+console.log('[SMTP cfg]', { SMTP_HOST, SMTP_PORT, SMTP_SECURE });
+
+// Resolver DNS para verificar conexión
+dns.lookup(SMTP_HOST, { all: true }, (err, addrs) => {
+  console.log('[SMTP resolve]', err || addrs);
+});
+
+// Crear transporter seguro
+const transporter = nodemailer.createTransport({
+  host: SMTP_HOST,
+  port: Number(SMTP_PORT) || 587,
+  secure: String(SMTP_SECURE) === 'true', // true → 465, false → 587
+  auth: { user: SMTP_USER, pass: SMTP_PASS },
+  connectionTimeout: 10000,
+  greetingTimeout: 8000,
+  socketTimeout: 10000,
+});
+
+// Verificar conexión SMTP al iniciar
+transporter.verify((err, ok) => {
+  if (err) {
+    console.error('❌ SMTP VERIFY ERROR:', err);
+  } else {
+    console.log('✅ SMTP READY:', ok);
+  }
+});
+
+// ===== Funciones auxiliares =====
+
+// Genera un código de 6 dígitos
+function gen6Code() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// Hashea el código
+function hashCode(code) {
+  return crypto.createHash('sha256').update(code).digest('hex');
+}
+
+// Envía correo con código de verificación
+async function SendVerifyMail({ to, name, code }) {
+  try {
+    console.log(`📤 Intentando enviar correo a: ${to}`);
+
+    const info = await transporter.sendMail({
+      from: MAIL_FROM || `"Soporte Marina Mercante" <${SMTP_USER}>`,
+      to,
+      subject: 'Tu código de verificación',
+      html: `
+        <p>Hola ${name || ''},</p>
+        <p>Tu código de verificación es:</p>
+        <p style="font-size:20px;font-weight:bold;letter-spacing:3px;">${code}</p>
+        <p>Caduca en 15 minutos.</p>
+        <p>Si no solicitaste este correo, puedes ignorarlo.</p>
+      `,
+    });
+
+    console.log('✅ Correo de verificación enviado a:', to);
+    console.log('✉️ ID del mensaje:', info.messageId);
+    return info;
+  } catch (err) {
+    console.error('❌ Error al enviar código:', err);
+    throw err;
+  }
+}
+
+// Exportar para usar en otros módulos
+module.exports = { transporter, SendVerifyMail, gen6Code, hashCode };
+
+// ===== Registrar acción en la bitácora =====
+function logBitacora(conexion, { id_objeto, id_usuario, accion, descripcion, usuario }, callback) {
+  
+  // Validación y valores por defecto
+  const params = [
+    id_objeto ?? null,
+    id_usuario ?? null,
+    accion ?? 'SIN_ACCION',
+    descripcion ?? '',
+    usuario ?? 'sistema'
+  ];
+  const query = "CALL event_bitacora(?, ?, ?, ?, ?)";
+  conexion.query(query, params, (err, results) => {
+    if (err) {
+      console.error(" Error al registrar en bitácora:", err.message);
+      if (callback) callback(err);
+    } else {
+      console.log(` Bitácora registrada correctamente → Acción: ${accion}`);
+      if (callback) callback(null, results);
+    }
+  });
+}
+
+// ===== Middlewares de auth (IMPORTAR SOLO UNA VEZ) =====
+const {
+  verificarToken,
+  autorizarRoles,
+  autorizarSelfOrAdmin,
+  bloquearCambioRolSiNoAdmin,
+} = require("./middlewares/auth");
+
+const registrarBitacora = (..._args) => {}; // TODO: implementar de verdad
+const meRoutes = require("./routes/me");
 
 // Logger opcional
 let logger;
@@ -17,20 +151,72 @@ try {
 }
 
 // ===== Conexión a la base de datos =====
-var conexion = mysql.createConnection({
-  host: "localhost",
-  port: "3306",
-  user: "root",
-  password: "",
-  database: "marina_mercante_v3",
-  charset: "utf8mb4", //  importante para ñ y acentos
-  authPlugins: {
-    mysql_native_password: () => () => Buffer.from("1984"),
-  },
+
+const conexion = mysql.createConnection(DB_CONFIG);
+
+conexion.connect((err) => {
+  if (err) {
+    console.error("Error de conexión a BD:", err);
+  } else {
+    console.log("Conectado a BD");
+  }
 });
 
-// ===== Inicio de Express.js =====
-var app = Express();
+
+// ====== Helper de permisos por rol/objeto ======
+function autorizarPermiso(nombreObjeto, accion) {
+  // accion: 'insertar' | 'actualizar' | 'eliminar' | 'consultar'
+  const mapCol = {
+    insertar: "puede_insertar",
+    actualizar: "puede_actualizar",
+    eliminar: "puede_eliminar",
+    consultar: "puede_consultar",
+  };
+
+  const col = mapCol[accion];
+  if (!col) {
+    throw new Error(`Acción de permiso desconocida: ${accion}`);
+  }
+
+  return (req, res, next) => {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ mensaje: "No autenticado" });
+    }
+
+    const idRol = user.id_rol;
+    if (!idRol) {
+      return res.status(403).json({ mensaje: "Rol no definido en el token" });
+    }
+
+    // IMPORTANTE: nombreObjeto debe coincidir EXACTO con la columna nombre_objeto de tbl_objeto
+    const sql = `
+      SELECT p.${col} AS permitido
+      FROM tbl_permiso p
+      INNER JOIN tbl_objeto o ON o.id_objeto = p.id_objeto
+      WHERE p.id_rol = ?
+        AND o.nombre_objeto = ?
+        AND p.${col} = 1
+      LIMIT 1
+    `;
+
+    conexion.query(sql, [idRol, nombreObjeto], (err, rows) => {
+      if (err) {
+        console.error("Error consultando permisos:", err);
+        return res.status(500).json({ mensaje: "Error verificando permisos" });
+      }
+
+      if (!rows || rows.length === 0) {
+        return res.status(403).json({
+          mensaje: `No tiene permiso para ${accion} en ${nombreObjeto}`,
+        });
+      }
+
+      // Tiene permiso
+      next();
+    });
+  };
+}
 
 // ===== Configuración de CORS =====
 app.use(
@@ -48,7 +234,7 @@ app.use(
         callback(new Error("Not allowed by CORS"));
       }
     },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
@@ -59,40 +245,32 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ===== Listener y conexión a MySQL =====
+// ===== Verificar conexión a la BD y levantar servidor =====
+app.use("/api", meRoutes(conexion, { verificarToken, bloquearCambioRolSiNoAdmin }));
 const PORT = 49146;
-const SECRET_KEY = "1984";
+const SECRET_KEY = process.env.JWT_SECRET || "1984";
+
+// === usar las rutas de backup 
+app.use("/api", backupRoutes); 
 
 app.listen(PORT, () => {
-  conexion.connect((err) => {
+  conexion.query("SELECT 1", (err, results) => {
     if (err) {
-      logger.error("Error al conectar a la BD: " + err.message);
-      throw err;
+      console.error(" Error al conectar a la BD:", err.message);
+      process.exit(1);
+    } else {
+      console.log(" Conexión a la BD con éxito.");
+      console.log(` API corriendo en http://localhost:${PORT}`);
     }
-    logger.info(`Conexión a la BD con éxito! API en http://localhost:${PORT}`);
   });
 });
+
 
 // ===== Utilidades =====
 function handleDatabaseError(err, res, message) {
   console.error("x " + message, err);
   res.status(500).json({ error: err.message || "Error de servidor" });
 }
-
-// JWT middleware
-const verificarToken = (req, res, next) => {
-  const token =
-    req.cookies.token || req.headers.authorization?.replace(/^Bearer\s+/i, "");
-  if (!token) return res.status(401).json({ mensaje: "Acceso denegado" });
-
-  try {
-    const verificado = jwt.verify(token, SECRET_KEY);
-    req.usuario = verificado;
-    next();
-  } catch (error) {
-    res.status(401).json({ mensaje: "Token inválido" });
-  }
-};
 
 // ===== Rutas base =====
 app.get("/api/json", (req, res) => {
@@ -107,146 +285,410 @@ app.get("/", (req, res) => {
 app.get("/api/seguro", verificarToken, (req, res) => {
   res.json({
     mensaje: "Acceso concedido a la ruta segura",
-    usuario: req.usuario,
+    usuario: req.user,
   });
 });
 
-// ====== CRUD PARA tbl_rol ======
-// Listar roles
-app.get("/api/roles", (req, res) => {
-  const q = "SELECT id_rol, nombre, descripcion FROM tbl_rol ORDER BY nombre ASC";
-  conexion.query(q, (err, rows) => {
-    if (err) return handleDatabaseError(err, res, "Error al listar roles:");
+// 1. Listar objetos
+app.get("/api/objetos", verificarToken, autorizarRoles("Administrador"), (req, res) => {
+  const sql = "SELECT id_objeto, nombre_objeto FROM tbl_objeto WHERE estado = 'ACTIVO'";
+  conexion.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error al listar objetos" });
     res.json(rows);
   });
 });
 
-// Obtener rol por ID
-app.get("/api/roles/:id", (req, res) => {
-  const q = "SELECT id_rol, nombre, descripcion FROM tbl_rol WHERE id_rol = ? LIMIT 1";
-  conexion.query(q, [parseInt(req.params.id)], (err, rows) => {
-    if (err) return handleDatabaseError(err, res, "Error al obtener rol:");
-    if (rows.length === 0) return res.status(404).json({ mensaje: "Rol no encontrado" });
-    res.json(rows[0]);
+// 2. Listar permisos de un rol
+app.get("/api/seguridad/permisos", verificarToken, autorizarRoles("Administrador"), (req, res) => {
+  const id_rol = req.query.id_rol;
+  const sql = `
+    SELECT id_permiso, id_rol, id_objeto,
+           puede_insertar, puede_eliminar, puede_actualizar, puede_consultar
+    FROM tbl_permiso
+    WHERE id_rol = ?
+  `;
+  conexion.query(sql, [id_rol], (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error al listar permisos" });
+    res.json(rows);
   });
 });
 
+// 3. Guardar permisos de un rol (sobreescribe todo)
+app.post("/api/seguridad/permisos/guardar", verificarToken, autorizarRoles("Administrador"), (req, res) => {
+  const { id_rol, permisos } = req.body;
+
+  if (!id_rol || !Array.isArray(permisos)) {
+    return res.status(400).json({ mensaje: "Datos incompletos" });
+  }
+
+  // Borramos los permisos actuales del rol y metemos los nuevos
+  const deleteSql = "DELETE FROM tbl_permiso WHERE id_rol = ?";
+  conexion.query(deleteSql, [id_rol], (err) => {
+    if (err) return res.status(500).json({ mensaje: "Error al limpiar permisos" });
+
+    if (permisos.length === 0) {
+      return res.json({ mensaje: "Permisos actualizados (lista vacía)" });
+    }
+
+    const insertSql = `
+      INSERT INTO tbl_permiso
+        (id_rol, id_objeto, puede_insertar, puede_eliminar, puede_actualizar, puede_consultar)
+      VALUES ?
+    `;
+
+    const values = permisos.map((p) => [
+      id_rol,
+      p.id_objeto,
+      p.puede_insertar,
+      p.puede_eliminar,
+      p.puede_actualizar,
+      p.puede_consultar,
+    ]);
+
+    conexion.query(insertSql, [values], (err2) => {
+      if (err2) return res.status(500).json({ mensaje: "Error al guardar permisos" });
+      res.json({ mensaje: "Permisos actualizados correctamente" });
+    });
+  });
+});
+
+// =========================================
+// PARÁMETROS DE SEGURIDAD - LISTAR TODOS
+// Solo Administrador
+// GET /api/seguridad/parametros
+// =========================================
+app.get(
+  "/api/seguridad/parametros",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const sql = `
+      SELECT 
+        id_parametro,
+        codigo,
+        nombre,
+        valor,
+        descripcion,
+        estado
+      FROM tbl_parametro_seguridad
+      WHERE estado = 'ACTIVO'
+      ORDER BY id_parametro
+    `;
+
+    conexion.query(sql, (err, rows) => {
+      if (err) {
+        console.error("Error al listar parámetros de seguridad:", err);
+        return res
+          .status(500)
+          .json({ mensaje: "Error al listar parámetros de seguridad" });
+      }
+      return res.json(rows);
+    });
+  }
+);
+
+// =========================================
+// OBTENER UN PARÁMETRO POR CÓDIGO
+// GET /api/seguridad/parametros/:codigo
+// =========================================
+app.get(
+  "/api/seguridad/parametros/:codigo",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const { codigo } = req.params;
+
+    const sql = `
+      SELECT 
+        id_parametro,
+        codigo,
+        nombre,
+        valor,
+        descripcion,
+        estado
+      FROM tbl_parametro_seguridad
+      WHERE codigo = ?
+      LIMIT 1
+    `;
+
+    conexion.query(sql, [codigo], (err, rows) => {
+      if (err) {
+        console.error("Error al obtener parámetro de seguridad:", err);
+        return res
+          .status(500)
+          .json({ mensaje: "Error al obtener parámetro de seguridad" });
+      }
+
+      if (rows.length === 0) {
+        return res.status(404).json({ mensaje: "Parámetro no encontrado" });
+      }
+
+      return res.json(rows[0]);
+    });
+  }
+);
+
+// =========================================
+// ACTUALIZAR PARÁMETRO POR CÓDIGO
+// PUT /api/seguridad/parametros/:codigo
+// body: { valor: "nuevoValor" }
+// =========================================
+app.put(
+  "/api/seguridad/parametros/:codigo",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const { codigo } = req.params;
+    const { valor } = req.body;
+
+    if (valor === undefined || valor === null || valor === "") {
+      return res
+        .status(400)
+        .json({ mensaje: "El valor del parámetro es obligatorio" });
+    }
+
+    const sql = `
+      UPDATE tbl_parametro_seguridad
+      SET valor = ?
+      WHERE codigo = ?
+    `;
+
+    conexion.query(sql, [valor, codigo], (err, result) => {
+      if (err) {
+        console.error("Error al actualizar parámetro de seguridad:", err);
+        return res
+          .status(500)
+          .json({ mensaje: "Error al actualizar parámetro de seguridad" });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ mensaje: "Parámetro no encontrado" });
+      }
+
+      return res.json({ mensaje: "Parámetro actualizado correctamente" });
+    });
+  }
+);
+
+
+// ====== CRUD PARA tbl_rol ======
+
+// Listar roles
+app.get("/api/roles", verificarToken, autorizarRoles("Administrador"),async (req, res) => {
+  const { id_usuario } = req.query; 
+  try {
+    const [rows] = await conexion.promise().query(
+      "SELECT id_rol, nombre, descripcion FROM tbl_rol ORDER BY nombre ASC"
+    );
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 4, "GET", "Se consultó la lista de roles"]
+      );
+    }
+    res.json(rows);
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al listar roles:");
+  }
+});
+
+// Obtener rol por ID
+app.get("/api/roles/:id", async (req, res) => {
+  const { id } = req.params;
+  const { id_usuario } = req.query;
+  try {
+    const [rows] = await conexion.promise().query(
+      "SELECT id_rol, nombre, descripcion FROM tbl_rol WHERE id_rol = ? LIMIT 1",
+      [parseInt(id)]
+    );
+
+    if (rows.length === 0)
+      return res.status(404).json({ mensaje: "Rol no encontrado" });
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 4, "GET", `Se consultó el rol con ID ${id}`]
+      );
+    }
+
+    res.json(rows[0]);
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al obtener rol:");
+  }
+});
+
 // Crear rol
-app.post("/api/roles", (req, res) => {
-  let { nombre, descripcion } = req.body;
+app.post("/api/roles", verificarToken, autorizarRoles("Administrador"), async (req, res) => {
+  let { nombre, descripcion, id_usuario } = req.body;
   if (!nombre || typeof nombre !== "string" || !nombre.trim()) {
     return res.status(400).json({ mensaje: "El nombre del rol es requerido" });
   }
+
   nombre = nombre.trim().toUpperCase();
   descripcion = (descripcion ?? "").toString().trim();
 
-  const q = "INSERT INTO tbl_rol (nombre, descripcion) VALUES (?, ?)";
-  conexion.query(q, [nombre, descripcion], (err, result) => {
-    if (err) {
-      if (err.code === "ER_DUP_ENTRY") {
-        return res.status(409).json({ mensaje: "Ya existe un rol con ese nombre" });
-      }
-      return handleDatabaseError(err, res, "Error al crear rol:");
+  try {
+    const [result] = await conexion.promise().query(
+      "INSERT INTO tbl_rol (nombre, descripcion) VALUES (?, ?)",
+      [nombre, descripcion]
+    );
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 4, "INSERT", `Se creó el rol ${nombre}`]
+      );
     }
+
     res.status(201).json({
       mensaje: "Rol creado correctamente",
       id_rol: result.insertId,
       nombre,
       descripcion
     });
-  });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ mensaje: "Ya existe un rol con ese nombre" });
+    }
+    handleDatabaseError(err, res, "Error al crear rol:");
+  }
 });
 
 // Actualizar rol
-app.put("/api/roles/:id", (req, res) => {
+app.put("/api/roles/:id", verificarToken, autorizarRoles("Administrador"),async (req, res) => {
   const id = parseInt(req.params.id);
-  let { nombre, descripcion } = req.body;
+  let { nombre, descripcion, id_usuario } = req.body;
 
   if (!id) return res.status(400).json({ mensaje: "ID inválido" });
   if (!nombre || typeof nombre !== "string" || !nombre.trim()) {
     return res.status(400).json({ mensaje: "El nombre del rol es requerido" });
   }
+
   nombre = nombre.trim().toUpperCase();
   descripcion = (descripcion ?? "").toString().trim();
 
-  const q = "UPDATE tbl_rol SET nombre = ?, descripcion = ? WHERE id_rol = ?";
-  conexion.query(q, [nombre, descripcion, id], (err, result) => {
-    if (err) {
-      if (err.code === "ER_DUP_ENTRY") {
-        return res.status(409).json({ mensaje: "Ya existe un rol con ese nombre" });
-      }
-      return handleDatabaseError(err, res, "Error al actualizar rol:");
-    }
+  try {
+    const [result] = await conexion.promise().query(
+      "UPDATE tbl_rol SET nombre = ?, descripcion = ? WHERE id_rol = ?",
+      [nombre, descripcion, id]
+    );
+
     if (result.affectedRows === 0) {
       return res.status(404).json({ mensaje: "Rol no encontrado" });
     }
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 4, "UPDATE", `Se actualizó el rol ${nombre} (ID ${id})`]
+      );
+    }
+
     res.json({ mensaje: "Rol actualizado correctamente" });
-  });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ mensaje: "Ya existe un rol con ese nombre" });
+    }
+    handleDatabaseError(err, res, "Error al actualizar rol:");
+  }
 });
 
 // Eliminar rol
-app.delete("/api/roles/:id", (req, res) => {
+app.delete("/api/roles/:id", verificarToken, autorizarRoles("Administrador"), async (req, res) => {
   const id = parseInt(req.params.id);
+  const { id_usuario } = req.query;
+
   if (!id) return res.status(400).json({ mensaje: "ID inválido" });
 
-  const q = "DELETE FROM tbl_rol WHERE id_rol = ?";
-  conexion.query(q, [id], (err, result) => {
-    if (err) {
-      // Si el rol está asignado a usuarios y la FK es RESTRICT, devolver 409
-      if (err.code === "ER_ROW_IS_REFERENCED_2" || err.code === "ER_ROW_IS_REFERENCED") {
-        return res.status(409).json({
-          mensaje: "No se puede eliminar: el rol está asignado a uno o más usuarios"
-        });
-      }
-      return handleDatabaseError(err, res, "Error al eliminar rol:");
-    }
+  try {
+    const [result] = await conexion.promise().query(
+      "DELETE FROM tbl_rol WHERE id_rol = ?",
+      [id]
+    );
+
     if (result.affectedRows === 0) {
       return res.status(404).json({ mensaje: "Rol no encontrado" });
     }
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 4, "DELETE", `Se eliminó el rol con ID ${id}`]
+      );
+    }
+
     res.json({ mensaje: "Rol eliminado correctamente" });
-  });
+  } catch (err) {
+    if (err.code === "ER_ROW_IS_REFERENCED_2" || err.code === "ER_ROW_IS_REFERENCED") {
+      return res.status(409).json({
+        mensaje: "No se puede eliminar: el rol está asignado a uno o más usuarios"
+      });
+    }
+    handleDatabaseError(err, res, "Error al eliminar rol:");
+  }
 });
 
-// ===== LOGIN (permitir a todo usuario con rol asignado distinto de "SIN ROL") =====
+// ===== LOGIN =====
 app.post("/api/login", (req, res) => {
   console.log("Ruta /api/login llamada");
+
   const { nombre_usuario, contraseña } = req.body;
 
+  // Validar campos
   if (!nombre_usuario || !contraseña) {
-    return res.status(400).json({ mensaje: "Faltan campos obligatorios." });
+    return res.status(400).json({ mensaje: "Faltan campos obligatorios." }); 
   }
 
-  const query = `
+  const q = `
     SELECT 
       u.id_usuario, 
       u.nombre_usuario, 
-      u.contraseña,
-      u.id_rol,
+      u.contraseña, 
+      u.is_verified, 
+      u.id_rol, 
       r.nombre AS rol_nombre
     FROM tbl_usuario u
-    LEFT JOIN tbl_rol r ON r.id_rol = u.id_rol
-    WHERE UPPER(u.nombre_usuario) = UPPER(?) AND u.contraseña = ?
+    LEFT JOIN tbl_rol r ON u.id_rol = r.id_rol
+    WHERE u.nombre_usuario = ? AND u.contraseña = ?
     LIMIT 1
   `;
 
-  conexion.query(query, [nombre_usuario, contraseña], (err, rows) => {
-    if (err) return handleDatabaseError(err, res, "Error en inicio de sesión:");
-    if (rows.length === 0) {
+  // SOLO UNA CONSULTA (la otra la eliminamos)
+  conexion.query(q, [nombre_usuario, contraseña], (err, rows) => {
+    if (err) {
+      console.error("Error en consulta de login:", err);
+      return res.status(500).json({ mensaje: "Error interno en la base de datos." });
+    }
+
+    if (!rows || rows.length === 0) {
       return res.status(401).json({ mensaje: "Credenciales inválidas." });
     }
 
     const usuario = rows[0];
     const rolNombre = (usuario.rol_nombre || "").trim().toUpperCase();
 
-    // Sin rol asignado o rol "SIN ROL" => bloquear
+    // Verificar rol
     if (!usuario.id_rol || !usuario.rol_nombre || rolNombre === "SIN ROL") {
       return res.status(403).json({
-        mensaje:
-          "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
+        mensaje: "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
       });
     }
 
-    // Si tiene cualquier rol válido => permitir
+    // Verificar email
+    if (Number(usuario.is_verified) !== 1) {
+      return res.status(403).json({
+        mensaje: "Debes verificar tu correo antes de iniciar sesión.",
+      });
+    }
+
+    // Generar token
     const token = jwt.sign(
       {
         id_usuario: usuario.id_usuario,
@@ -254,124 +696,446 @@ app.post("/api/login", (req, res) => {
         id_rol: usuario.id_rol,
         rol_nombre: usuario.rol_nombre,
       },
-      SECRET_KEY,
+      process.env.JWT_SECRET || "1984",
       { expiresIn: "1h" }
     );
 
+    // Guardar cookie
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false, // true en producción con HTTPS
+      secure: false,
       sameSite: "lax",
       maxAge: 3600000,
     });
 
-    res.json({
-      mensaje: "Inicio de sesión exitoso",
-      token,
-      usuario: {
+    // Registrar en bitácora
+    const ID_OBJETO_LOGIN = 1;
+
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_LOGIN,
         id_usuario: usuario.id_usuario,
-        nombre_usuario: usuario.nombre_usuario,
-        id_rol: usuario.id_rol,
-        rol_nombre: usuario.rol_nombre,
+        accion: "LOGIN",
+        descripcion: `El usuario ${usuario.nombre_usuario} inició sesión.`,
+        usuario: usuario.nombre_usuario,
       },
-    });
+      (bitErr) => {
+        if (bitErr) {
+          console.error("No se pudo registrar LOGIN en bitácora:", bitErr.message);
+        }
+
+        return res.json({
+          mensaje: "Inicio de sesión exitoso",
+          token,
+          usuario: {
+            id_usuario: usuario.id_usuario,
+            nombre_usuario: usuario.nombre_usuario,
+            id_rol: usuario.id_rol,
+            rol_nombre: usuario.rol_nombre,
+          },
+        });
+      }
+    );
   });
 });
-
 
 // ===== LOGOUT =====
 app.get("/api/logout", (req, res) => {
+  console.log("Ruta /api/logout llamada");
+  const token = req.cookies.token;
+  const ID_OBJETO_LOGIN = 1; 
+
+  if (token) {
+    try {
+      // Verificar y decodificar token
+      const decoded = jwt.verify(token, SECRET_KEY);
+
+      // Registrar acción en bitácora
+      logBitacora(
+        conexion,
+        {
+          id_objeto: ID_OBJETO_LOGIN,
+          id_usuario: decoded.id_usuario,
+          accion: "LOGOUT",
+          descripcion: `El usuario ${decoded.nombre_usuario} cerró sesión.`,
+          usuario: decoded.nombre_usuario,
+        },
+        (err) => {
+          if (err) {
+            console.error(" Error al registrar LOGOUT en bitácora:", err.message);
+          } else {
+            console.log(" LOGOUT registrado correctamente en bitácora");
+          }
+        }
+      );
+    } catch (tokenError) {
+      console.warn(" Token inválido o expirado al registrar LOGOUT:", tokenError.message);
+    }
+  } else {
+    console.warn(" No se encontró token en cookie durante LOGOUT.");
+  }
+
+  // Eliminar cookie de sesión 
   res.clearCookie("token", { httpOnly: true, sameSite: "lax" });
-  res.json({ mensaje: "Sesión cerrada" });
+  res.json({ mensaje: "Sesión cerrada correctamente." });
 });
 
-// ===== Recuperar contraseña (verifica TOTP) =====
-app.post("/api/recuperar-contrasena", async (req, res) => {
-  const { nombre_usuario, codigo } = req.body;
+// ===== Recuperación de contraseña =====
+// === 1. Iniciar recuperación ===
+app.post("/api/recuperar-iniciar", (req, res) => { 
+  console.log("▶ /api/recuperar-iniciar llamado con:", req.body); 
+  const { nombre_usuario, correo } = req.body;
 
-  if (!nombre_usuario || !codigo) {
+  // Validación básica
+  if (!nombre_usuario && !correo) {
+    return res.status(400).json({ mensaje: "Proporciona nombre de usuario o correo." }); 
+  }
+
+  const where = nombre_usuario ? "nombre_usuario = ?" : "correo = ?";
+  const value = nombre_usuario || correo;
+
+  const qSel = `
+    SELECT id_usuario, correo, nombre_usuario
+    FROM tbl_usuario
+    WHERE ${where}
+    LIMIT 1
+  `;
+
+  // Buscar usuario
+  conexion.query(qSel, [value], (err, rows) => {
+    if (err) {
+      console.error(" Error SQL (buscar usuario):", err);
+      return res.status(500).json({ mensaje: "Error al buscar usuario." });
+    }
+
+    if (!rows.length) {
+      return res.status(404).json({ mensaje: "Usuario no encontrado." });
+    }
+
+    const u = rows[0];
+    const code = Math.floor(100000 + Math.random() * 900000).toString(); // Código de 6 dígitos 
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Expira en 10 minutos 
+
+    const qUpd = `
+      UPDATE tbl_usuario
+      SET reset_code = ?, reset_expires = ?, reset_used = 0
+      WHERE id_usuario = ?
+    `;
+
+    // Guardar código en BD 
+    conexion.query(qUpd, [code, expiresAt, u.id_usuario], (err2) => { 
+      if (err2) {
+        console.error(" Error al guardar código:", err2);
+        return res.status(500).json({ mensaje: "Error al guardar código de recuperación." });
+      }
+
+      // Responder de inmediato al cliente
+      res.json({ mensaje: "Código generado y enviado (si el correo es válido)." });
+
+      // Enviar el correo sin bloquear respuesta
+      transporter.sendMail(
+        {
+          from: process.env.MAIL_FROM || `"Soporte Marina Mercante" <${process.env.SMTP_USER}>`,
+          to: u.correo,
+          subject: "Código para recuperar tu contraseña",
+          text: `Hola ${u.nombre_usuario}, tu código es: ${code}. Vence en 10 minutos.`,
+          html: `
+            <p>Hola <b>${u.nombre_usuario}</b>,</p>
+            <p>Tu código de recuperación es: <b>${code}</b></p>
+            <p>Vence en <b>10 minutos</b>.</p>
+            <p>Si no solicitaste esto, ignora este mensaje.</p>
+          `,
+        },
+        (mailErr, info) => {
+          if (mailErr) {
+            console.error(" Error enviando correo:", mailErr);
+          } else {
+            console.log(" EMAIL ENVIADO:", info.response);
+          }
+        }
+      );
+    });
+  });
+});
+
+// === 2. Verificar el código ===
+app.post("/api/recuperar-verificar", (req, res) => {
+  const { correo, nombre_usuario, codigo } = req.body;
+
+  if ((!correo && !nombre_usuario) || !codigo) {
     return res.status(400).json({ mensaje: "Faltan datos." });
   }
 
-  try {
-    // conflicto resuelto: usamos nombre_usuario correctamente
-    const query =
-      "SELECT secreto_google_auth FROM tbl_usuario WHERE nombre_usuario = ? LIMIT 1";
+  const where = nombre_usuario ? "nombre_usuario = ?" : "correo = ?";
+  const value = nombre_usuario || correo;
 
-    conexion.query(query, [nombre_usuario], async (err, rows) => {
-      if (err)
-        return handleDatabaseError(
-          err,
-          res,
-          "Error al obtener el secreto del usuario:"
-        );
-      if (rows.length === 0)
-        return res.status(404).json({ mensaje: "Usuario no encontrado" });
+  const qSel = `
+    SELECT id_usuario, reset_code, reset_expires, reset_used
+    FROM tbl_usuario
+    WHERE ${where}
+    LIMIT 1
+  `;
 
-      const secreto = rows[0].secreto_google_auth;
+  conexion.query(qSel, [value], (err, rows) => {
+    if (err) {
+      console.error(" Error al buscar código:", err);
+      return res.status(500).json({ mensaje: "Error al buscar código." });
+    }
 
-      const verificado = speakeasy.totp.verify({
-        secret: secreto,
-        encoding: "base32",
-        token: codigo,
-        window: 1, // tolerancia 30s
-      });
+    if (!rows.length) {
+      return res.status(404).json({ mensaje: "Usuario no encontrado." });
+    }
 
-      if (verificado) {
-        res.json({
-          mensaje:
-            "Código válido. Puedes proceder a restablecer la contraseña.",
-        });
-      } else {
-        res.status(400).json({ mensaje: "Código inválido" });
-      }
+    const u = rows[0];
+    const now = new Date();
+
+    if (!u.reset_code || !u.reset_expires) {
+      return res.status(400).json({ mensaje: "No hay solicitud activa de recuperación." });
+    }
+    if (u.reset_used) {
+      return res.status(400).json({ mensaje: "Este código ya fue usado." });
+    }
+    if (now > new Date(u.reset_expires)) {
+      return res.status(400).json({ mensaje: "El código ha expirado." });
+    }
+    if (u.reset_code !== codigo) {
+      return res.status(400).json({ mensaje: "Código incorrecto." });
+    }
+
+    // Marcar el código como usado
+    const qUpd = "UPDATE tbl_usuario SET reset_used = 1 WHERE id_usuario = ?";
+    conexion.query(qUpd, [u.id_usuario], (err2) => {
+      if (err2) console.error(" Error marcando código usado:", err2);
     });
-  } catch (error) {
-    console.error("Error en recuperación de contraseña:", error);
-    res.status(500).json({ mensaje: "Error del servidor" });
+
+    res.json({ mensaje: "Código verificado. Ahora puedes establecer una nueva contraseña." });
+  });
+});
+
+
+// === 3. Restablecer contraseña ===
+app.post("/api/recuperar-restablecer", (req, res) => {
+  const { correo, nombre_usuario, nueva_contraseña } = req.body;
+
+  if ((!correo && !nombre_usuario) || !nueva_contraseña) {
+    return res.status(400).json({ mensaje: "Faltan datos." });
+  }
+
+  const where = nombre_usuario ? "nombre_usuario = ?" : "correo = ?";
+  const value = nombre_usuario || correo;
+
+  const qSel = `
+    SELECT id_usuario
+    FROM tbl_usuario
+    WHERE ${where} AND reset_used = 1
+    LIMIT 1
+  `;
+
+  conexion.query(qSel, [value], (err, rows) => {
+    if (err) {
+      console.error(" Error al verificar usuario:", err);
+      return res.status(500).json({ mensaje: "Error al verificar usuario." });
+    }
+
+    if (!rows.length) {
+      return res.status(404).json({ mensaje: "Verificación inválida o expirada." });
+    }
+
+    const u = rows[0];
+
+    const qUpd = `
+      UPDATE tbl_usuario
+      SET contraseña = ?, reset_code = NULL, reset_expires = NULL, reset_used = 0
+      WHERE id_usuario = ?
+    `;
+
+    conexion.query(qUpd, [nueva_contraseña, u.id_usuario], (err2) => {
+      if (err2) {
+        console.error(" Error al actualizar contraseña:", err2); 
+        return res.status(500).json({ mensaje: "Error al actualizar contraseña." });
+      }
+
+      res.json({ mensaje: "Contraseña actualizada. Ya puedes iniciar sesión." });
+    });
+  });
+});
+
+// === Helper: generar código de 6 dígitos ===
+function gen6Code() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// ===== CRUD PARA tbl_usuario =====
+// Listar todos los usuarios
+// Listar todos los usuarios con nombre del rol
+app.get("/api/usuario", async (req, res) => {
+  const { id_usuario } = req.query;
+
+  try {
+    const [rows] = await conexion.promise().query(`
+      SELECT 
+        u.*, 
+        r.nombre AS rol_nombre
+      FROM tbl_usuario u
+      LEFT JOIN tbl_rol r ON u.id_rol = r.id_rol
+      ORDER BY u.id_usuario DESC
+    `);
+
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 3, "GET", "Se consultó la lista de usuarios"]
+      );
+    }
+
+    res.json(rows);
+  } catch (err) {
+    handleDatabaseError(err, res, "Error en listado de usuarios:");
   }
 });
 
-// ===== Verificar si un usuario existe =====
-app.post("/api/verificar-usuario", (req, res) => {
-  const { nombre_usuario } = req.body;
 
-  if (!nombre_usuario)
-    return res.status(400).json({ mensaje: "nombre_usuario es requerido" });
-
-  const query = "SELECT 1 FROM tbl_usuario WHERE nombre_usuario = ? LIMIT 1";
-  conexion.query(query, [nombre_usuario], (err, rows) => {
-    if (err)
-      return res
-        .status(500)
-        .json({ mensaje: "Error al verificar el usuario" });
-    res.json({ existe: rows.length > 0 });
-  });
-});
-
-// ===== Listar todos los usuarios =====
-app.get("/api/usuario", (req, res) => {
-  const query = "SELECT * FROM tbl_usuario ORDER BY id_usuario DESC";
-  conexion.query(query, (err, rows) => {
-    if (err) return handleDatabaseError(err, res, "Error en listado de usuario:");
-    res.json(rows);
-  });
-});
-
-// ===== Obtener usuario por ID =====
-app.get("/api/usuario/:id", (req, res) => {
+// Obtener usuario por ID
+app.get("/api/usuario/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const query = "SELECT * FROM tbl_usuario WHERE id_usuario = ? LIMIT 1";
-  conexion.query(query, [id], (err, rows) => {
-    if (err)
-      return handleDatabaseError(err, res, "Error al obtener usuario por ID:");
+  const { id_usuario } = req.query;
+
+  try {
+    const [rows] = await conexion.promise().query(
+      "SELECT * FROM tbl_usuario WHERE id_usuario = ? LIMIT 1",
+      [id]
+    );
+
     if (rows.length === 0)
       return res.status(404).json({ mensaje: "Usuario no encontrado" });
+
+    // Registrar en bitácora
+    if (id_usuario) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_usuario, 3, "GET", `Se consultó el usuario con ID ${id}`]
+      );
+    }
+
     res.json(rows[0]);
-  });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al obtener usuario por ID:");
+  }
 });
 
-// ===== Leer una cookie específica (debug) =====
+// Insertar nuevo usuario
+app.post("/api/usuario", async (req, res) => {
+  const {
+    id_rol,
+    nombre,
+    apellido,
+    correo,
+    nombre_usuario,
+    contraseña,
+    id_usuario: id_admin // usuario que realiza la acción (admin)
+  } = req.body;
+
+  if (!nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
+    return res.status(400).json({ error: "Faltan campos obligatorios." });
+  }
+
+  const query = `
+    INSERT INTO tbl_usuario (id_rol, nombre, apellido, correo, nombre_usuario, contraseña)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
+  const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, contraseña];
+
+  try {
+    const [result] = await conexion.promise().query(query, values);
+
+    // Registrar en bitácora
+    if (id_admin) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [
+          id_admin,
+          3,
+          "INSERT",
+          `Se agregó el usuario ${nombre_usuario} (${nombre} ${apellido})`
+        ]
+      );
+    }
+
+    res.json({ mensaje: "Usuario agregado correctamente", id: result.insertId });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al insertar usuario:");
+  }
+});
+
+// Actualizar usuario
+app.put("/api/usuario", async (req, res) => {
+  const { id_usuario, id_rol, nombre, apellido, correo, nombre_usuario, id_admin } = req.body;
+
+  if (!id_usuario)
+    return res.status(400).json({ error: "id_usuario es requerido" });
+
+  const query = `
+    UPDATE tbl_usuario
+    SET id_rol = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?
+    WHERE id_usuario = ?
+  `;
+  const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, id_usuario];
+
+  try {
+    const [result] = await conexion.promise().query(query, values);
+
+    if (result.affectedRows === 0)
+      return res.status(404).json({ mensaje: "Usuario no encontrado" });
+
+    // Registrar en bitácora
+    if (id_admin) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [
+          id_admin,
+          3,
+          "UPDATE",
+          `Se actualizó el usuario ${nombre_usuario} (ID ${id_usuario})`
+        ]
+      );
+    }
+
+    res.json({ mensaje: "Usuario actualizado correctamente" });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al actualizar usuario:");
+  }
+});
+
+// Eliminar usuario
+app.delete("/api/usuario/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { id_admin } = req.query; // el usuario que ejecuta el borrado
+
+  try {
+    const [result] = await conexion.promise().query(
+      "DELETE FROM tbl_usuario WHERE id_usuario = ?",
+      [id]
+    );
+
+    if (result.affectedRows === 0)
+      return res.status(404).json({ mensaje: "Usuario no encontrado" });
+
+    // Registrar en bitácora
+    if (id_admin) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [id_admin, 3, "DELETE", `Se eliminó el usuario con ID ${id}`]
+      );
+    }
+
+    res.json({ mensaje: "Usuario eliminado correctamente" });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al eliminar usuario:");
+  }
+});
+
+// ===== Leer cookie (sin bitácora, es solo debug) =====
 app.get("/api/cookie", (req, res) => {
   if (!req.cookies) {
     return res.status(400).json({
@@ -389,10 +1153,217 @@ app.get("/api/cookie", (req, res) => {
   }
 });
 
+
+
+// === helpers 
+
+function gen6Code() {
+  return Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
+}
+
+function hashCode(code) {
+  return crypto.createHash('sha256').update(String(code)).digest('hex');
+}
+
+// === REGISTRO con envío de CÓDIGO ===
+app.post('/api/auth/register', (req, res) => {
+  const { nombre, apellido, correo, nombre_usuario, contraseña } = req.body;
+
+  if (!nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
+    return res.status(400).json({ mensaje: 'Rellena todos los campos.' });
+  }
+
+  const qUser = `
+    INSERT INTO tbl_usuario (nombre, apellido, correo, nombre_usuario, contraseña, is_verified, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 0, NOW(), NOW())
+  `;
+
+  conexion.query(qUser, [nombre, apellido, correo, nombre_usuario, contraseña], (err, result) => {
+    if (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ mensaje: 'Correo o nombre de usuario ya existe.' });
+      }
+      return handleDatabaseError(err, res, 'Error al registrar usuario:');
+    }
+
+    const id_usuario = result.insertId;
+
+    // 1) Generar y hashear código
+    const code = gen6Code();
+    const code_hash = hashCode(code);
+    const expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+    // 2) Guardar token
+   const qTok = `
+  INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, used, created_at)
+  VALUES (?, ?, ?, 0, NOW())
+`;
+    conexion.query(qTok, [id_usuario, code_hash, expires_at], async (err2) => {
+      if (err2) return handleDatabaseError(err2, res, 'Error al crear token:');
+
+      // 3) Enviar correo
+      try {
+        await SendVerifyMail({ to: correo, name: nombre, code });
+        return res.status(201).json({
+          mensaje: 'Usuario creado. Revisa tu correo para verificar la cuenta con el código enviado.'
+        });
+      } catch (e) {
+        console.error('Email error:', e);
+        return res.status(500).json({
+          mensaje: 'Usuario creado, pero falló el envío del correo. Intenta “reenviar código”.'
+        });
+      }
+    });
+  });
+});
+
+//Verificar el código recibido por el usuario
+app.post('/api/auth/verify-code', (req, res) => {
+  const { correo, code } = req.body;
+  if (!correo || !code) {
+    return res.status(400).json({ mensaje: 'Faltan datos: correo o código.' });
+  }
+
+  // Buscar usuario
+  const qUser = `SELECT id_usuario FROM tbl_usuario WHERE correo = ? LIMIT 1`;
+  conexion.query(qUser, [correo], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, 'Error al buscar usuario:');
+    if (rows.length === 0) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+
+    const id_usuario = rows[0].id_usuario;
+
+    // Generar hash del código recibido
+    const code_hash = crypto.createHash('sha256').update(String(code)).digest('hex');
+
+    // Buscar token válido
+    const qTok = `
+      SELECT id_verificar_email, expires_at, used
+      FROM verificar_email_tokens
+      WHERE id_usuario = ? AND token_hash = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    conexion.query(qTok, [id_usuario, code_hash], (err2, tokRows) => {
+      if (err2) return handleDatabaseError(err2, res, 'Error al verificar token:');
+      if (tokRows.length === 0) {
+        return res.status(400).json({ mensaje: 'Código inválido o incorrecto.' });
+      }
+
+      const token = tokRows[0];
+      if (token.used) {
+        return res.status(400).json({ mensaje: 'Este código ya fue utilizado.' });
+      }
+
+      const now = new Date();
+      if (new Date(token.expires_at) < now) {
+        return res.status(400).json({ mensaje: 'El código ha expirado. Solicita uno nuevo.' });
+      }
+
+      // Marcar token como usado y usuario como verificado
+      const qUpdTok = `UPDATE verificar_email_tokens SET used = 1 WHERE id_verificar_email = ?`;
+      const qUpdUser = `UPDATE tbl_usuario SET is_verified = 1 WHERE id_usuario = ?`;
+
+      conexion.query(qUpdTok, [token.id_verificar_email], (err3) => {
+        if (err3) return handleDatabaseError(err3, res, 'Error al actualizar token:');
+        conexion.query(qUpdUser, [id_usuario], (err4) => {
+          if (err4) return handleDatabaseError(err4, res, 'Error al actualizar usuario:');
+
+          res.json({ mensaje: ' Cuenta verificada correctamente.' });
+        });
+      });
+    });
+  });
+});
+
+// ===== ENVIAR CÓDIGO DE VERIFICACIÓN =====
+app.post('/api/enviar', (req, res) => {
+  const { correo } = req.body;
+
+  if (!correo) {
+    return res.status(400).json({ mensaje: 'correo es requerido' });
+  }
+
+  // Buscar usuario
+  const qUser = `
+    SELECT id_usuario, nombre, is_verified 
+    FROM tbl_usuario 
+    WHERE correo = ? 
+    LIMIT 1
+  `;
+
+  conexion.query(qUser, [correo], (err, rows) => {
+    if (err) {
+      return handleDatabaseError(err, res, 'Error al buscar usuario:');
+    }
+
+    if (rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+    }
+
+    const u = rows[0];
+
+    // Si ya está verificado -> no reenviar código
+    if (u.is_verified) {
+      return res.json({ mensaje: 'El correo ya está verificado.' });
+    }
+
+    // Marcar tokens anteriores como usados (por seguridad)
+    const qMarkUsed = `
+      UPDATE verificar_email_tokens 
+      SET used = 1 
+      WHERE id_usuario = ?
+    `;
+
+    conexion.query(qMarkUsed, [u.id_usuario], (err2) => {
+      if (err2) {
+        return handleDatabaseError(err2, res, 'Error al invalidar tokens anteriores:');
+      }
+
+      // Generar nuevo código y expiración
+      const code = gen6Code();
+      const code_hash = hashCode(code);
+      const expires_at = new Date(Date.now() + 15 * 60 * 1000);
+
+      // Guardar nuevo token
+      const qTok = `
+        INSERT INTO verificar_email_tokens
+          (id_usuario, token_hash, expires_at, created_at, used)
+        VALUES (?, ?, ?, NOW(), 0)
+      `;
+
+      conexion.query(qTok, [u.id_usuario, code_hash, expires_at], async (err3) => {
+        if (err3) {
+          return handleDatabaseError(err3, res, 'Error al crear el nuevo token:');
+        }
+
+        // ENVIAR EL CORREO 
+        try {
+          await SendVerifyMail({
+            to: correo,
+            name: u.nombre,
+            code
+          });
+
+          console.log(`Código enviado a ${correo}: ${code}`);
+
+          return res.json({
+            mensaje: 'Se envió un código de verificación al correo proporcionado.'
+          });
+
+        } catch (e) {
+          console.error(' Error enviando correo:', e);
+          return res.status(500).json({
+            mensaje: 'No se pudo enviar el código al correo.'
+          });
+        }
+      });
+    });
+  });
+});
+
 // ===== Insertar nuevo usuario (rol opcional; por defecto sin rol) =====
-app.post("/api/usuario", (req, res) => {
-  const {
-    id_rol,          // opcional: admin puede pasarlo; si no, NULL
+app.post("/api/usuario", verificarToken, autorizarRoles("Administrador"),  (req, res) => {
+  const {         
     nombre,
     apellido,
     correo,
@@ -401,732 +1372,321 @@ app.post("/api/usuario", (req, res) => {
   } = req.body;
 
   if (!nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
-    return res.status(400).json({ error: "Faltan campos obligatorios." });
+    return res.status(400).json({ mensaje: 'Rellena todos los campos.' });
   }
 
-  const query = `
-    INSERT INTO tbl_usuario (id_rol, nombre, apellido, correo, nombre_usuario, contraseña)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `;
-  const values = [
-    id_rol ?? null,
-    nombre,
-    apellido,
-    correo,
-    nombre_usuario,
-    contraseña,
-  ];
+  const qTok = `
+  INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, used, created_at)
+  VALUES (?, ?, ?, 0, NOW())
+`;
 
-  conexion.query(query, values, (err) => {
-    if (err) return handleDatabaseError(err, res, "Error al insertar usuario:");
-    res.json({ mensaje: "Usuario agregado correctamente" });
+
+  conexion.query(qUser, [nombre, apellido, correo, nombre_usuario, contraseña], (err, result) => {
+    if (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ mensaje: 'Correo o nombre de usuario ya existe.' });
+      }
+      return handleDatabaseError(err, res, 'Error al registrar usuario:');
+    }
+
+    const id_usuario = result.insertId;
+
+    // 1) Generar y hashear código
+    const code = gen6Code();
+    const code_hash = hashCode(code);
+    const expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+    // 2) Guardar token
+    const qTok = `
+  INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, used, created_at)
+  VALUES (?, ?, ?, 0, NOW())
+`;
+    conexion.query(qTok, [id_usuario, code_hash, expires_at], async (err2) => {
+      if (err2) return handleDatabaseError(err2, res, 'Error al crear token:');
+
+      // 3) Enviar correo
+      try {
+        await SendVerifyMail({ to: correo, name: nombre, code });
+        return res.status(201).json({
+          mensaje: 'Usuario creado. Revisa tu correo para verificar la cuenta con el código enviado.'
+        });
+      } catch (e) {
+        console.error('Email error:', e);
+        return res.status(500).json({
+          mensaje: 'Usuario creado, pero falló el envío del correo. Intenta “reenviar código”.'
+        });
+      }
+    });
   });
 });
 
+// ===== REENVIAR CÓDIGO DE VERIFICACIÓN =====
+app.post("/api/reenviar", (req, res) => {
+  const { correo } = req.body;
+
+  if (!correo) {
+    return res.status(400).json({ mensaje: "correo es requerido" });
+  }
+
+  const qUser = `
+    SELECT id_usuario, nombre, is_verified
+    FROM tbl_usuario
+    WHERE correo = ?
+    LIMIT 1
+  `;
+
+  conexion.query(qUser, [correo], (err, rows) => {
+    if (err) {
+      return handleDatabaseError(err, res, "Error al buscar usuario:");
+    }
+
+    if (rows.length === 0) {
+      return res.status(404).json({ mensaje: "Usuario no encontrado." });
+    }
+
+    const u = rows[0];
+
+    // Si ya está verificado, no tiene sentido reenviar
+    if (u.is_verified) {
+      return res.json({ mensaje: "El correo ya está verificado." });
+    }
+
+    // Marcar tokens anteriores como usados (por seguridad)
+    const qMarkUsed = `
+      UPDATE verificar_email_tokens
+      SET used = 1
+      WHERE id_usuario = ?
+    `;
+
+    conexion.query(qMarkUsed, [u.id_usuario], (err2) => {
+      if (err2) {
+        return handleDatabaseError(
+          err2,
+          res,
+          "Error al invalidar tokens anteriores:"
+        );
+      }
+
+      // Generar nuevo código y expiración
+      const code = gen6Code();
+      const code_hash = hashCode(code);
+      const expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+
+      // Guardar nuevo token (used = 0)
+      const qTok = `
+        INSERT INTO verificar_email_tokens
+          (id_usuario, token_hash, expires_at, created_at, used)
+        VALUES (?, ?, ?, NOW(), 0)
+      `;
+
+      conexion.query(
+        qTok,
+        [u.id_usuario, code_hash, expires_at],
+        async (err3) => {
+          if (err3) {
+            return handleDatabaseError(
+              err3,
+              res,
+              "Error al crear nuevo token:"
+            );
+          }
+
+          // Enviar correo 
+          try {
+            await SendVerifyMail({
+              to: correo,
+              name: u.nombre,
+              code,
+            });
+
+            console.log(`Nuevo código reenviado a ${correo}: ${code}`);
+
+            return res.json({
+              mensaje: "Se envió un nuevo código de verificación al correo proporcionado.",
+            });
+          } catch (e) {
+            console.error("Error enviando correo:", e);
+            return res.status(500).json({
+              mensaje: "No se pudo enviar el código al correo.",
+            });
+          }
+        }
+      );
+    });
+  });
+});
 
 // ===== Actualizar usuario =====
-app.put("/api/usuario", (req, res) => {
-  const { id_usuario, id_rol, nombre, apellido, correo, nombre_usuario } = req.body;
+// ACTUALIZAR usuario -> él mismo o Administrador
+app.put(
+  "/api/usuario/:id",
+  verificarToken,
+  autorizarSelfOrAdmin("id"),
+  bloquearCambioRolSiNoAdmin, // impide que no-admin cambie su rol
+  (req, res) => {
+    const id = Number(req.params.id);
 
-  if (!id_usuario)
-    return res.status(400).json({ error: "id_usuario es requerido" });
+    // solo campos permitidos para no-admin:
+    const campos = [ "nombre", "apellido", "correo", "nombre_usuario", "contraseña"];
+    // si es admin, puede incluir id_rol:
+    if (req.user.rol_nombre === "Administrador") campos.push("id_rol");
 
-  const query = `
-    UPDATE tbl_usuario
-    SET id_rol = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?
-    WHERE id_usuario = ?
-  `;
-  const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, id_usuario];
+    const update = {};
+    for (const c of campos) if (req.body[c] !== undefined) update[c] = req.body[c];
+    if (!Object.keys(update).length) return res.status(400).json({ mensaje: "Nada para actualizar" });
 
-  conexion.query(query, values, (err) => {
-    if (err) return handleDatabaseError(err, res, "Error al actualizar usuario:");
-    res.json({ mensaje: "Usuario actualizado correctamente" });
-  });
-});
-
-
-// ===== Eliminar usuario =====
-app.delete("/api/usuario/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const query = "DELETE FROM tbl_usuario WHERE id_usuario = ?";
-  conexion.query(query, [id], (err) => {
-    if (err)
-      return handleDatabaseError(err, res, "Error al eliminar usuario:");
-    res.json({ mensaje: "Usuario eliminado correctamente" });
-  });
-});
-
-//GET cliente 
-
-app.get('/api/cliente', (request, response) => {
-    var query = "SELECT * FROM tbl_cliente";
-    
-    conexion.query(query, (err, rows) => { 
-        if (err) {
-            logger.error("Error en listado de cliente: " + err.message);
-            return response.status(500).json({ error: "Error en listado de cliente" });
-        }
-        response.json(rows);
-        registrarBitacora("tlb_cliente", "GET", request.body); // Registra la petición en la bitácora
-        logger.info("Listado de cliente - OK");
+    conexion.query("UPDATE tbl_usuario SET ? WHERE id_usuario = ?", [update, id], (err, result) => {
+      if (err) return res.status(500).json({ mensaje: "Error al actualizar" });
+      if (result.affectedRows === 0) return res.status(404).json({ mensaje: "Usuario no encontrado" });
+      res.json({ mensaje: "Usuario actualizado correctamente" });
     });
-});
+  }
+);
 
-// GET con where cliente
-app.get('/api/cliente/:id',(request, response)=>{
-    var query = "SELECT * FROM tbl_cliente WHERE id_cliente = ?"
-    var values = [parseInt(request.params.id)];
+//Verificar código
+app.post('/api/auth/verify-code', (req, res) => {
+  const { correo, code } = req.body;
+  if (!correo || !code) {
+    return res.status(400).json({ mensaje: 'Faltan datos: correo o código.' });
+  }
 
-    conexion.query(query,values,function(err,rows,fields){
-        if (err){
-            handleDatabaseError(err, response, "Error en listado de cliente con where:");
-            return;
-        }
-        registrarBitacora("tbl_cliente", "GET", request.body); 
-        logger.info("Listado de clientes con where - OK");
-        response.json(rows);
-    });
-});
+  // Buscar usuario
+  const qUser = `SELECT id_usuario FROM tbl_usuario WHERE correo = ? LIMIT 1`;
+  conexion.query(qUser, [correo], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, 'Error al buscar usuario:');
+    if (rows.length === 0) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
 
-// Insert cliente
-app.post('/api/cliente', (request, response) => {
-    var query = "INSERT INTO tbl_cliente (nombre, identidad) VALUES (?, ?)";
-    var values = [
-        request.body["nombre"],
-        request.body["identidad"]
-    ];
+    const id_usuario = rows[0].id_usuario;
 
-    conexion.query(query, values, function(err, rows, fields) {
-        if (err) {
-            handleDatabaseError(err, response, "Error en inserción del cliente:");
-            return;
-        }
-        registrarBitacora("cliente", "INSERT", request.body); // Registra accion en la bitácora
-        logger.info("INSERT de cliente - OK");
-        response.json("INSERT EXITOSO!");
-    });
-});
+    // Generar hash del código recibido
+    const code_hash = crypto.createHash('sha256').update(String(code)).digest('hex');
 
-// PUT de cliente
-app.put('/api/cliente/:id', (request, response) => {
-    console.log("Params:", request.params);
-    console.log("Body:", request.body);
-    const query = `
-        UPDATE tbl_cliente 
-        SET nombre = ?, identidad = ? WHERE id_cliente = ?
+    // Buscar token válido
+    const qTok = `
+      SELECT id_verificar_email, expires_at, used
+      FROM verificar_email_tokens
+      WHERE id_usuario = ? AND token_hash = ?
+      ORDER BY created_at DESC
+      LIMIT 1
     `;
-    const values = [
-        request.body["nombre"],
-        request.body["identidad"],
-        request.body["id_cliente"]
-    ];
-
-    conexion.query(query, values, (err) => {
-        if (err) {
-            handleDatabaseError(err, response, "Error en actualización de cliente:");
-            return;
-        }
-        registrarBitacora("cliente", "PUT");
-        logger.info("ACTUALIZACIÓN cliente - OK");
-        response.json("UPDATE EXITOSO!");
-    });
-});
-
-
-app.delete('/api/cliente/:id', (request, response) => {
-    var query = "DELETE FROM tbl_cliente where id_cliente= ?";
-    var values = [
-        parseInt(request.params.id)
-    ];
-
-    conexion.query(query, values, function(err, rows, fields) {
-        if (err) {
-            handleDatabaseError(err, response, "Error en la eliminación del cliente:");
-            return;
-        }
-        
-        registrarBitacora("cliente", "DELETE", request.body); // Registra accion en la bitácora
-        logger.info("DELETE de cliente - OK");
-        response.json("DELETE EXITOSO!");
-    });
-});
-
-//Get 
-app.get('/api/estado_ticket',(request, response)=>{
-  var query = "SELECT * FROM marina_mercante.tbl_estado_ticket"
-    conexion.query(query,function(err,rows,fields){
-        if (err){
-            response.send("301 ERROR EN LISTADO DE ESTADOS DE TICKET")
-        };
-        registrarBitacora("Estados de ticket", "GET", request.body); //REGISTRAR LA PETICION EN LA BITACORA
-        response.send(rows)
-        console.log("listado de estados de ticket - OK")
-    })
-});
-
-//Get listado de estado de ticket con where
-app.get('/api/estado_ticket/:id',(request, response)=>{
-  var query = "SELECT * FROM marina_mercante.tbl_estado_ticket WHERE id_estado_ticket = ?"
-    var values = [
-        parseInt(request.params.id)
-    ];
-    conexion.query(query,values,function(err,rows,fields){
-        if (err){
-            response.send("301 ERROR EN LISTADO DE ESTADO DE TICKET")
-        };
-        registrarBitacora("estado de ticket", "GET", request.body);
-        response.send(rows)
-        console.log("listado de productos con where - OK")
-    })
-});
-
-
-//Post insert de productos
-app.post('/api/estado_ticket', (request, response) => {
-  var query = "INSERT INTO marina_mercante.tbl_estado_ticket (estado) VALUES (?)";
-    var values = [
-        request.body["estado"],
-        
-    ];
-    conexion.query(query, values, function(err, rows, fields) {
-        if (err) {
-            console.log(err.message);
-            return response.status(500).json({ error: err.message }); // Mejor manejo de errores
-        }
-        registrarBitacora("Estado ticket", "POST", request.body);
-        response.json("INSERT EXITOSO!");
-        console.log("INSERT de estado ticket - OK");
-    });
-});
-
-
-//Put Update de Estdo ticket
-app.put('/api/estado_ticket', (request, response) => {
-  var query = "UPDATE marina_mercante.tbl_estado_ticket SET estado = ? where id_estado_ticket = ?";
-    var values = [
-        request.body["estado"]
-       
-    ];
-    conexion.query(query, values, function(err, rows, fields) {
-        if (err) {
-            console.log(err.message);
-            return response.status(500).json({ error: err.message }); // Mejor manejo de errores
-        }
-        registrarBitacora("estado ticket", "PUT", request.body);
-        response.json("UPDATE EXITOSO!");
-        console.log("UPDATE de estado ticket - OK");
-    });
-});
-
-
-//Delete de estado de ticket
-app.delete('/api/estado_ticket/:id', (request, response) => {
-  var query = "DELETE FROM marina_mercante.tbl_estado_ticket WHERE id_estado_ticket = ?";
-    var values = [
-        parseInt(request.params.id)
-    ];
-    conexion.query(query, values, function(err, rows, fields) {
-        if (err) {
-            console.log(err.message);
-            return response.status(500).json({ error: err.message }); // Mejor manejo de errores
-        }
-        registrarBitacora("productos", "DELETE", request.body);
-        response.json("DELETE EXITOSO!");
-        console.log("DELETE de estado ticket - OK");
-    });
-});
-
-// ====== CRUD PARA tl_proveedor ======  
-app.get('/api/proveedor', (req, res) => {  
-  // Nota: usar el nombre de tabla correcto 'tbl_proveedor' (homogeneizar prefijo 'tbl_')
-  const query = "SELECT * FROM tbl_proveedor";  
-  conexion.query(query, (err, rows) => {  
-    if (err) {  
-      console.error("Error al listar proveedor:", err);  
-      res.status(500).json({ error: "Error al listar proveedor" });  
-      return;  
-    }  
-    res.json(rows);  
-  });  
-});  
-  
-app.get('/api/proveedor/:id', (req, res) => {  
-  const query = "SELECT * FROM tbl_proveedor WHERE id_proveedor = ?";  
-  conexion.query(query, [req.params.id], (err, rows) => {  
-    if (err) {  
-      console.error("Error al obtener proveedor:", err);  
-      res.status(500).json({ error: "Error al obtener proveedor" });  
-      return;  
-    }  
-    res.json(rows[0]);  
-  });  
-});  
-  
-app.post('/api/proveedor', (req, res) => {  
-  const { nombre, telefono, direccion } = req.body;  
-  const query = "INSERT INTO tbl_proveedor (nombre, telefono, direccion) VALUES (?, ?, ?)";  
-  conexion.query(query, [nombre, telefono, direccion], (err, result) => {  
-    if (err) {  
-      console.error("Error al insertar proveedor:", err);  
-      res.status(500).json({ error: "Error al insertar proveedor" });  
-      return;  
-    }  
-    res.json({ message: "Proveedor insertado correctamente", id: result.insertId });  
-  });  
-});  
-  
-app.put('/api/proveedor/:id', (req, res) => {  
-  const { nombre, telefono, direccion } = req.body;  
-  const query = "UPDATE tbl_proveedor SET nombre = ?, telefono = ?, direccion = ? WHERE id_proveedor = ?";  
-  conexion.query(query, [nombre, telefono, direccion, req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al actualizar proveedor:", err);  
-      res.status(500).json({ error: "Error al actualizar proveedor" });  
-      return;  
-    }  
-    res.json({ message: "Proveedor actualizado correctamente" });  
-  });  
-});  
-  
-app.delete('/api/proveedor/:id', (req, res) => {  
-  const query = "DELETE FROM tbl_proveedor WHERE id_proveedor = ?";  
-  conexion.query(query, [req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al eliminar proveedor:", err);  
-      res.status(500).json({ error: "Error al eliminar proveedor" });  
-      return;  
-    }  
-    res.json({ message: "Proveedor eliminado correctamente" });  
-  });  
-});  
-
-// ====== CRUD PARA tbl_compra ======  
-app.get('/api/compra', (req, res) => {  
-  const query = "SELECT * FROM tbl_compra";  
-  conexion.query(query, (err, rows) => {  
-    if (err) {  
-      console.error("Error al listar compras:", err);  
-      res.status(500).json({ error: "Error al listar compras" });  
-      return;  
-    }  
-    res.json(rows);  
-  });  
-});  
-  
-app.get('/api/compra/:id', (req, res) => {  
-  const query = "SELECT * FROM tbl_compra WHERE id_compra = ?";  
-  conexion.query(query, [req.params.id], (err, rows) => {  
-    if (err) {  
-      console.error("Error al obtener compra:", err);  
-      res.status(500).json({ error: "Error al obtener compra" });  
-      return;  
-    }  
-    res.json(rows[0]);  
-  });  
-});  
-  
-app.post('/api/compra', (req, res) => {  
-  const { id_proveedor, monto_total, fecha_hora_compra, estado_compra } = req.body;  
-  const query = "INSERT INTO tbl_compra (id_proveedor, monto_total, fecha_hora_compra, estado_compra) VALUES (?, ?, ?, ?)";  
-  conexion.query(query, [id_proveedor, monto_total, fecha_hora_compra, estado_compra], (err, result) => {  
-    if (err) {  
-      console.error("Error al insertar compra:", err);  
-      res.status(500).json({ error: "Error al insertar compra" });  
-      return;  
-    }  
-    res.json({ message: "Compra insertada correctamente", id: result.insertId });  
-  });  
-});  
-  
-app.put('/api/compra/:id', (req, res) => {  
-  const { id_proveedor, monto_total, fecha_hora_compra, estado_compra } = req.body;  
-  const query = "UPDATE tbl_compra SET id_proveedor = ?, monto_total = ?, fecha_hora_compra = ?, estado_compra = ? WHERE id_compra = ?";  
-  conexion.query(query, [id_proveedor, monto_total, fecha_hora_compra, estado_compra, req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al actualizar compra:", err);  
-      res.status(500).json({ error: "Error al actualizar compra" });  
-      return;  
-    }  
-    res.json({ message: "Compra actualizada correctamente" });  
-  });  
-});  
-  
-app.delete('/api/compra/:id', (req, res) => {  
-  const query = "DELETE FROM tbl_compra WHERE id_compra = ?";  
-  conexion.query(query, [req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al eliminar compra:", err);  
-      res.status(500).json({ error: "Error al eliminar compra" });  
-      return;  
-    }  
-    res.json({ message: "Compra eliminada correctamente" });  
-  });  
-});
-
-// ====== CRUD PARA tbl_detalle_compra ======  
-app.get('/api/detalle_compra', (req, res) => {
-  // Safer: primero obtener filas de detalle y después enriquecer en JS
-  const query = `SELECT dc.* FROM tbl_detalle_compra dc ORDER BY dc.id_detalle_compra DESC`;
-  conexion.query(query, (err, detalleRows) => {
-    if (err) {
-      console.error("Error al listar detalle_compra:", err);
-      return res.status(500).json({ error: "Error al listar detalles de compra" });
-    }
-
-    // Si no hay registros, devolver lista vacía
-    if (!detalleRows || detalleRows.length === 0) return res.json([]);
-
-    // Obtener listados de productos y compras/proveedores para enriquecer
-    const productoIds = [...new Set(detalleRows.map(r => r.id_producto).filter(Boolean))];
-    const compraIds = [...new Set(detalleRows.map(r => r.id_compra).filter(Boolean))];
-
-    // Consultas paralelas
-    const qProductos = productoIds.length > 0
-      ? `SELECT * FROM tbl_productos WHERE id_producto IN (${productoIds.map(() => '?').join(',')})`
-      : null;
-    const qCompras = compraIds.length > 0
-      ? `SELECT c.*, prov.nombre AS nombre_proveedor FROM tbl_compra c LEFT JOIN tbl_proveedor prov ON prov.id_proveedor = c.id_proveedor WHERE c.id_compra IN (${compraIds.map(() => '?').join(',')})`
-      : null;
-
-    // Ejecutar consultas
-    const tasks = [];
-    if (qProductos) tasks.push(new Promise((resolve) => conexion.query(qProductos, productoIds, (e, rows) => resolve({ e, rows }))));
-    else tasks.push(Promise.resolve({ e: null, rows: [] }));
-    if (qCompras) tasks.push(new Promise((resolve) => conexion.query(qCompras, compraIds, (e, rows) => resolve({ e, rows }))));
-    else tasks.push(Promise.resolve({ e: null, rows: [] }));
-
-    Promise.all(tasks).then(results => {
-      const prodRes = results[0];
-      const compRes = results[1];
-      if (prodRes.e) {
-        console.error('Error al obtener productos para detalle_compra:', prodRes.e);
-        return res.status(500).json({ error: 'Error al obtener productos asociados' });
-      }
-      if (compRes.e) {
-        console.error('Error al obtener compras/proveedores para detalle_compra:', compRes.e);
-        return res.status(500).json({ error: 'Error al obtener compras asociadas' });
+    conexion.query(qTok, [id_usuario, code_hash], (err2, tokRows) => {
+      if (err2) return handleDatabaseError(err2, res, 'Error al verificar token:');
+      if (tokRows.length === 0) {
+        return res.status(400).json({ mensaje: 'Código inválido o incorrecto.' });
       }
 
-      const productosMap = (prodRes.rows || []).reduce((acc, p) => { acc[p.id_producto] = p; return acc; }, {});
-      const comprasMap = (compRes.rows || []).reduce((acc, c) => { acc[c.id_compra] = c; return acc; }, {});
+      const token = tokRows[0];
+      if (token.used) {
+        return res.status(400).json({ mensaje: 'Este código ya fue utilizado.' });
+      }
 
-      // Mapear y enriquecer filas retornadas
-      const out = detalleRows.map(r => {
-        const prod = productosMap[r.id_producto] || {};
-        const compra = comprasMap[r.id_compra] || {};
+      const now = new Date();
+      if (new Date(token.expires_at) < now) {
+        return res.status(400).json({ mensaje: 'El código ha expirado. Solicita uno nuevo.' });
+      }
 
-        // intentar detectar campo de nombre del producto
-        const productName = prod.nombre_producto || prod.nombre || prod.nombre_producto || prod.descripcion || null;
-        const proveedorName = compra.nombre_proveedor || compra.nombre || null;
+      // Marcar token como usado y usuario como verificado
+      const qUpdTok = `UPDATE verificar_email_tokens SET used = 1 WHERE id_verificar_email = ?`;
+      const qUpdUser = `UPDATE tbl_usuario SET is_verified = 1 WHERE id_usuario = ?`;
 
-        return {
-          id_detalle_compra: r.id_detalle_compra,
-          id_kardex: r.id_kardex || null,
-          id_compra: r.id_compra,
-          id_producto: r.id_producto,
-          cantidad: r.cantidad,
-          precio_compra: r.precio_compra,
-          monto_total: compra.monto_total || null,
-          fecha_hora_compra: compra.fecha_hora_compra || null,
-          id_proveedor: compra.id_proveedor || null,
-          nombre_proveedor: proveedorName,
-          nombre_producto: productName,
-        };
+      conexion.query(qUpdTok, [token.id_verificar_email], (err3) => {
+        if (err3) return handleDatabaseError(err3, res, 'Error al actualizar token:');
+        conexion.query(qUpdUser, [id_usuario], (err4) => {
+          if (err4) return handleDatabaseError(err4, res, 'Error al actualizar usuario:');
+
+          res.json({ mensaje: 'Cuenta verificada correctamente.' });
+        });
       });
-
-      res.json(out);
-    }).catch(ex => {
-      console.error('Error al procesar detalle_compra:', ex);
-      res.status(500).json({ error: 'Error interno al procesar detalles' });
     });
   });
 });
 
-app.get('/api/detalle_compra/:id', (req, res) => {
-  const query = `SELECT dc.* FROM tbl_detalle_compra dc WHERE dc.id_detalle_compra = ? LIMIT 1`;
-  conexion.query(query, [req.params.id], (err, rows) => {
-    if (err) {
-      console.error('Error al obtener detalle_compra por id:', err);
-      return res.status(500).json({ error: 'Error al obtener detalle de compra' });
-    }
-    const r = (rows && rows[0]) || null;
-    if (!r) return res.json(null);
+//Verificar código
+app.post('/api/auth/verify-code', (req, res) => {
+  const { correo, code } = req.body;
+  if (!correo || !code) {
+    return res.status(400).json({ mensaje: 'Faltan datos: correo o código.' });
+  }
 
-    // Obtener producto y compra relacionados
-    const tasks = [];
-    tasks.push(new Promise((resolve) => conexion.query('SELECT * FROM tbl_productos WHERE id_producto = ?', [r.id_producto], (e, pr) => resolve({ e, pr }))));
-    tasks.push(new Promise((resolve) => conexion.query('SELECT c.*, prov.nombre AS nombre_proveedor FROM tbl_compra c LEFT JOIN tbl_proveedor prov ON prov.id_proveedor = c.id_proveedor WHERE c.id_compra = ?', [r.id_compra], (e, cr) => resolve({ e, cr }))));
+  // Buscar usuario
+  const qUser = `SELECT id_usuario FROM tbl_usuario WHERE correo = ? LIMIT 1`;
+  conexion.query(qUser, [correo], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, 'Error al buscar usuario:');
+    if (rows.length === 0) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
 
-    Promise.all(tasks).then(results => {
-      const prodRes = results[0];
-      const compRes = results[1];
-      if (prodRes.e) {
-        console.error('Error al obtener producto para detalle:', prodRes.e);
-        return res.status(500).json({ error: 'Error al obtener producto asociado' });
+    const id_usuario = rows[0].id_usuario;
+
+    // Generar hash del código recibido
+    const code_hash = crypto.createHash('sha256').update(String(code)).digest('hex');
+
+    // Buscar token válido
+    const qTok = `
+      SELECT id_verificar_email, expires_at, used
+      FROM verificar_email_tokens
+      WHERE id_usuario = ? AND token_hash = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    conexion.query(qTok, [id_usuario, code_hash], (err2, tokRows) => {
+      if (err2) return handleDatabaseError(err2, res, 'Error al verificar token:');
+      if (tokRows.length === 0) {
+        return res.status(400).json({ mensaje: 'Código inválido o incorrecto.' });
       }
-      if (compRes.e) {
-        console.error('Error al obtener compra para detalle:', compRes.e);
-        return res.status(500).json({ error: 'Error al obtener compra asociada' });
+
+      const token = tokRows[0];
+      if (token.used) {
+        return res.status(400).json({ mensaje: 'Este código ya fue utilizado.' });
       }
 
-      const prod = (prodRes.pr && prodRes.pr[0]) || {};
-      const compra = (compRes.cr && compRes.cr[0]) || {};
-      const productName = prod.nombre_producto || prod.nombre || prod.descripcion || null;
-      const proveedorName = compra.nombre_proveedor || compra.nombre || null;
+      const now = new Date();
+      if (new Date(token.expires_at) < now) {
+        return res.status(400).json({ mensaje: 'El código ha expirado. Solicita uno nuevo.' });
+      }
 
-      const out = {
-        id_detalle_compra: r.id_detalle_compra,
-        id_kardex: r.id_kardex || null,
-        id_compra: r.id_compra,
-        id_producto: r.id_producto,
-        cantidad: r.cantidad,
-        precio_compra: r.precio_compra,
-        monto_total: compra.monto_total || null,
-        fecha_hora_compra: compra.fecha_hora_compra || null,
-        id_proveedor: compra.id_proveedor || null,
-        nombre_proveedor: proveedorName,
-        nombre_producto: productName,
-      };
+      // Marcar token como usado y usuario como verificado
+      const qUpdTok = `UPDATE verificar_email_tokens SET used = 1 WHERE id_verificar_email = ?`;
+      const qUpdUser = `UPDATE tbl_usuario SET is_verified = 1 WHERE id_usuario = ?`;
 
-      res.json(out);
-    }).catch(ex => {
-      console.error('Error al enriquecer detalle_compra:', ex);
-      res.status(500).json({ error: 'Error interno al procesar detalle' });
+      conexion.query(qUpdTok, [token.id_verificar_email], (err3) => {
+        if (err3) return handleDatabaseError(err3, res, 'Error al actualizar token:');
+        conexion.query(qUpdUser, [id_usuario], (err4) => {
+          if (err4) return handleDatabaseError(err4, res, 'Error al actualizar usuario:');
+
+          res.json({ mensaje: 'Cuenta verificada correctamente.' });
+        });
+      });
     });
   });
 });
-  
-app.post('/api/detalle_compra', (req, res) => {  
-  const { id_compra, id_producto, cantidad, precio_compra } = req.body;  
-  const query = "INSERT INTO tbl_detalle_compra (id_compra, id_producto, cantidad, precio_compra) VALUES (?, ?, ?, ?)";  
-  conexion.query(query, [id_compra, id_producto, cantidad, precio_compra], (err, result) => {  
-    if (err) {  
-      console.error("Error al insertar detalle de compra:", err);  
-      res.status(500).json({ error: "Error al insertar detalle de compra" });  
-      return;  
-    }  
-    res.json({ message: "Detalle de compra insertado correctamente", id: result.insertId });  
-  });  
-});  
-  
-app.put('/api/detalle_compra/:id', (req, res) => {  
-  const { id_compra, id_producto, cantidad, precio_compra } = req.body;  
-  const query = "UPDATE tbl_detalle_compra SET id_compra = ?, id_producto = ?, cantidad = ?, precio_compra = ? WHERE id_detalle_compra = ?";  
-  conexion.query(query, [id_compra, id_producto, cantidad, precio_compra, req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al actualizar detalle de compra:", err);  
-      res.status(500).json({ error: "Error al actualizar detalle de compra" });  
-      return;  
-    }  
-    res.json({ message: "Detalle de compra actualizado correctamente" });  
-  });  
-});  
-  
-app.delete('/api/detalle_compra/:id', (req, res) => {  
-  const query = "DELETE FROM tbl_detalle_compra WHERE id_detalle_compra = ?";  
-  conexion.query(query, [req.params.id], (err) => {  
-    if (err) {  
-      console.error("Error al eliminar detalle de compra:", err);  
-      res.status(500).json({ error: "Error al eliminar detalle de compra" });  
-      return;  
-    }  
-    res.json({ message: "Detalle de compra eliminado correctamente" });  
-  });  
-});
 
-// Get listado de tipo ticket
-app.get('/api/tipo_ticket', (request, response) => {
-    const query = "SELECT * FROM marina_mercante.tipo_ticket";
-    conexion.query(query, (err, rows) => {
-        if (err) {
-            return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
-        }
-        registrarBitacora("tipo ticket", "GET");
-        logger.info("Listado de tipo de ticket - OK");
-        response.json(rows);
-    });
-});
 
-// Get tipo ticket con where (por id)
-app.get('/api/tipo_ticket/:id', (request, response) => {
-    const query = "SELECT * FROM marina_mercante.tipo_ticket WHERE id_tipo_ticket= ?";
-    const values = [parseInt(request.params.id)];
-    conexion.query(query, values, (err, rows) => {
-        if (err) {
-            return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
-        }
-        registrarBitacora("Tipo Ticket", "GET");
-        logger.info("Listado de tipo ticket - OK");
-        response.json(rows);
-    });
-});
 
-// Post insert de tipo ticket
-app.post('/api/tipo_ticket', (request, response) => {
-    try {
-        const { tipo_ticket , estado, prefijo } = request.body;
-        const query = `
-            INSERT INTO marina_mercante.tipo_ticket (tipo_ticket , estado, prefijo) 
-            VALUES (?, ?, ?)
-        `;
-        const values = [tipo_ticket , estado, prefijo];
-        conexion.query(query, values, (err) => {
-            if (err) {
-                return handleDatabaseError(err, response, "Error en inserción de tipo ticket:");
-            }
-            registrarBitacora("Tipo ticket", "POST");
-            logger.info("INSERT de tipo ticket - OK");
-            response.json("INSERT EXITOSO!");
-        });
-    } catch (error) {
-        console.error(error);
-        response.status(400).json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
-    }
-});
 
-// Put update de tipo ticket
-app.put('/api/tipo_ticket', (request, response) => {
-    try {
-        const {  tipo_ticket , estado, prefijo, id_tipo_ticket  } = request.body;
-        const query = `
-            UPDATE imple.tipo_ticket 
-            SET tipo_ticket = ? , estado = ? , prefijo = ? WHERE id_tipo_ticket = ?
-        `;
-        const values = [nombre, modelo, marca, id_proveedor, fecha_adquisicion, estado, costo, ubicacion, id_maquinaria];
-        conexion.query(query, values, (err) => {
-            if (err) {
-                return handleDatabaseError(err, response, "Error en actualización de tipo ticket:");
-            }
-            registrarBitacora("Tipo ticket", "PUT");
-            logger.info("ACTUALIZACIÓN de tipo ticket - OK");
-            response.json("UPDATE EXITOSO!");
-        });
-    } catch (error) {
-        console.error(error);
-        response.status(400).json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
-    }
-});
-
-// Delete de tipo ticket
-app.delete('/api/tipo_ticket/:id', (request, response) => {
-    const query = "DELETE FROM marina_mercante.tipo_ticket WHERE id_tipo_ticket = ?";
-    const values = [parseInt(request.params.id)];
-    conexion.query(query, values, (err) => {
-        if (err) {
-            return handleDatabaseError(err, response, "Error en eliminación de tipo ticket:");
-        }
-        registrarBitacora("tipo ticket", "DELETE");
-        logger.info("DELETE de tipo ticket - OK");
-        response.json("DELETE EXITOSO!");
-    });
-});
-
-app.get('/api/ticket', (req, res) => {
-    const query = "SELECT * FROM marina_mercante.ticket";
-    conexion.query(query, (err, rows) => {
-        if (err) return res.status(500).json({ error: "Error al obtener ticket" });
-        registrarBitacora("Ticket", "GET");
-        res.json({ status: "success", data: rows });
-    });
-});
-
-app.get('/api/ticket/:id', (req, res) => {
-  const query = "SELECT * FROM marina_mercante.tbl_ticket WHERE id_ticket = ?";
-  const values = [parseInt(req.params.id)];
-    conexion.query(query, values, (err, rows) => {
-        if (err) return res.status(500).json({ error: "Error al obtener el ticket" });
-        if (rows.length === 0) return res.status(404).json({ error: "Ticket no encontrado" });
-        registrarBitacora("ticket", "GET");
-        res.json({ status: "success", data: rows[0] });
-    });
-});
-
-app.post('/api/ticket', (req, res) => {
-    const { id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket } = req.body;
-    if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket ) {
-        return res.status(400).json({ error: "Todos los campos son obligatorios" });
-    }
-  const query = "INSERT INTO marina_mercante.tbl_ticket (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket) VALUES (?, ?, ?, ?)";
-    const values = [id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket];
-    conexion.query(query, values, (err, result) => {
-        if (err) {
-            console.error("Error al insertar ticket:", err.message);
-            if (err.code === 'ER_DUP_ENTRY') {
-                return res.status(409).json({ error: "El correo ya está registrado." });
-            }
-            return res.status(500).json({ error: err.message });
-        }
-        registrarBitacora("Ticket", "INSERT");
-        res.status(201).json({ status: "success", message: "Ticket agregado con éxito", proveedor_id: result.insertId });
-    });
-});
-
-app.put('/api/ticket/:id', (req, res) => {
-    const { id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket } = req.body;
-    const id_ticket = parseInt(req.params.id);
-    if (!id_cliente || !id_estado_ticket || !id_tipo_ticket || !NO_ticket) {
-        return res.status(400).json({ error: "Todos los campos son obligatorios" });
-    }
-  const query = "UPDATE marina_mercante.tbl_ticket SET id_cliente= ?, id_estado_ticket = ?, id_tipo_ticket = ?, NO_ticket = ? WHERE id_ticket = ?";
-  const values = [id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket, id_ticket];
-    conexion.query(query, values, (err, result) => {
-        if (err) {
-            console.error("Error al actualizar ticket:", err.message);
-            return res.status(500).json({ error: err.message });
-        }
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: "Ticket no encontrado" });
-        }
-        registrarBitacora("Ticket", "PUT");
-        res.json({ status: "success", message: "Ticket actualizado con éxito" });
-    });
-});
-
-app.delete('/api/ticket/:id', (req, res) => {
-  const query = "DELETE FROM marina_mercante.tbl_ticket WHERE id_ticket = ?";
-    const values = [parseInt(req.params.id)];
-    conexion.query(query, values, (err, result) => {
-        if (err) {
-            console.error("Error al eliminar ticket:", err.message);
-            return res.status(500).json({ error: err.message });
-        }
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: "ticket no encontrado" });
-        }
-        registrarBitacora("Ticket", "DELETE");
-        res.json({ status: "success", message: "Ticket eliminado con éxito" });
-    });
-});
-
-// ====== CRUD PARA tl_visualizacion ======
-
-// Listar todas las visualizaciones
+// =======================================================
+// =================== Visualización =====================
+// =======================================================
 app.get('/api/visualizaciones', (req, res) => {
   const query = "SELECT * FROM tbl_visualizacion";
   conexion.query(query, (err, rows) => {
     if (err) {
       console.error("Error al listar visualizaciones:", err);
-      res.status(500).json({ error: "Error al listar visualizaciones" });
-      return;
+      return res.status(500).json({ error: "Error al listar visualizaciones" });
     }
     res.json(rows);
   });
 });
 
-// Obtener una visualización por ID
 app.get('/api/visualizaciones/:id', (req, res) => {
   const query = "SELECT * FROM tbl_visualizacion WHERE id_visualizacion = ?";
   conexion.query(query, [req.params.id], (err, rows) => {
     if (err) {
       console.error("Error al obtener visualización:", err);
-      res.status(500).json({ error: "Error al obtener visualización" });
-      return;
+      return res.status(500).json({ error: "Error al obtener visualización" });
     }
-    res.json(rows[0]);
+    res.json(rows[0] || null);
   });
 });
 
-// Insertar una nueva visualización
 app.post('/api/visualizaciones', (req, res) => {
   const { id_usuario, id_ticket, ventanilla } = req.body;
   const query = `
@@ -1136,14 +1696,12 @@ app.post('/api/visualizaciones', (req, res) => {
   conexion.query(query, [id_usuario, id_ticket, ventanilla], (err, result) => {
     if (err) {
       console.error("Error al insertar visualización:", err);
-      res.status(500).json({ error: "Error al insertar visualización" });
-      return;
+      return res.status(500).json({ error: "Error al insertar visualización" });
     }
     res.json({ message: "Visualización insertada correctamente", id: result.insertId });
   });
 });
 
-// Actualizar una visualización
 app.put('/api/visualizaciones/:id', (req, res) => {
   const { id_usuario, id_ticket, ventanilla } = req.body;
   const query = `
@@ -1154,264 +1712,287 @@ app.put('/api/visualizaciones/:id', (req, res) => {
   conexion.query(query, [id_usuario, id_ticket, ventanilla, req.params.id], (err) => {
     if (err) {
       console.error("Error al actualizar visualización:", err);
-      res.status(500).json({ error: "Error al actualizar visualización" });
-      return;
+      return res.status(500).json({ error: "Error al actualizar visualización" });
     }
     res.json({ message: "Visualización actualizada correctamente" });
   });
 });
 
-// Eliminar una visualización
 app.delete('/api/visualizaciones/:id', (req, res) => {
   const query = "DELETE FROM tbl_visualizacion WHERE id_visualizacion = ?";
   conexion.query(query, [req.params.id], (err) => {
     if (err) {
       console.error("Error al eliminar visualización:", err);
-      res.status(500).json({ error: "Error al eliminar visualización" });
-      return;
+      return res.status(500).json({ error: "Error al eliminar visualización" });
     }
     res.json({ message: "Visualización eliminada correctamente" });
   });
 });
 
-// ====== CRUD PARA tl_bitacora ======
 
-// Listar todas las bitácoras
-app.get('/api/bitacoras', (req, res) => {
-  const query = "SELECT * FROM tbl_bitacora";
-  conexion.query(query, (err, rows) => {
+// GET /api/bitacora
+app.get('/api/bitacora', (req, res) => {
+  const sql = `
+    SELECT 
+      b.id_bitacora,
+      b.fecha,
+      b.usuario,
+      b.id_objeto,
+      o.nombre_objeto,
+      b.accion,
+      b.descripcion
+    FROM tbl_bitacora b
+    LEFT JOIN tbl_objeto o ON b.id_objeto = o.id_objeto
+    ORDER BY b.fecha DESC
+  `;
+
+  conexion.query(sql, (err, rows) => {
     if (err) {
-      console.error("Error al listar bitácoras:", err);
-      res.status(500).json({ error: "Error al listar bitácoras" });
-      return;
+      console.error("Error listando bitácora:", err);
+      return res.status(500).json({ mensaje: "Error al obtener bitácora" });
     }
     res.json(rows);
   });
 });
 
-// Obtener una bitácora por ID
-app.get('/api/bitacoras/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_bitacora WHERE id_bitacora = ?";
-  conexion.query(query, [req.params.id], (err, rows) => {
-    if (err) {
-      console.error("Error al obtener bitácora:", err);
-      res.status(500).json({ error: "Error al obtener bitácora" });
-      return;
+// GET /api/bitacora/:id
+app.get('/api/bitacora/:id', (req, res) => {
+  const { id_usuario } = req.query;
+  const { id } = req.params;
+
+  conexion.query(
+    'SELECT * FROM tbl_bitacora WHERE id_bitacora = ?',
+    [id],
+    (err, rows) => {
+      if (err) {
+        console.error('Error al obtener bitácora:', err);
+        return res.status(500).json({ error: 'Error al obtener bitácora' });
+      }
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({ error: 'Registro de bitácora no encontrado' });
+      }
+      if (id_usuario) {
+        conexion.query(
+          'CALL event_bitacora(?, ?, ?, ?)',
+          [id_usuario, 14, 'CONSULTA', `Se consultó la bitácora con ID ${id}`],
+          (e) => {
+            if (e) console.error('Error bitácora (GET bitácora por id):', e);
+            return res.json(rows[0]);
+          }
+        );
+      } else {
+        return res.json(rows[0]);
+      }
     }
-    res.json(rows[0]);
-  });
+  );
 });
 
-// Insertar una nueva bitácora (fecha se genera automáticamente)
-app.post('/api/bitacoras', (req, res) => {
-  const { id_usuario, accion } = req.body;
-  const query = `
-    INSERT INTO tbl_bitacora (id_usuario, accion, fecha)
-    VALUES (?, ?, NOW())
-  `;
-  conexion.query(query, [id_usuario, accion], (err, result) => {
-    if (err) {
-      console.error("Error al insertar bitácora:", err);
-      res.status(500).json({ error: "Error al insertar bitácora" });
-      return;
-    }
-    res.json({ message: "Bitácora insertada correctamente", id: result.insertId });
-  });
-});
+const SOLO_ALMACEN_O_ADMIN = autorizarRoles(
+  "Administrador",
+  "Guarda almacen",
+  "Auxiliar de almacen"
+);
 
-// Actualizar una bitácora
-app.put('/api/bitacoras/:id', (req, res) => {
-  const { id_usuario, accion } = req.body;
-  const query = `
-    UPDATE tbl_bitacora
-    SET id_usuario = ?, accion = ?, fecha = NOW()
-    WHERE id_bitacora = ?
-  `;
-  conexion.query(query, [id_usuario, accion, req.params.id], (err) => {
-    if (err) {
-      console.error("Error al actualizar bitácora:", err);
-      res.status(500).json({ error: "Error al actualizar bitácora" });
-      return;
-    }
-    res.json({ message: "Bitácora actualizada correctamente" });
-  });
-});
+// ============================
+//  GET /api/productos
+// ============================
+app.get('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+  const user = req.user; 
 
-// Eliminar una bitácora
-app.delete('/api/bitacoras/:id', (req, res) => {
-  const query = "DELETE FROM tbl_bitacora WHERE id_bitacora = ?";
-  conexion.query(query, [req.params.id], (err) => {
-    if (err) {
-      console.error("Error al eliminar bitácora:", err);
-      res.status(500).json({ error: "Error al eliminar bitácora" });
-      return;
-    }
-    res.json({ message: "Bitácora eliminada correctamente" });
-  });
-});
-
-// ====== CRUD PARA tl_productos ======
-
-// Listar todos los productos
-app.get('/api/productos', (req, res) => {
-  const query = "SELECT * FROM tbl_productos";
-  conexion.query(query, (err, rows) => {
+  conexion.query("SELECT * FROM tbl_productos", (err, rows) => {
     if (err) {
       console.error("Error al listar productos:", err);
-      res.status(500).json({ error: "Error al listar productos" });
-      return;
+      return res.status(500).json({ error: "Error al listar productos" });
     }
-    res.json(rows);
+
+    // Registrar en bitácora
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_PRODUCTOS,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: "Se consultó la lista de productos",
+        usuario: user.nombre_usuario,
+      }
+    );
+
+    return res.json(rows);
   });
 });
 
-// Obtener un producto por ID
-app.get('/api/productos/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_productos WHERE id_producto = ?";
-  conexion.query(query, [req.params.id], (err, rows) => {
+
+// ============================
+//  GET /api/productos/:id
+// ============================
+app.get('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+  const user = req.user;
+  const id = req.params.id;
+
+  conexion.query("SELECT * FROM tbl_productos WHERE id_producto = ?", [id], (err, rows) => {
     if (err) {
       console.error("Error al obtener producto:", err);
-      res.status(500).json({ error: "Error al obtener producto" });
-      return;
+      return res.status(500).json({ error: "Error al obtener producto" });
     }
-    res.json(rows[0]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    // Registrar en bitácora
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_PRODUCTOS,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: `Se consultó el producto id=${id}`,
+        usuario: user.nombre_usuario,
+      }
+    );
+
+    return res.json(rows[0]);
   });
 });
 
-// Insertar un nuevo producto
-app.post('/api/productos', (req, res) => {
-  const { cantidad_minima, cantidad_maxima } = req.body;
-  const query = `
-    INSERT INTO tbl_productos (cantidad_minima, cantidad_maxima)
-    VALUES (?, ?)
+
+// ============================
+//  POST /api/productos
+// ============================
+app.post('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+  const { nombre_producto, cantidad_minima, cantidad_maxima } = req.body;
+  const user = req.user;
+
+  if (!nombre_producto || cantidad_minima == null || cantidad_maxima == null) {
+    return res.status(400).json({
+      error: "nombre_producto, cantidad_minima y cantidad_maxima son obligatorios"
+    });
+  }
+
+  const sql = `
+    INSERT INTO tbl_productos (nombre_producto, cantidad_minima, cantidad_maxima)
+    VALUES (?, ?, ?)
   `;
-  conexion.query(query, [cantidad_minima, cantidad_maxima], (err, result) => {
-    if (err) {
-      console.error("Error al insertar producto:", err);
-      res.status(500).json({ error: "Error al insertar producto" });
-      return;
+
+  conexion.query(
+    sql,
+    [nombre_producto.trim(), Number(cantidad_minima), Number(cantidad_maxima)],
+    (err, result) => {
+      if (err) {
+        console.error("Error al insertar producto:", err);
+        return res.status(500).json({ error: "Error al insertar producto" });
+      }
+
+      // Registrar en bitácora
+      logBitacora(
+        conexion,
+        {
+          id_objeto: ID_OBJETO_PRODUCTOS,
+          id_usuario: user.id_usuario,
+          accion: "POST",
+          descripcion: `Se creó el producto id=${result.insertId} (${nombre_producto})`,
+          usuario: user.nombre_usuario,
+        }
+      );
+
+      return res.status(201).json({
+        message: "Producto insertado correctamente",
+        id: result.insertId
+      });
     }
-    res.json({ message: "Producto insertado correctamente", id: result.insertId });
-  });
+  );
 });
 
-// Actualizar un producto
-app.put('/api/productos/:id', (req, res) => {
-  const { cantidad_minima, cantidad_maxima } = req.body;
-  const query = `
-    UPDATE tbl_productos
-    SET cantidad_minima = ?, cantidad_maxima = ?
-    WHERE id_producto = ?
-  `;
-  conexion.query(query, [cantidad_minima, cantidad_maxima, req.params.id], (err) => {
+
+// ============================
+//  PUT /api/productos/:id
+// ============================
+app.put('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+  const { nombre_producto, cantidad_minima, cantidad_maxima } = req.body;
+  const id = req.params.id;
+  const user = req.user;
+
+  const campos = [];
+  const valores = [];
+
+  if (nombre_producto !== undefined) {
+    campos.push("nombre_producto = ?");
+    valores.push(nombre_producto.trim());
+  }
+  if (cantidad_minima !== undefined) {
+    campos.push("cantidad_minima = ?");
+    valores.push(Number(cantidad_minima));
+  }
+  if (cantidad_maxima !== undefined) {
+    campos.push("cantidad_maxima = ?");
+    valores.push(Number(cantidad_maxima));
+  }
+
+  if (campos.length === 0) {
+    return res.status(400).json({ error: "Nada que actualizar" });
+  }
+
+  const sql = `UPDATE tbl_productos SET ${campos.join(", ")} WHERE id_producto = ?`;
+  valores.push(id);
+
+  conexion.query(sql, valores, (err, result) => {
     if (err) {
       console.error("Error al actualizar producto:", err);
-      res.status(500).json({ error: "Error al actualizar producto" });
-      return;
+      return res.status(500).json({ error: "Error al actualizar producto" });
     }
-    res.json({ message: "Producto actualizado correctamente" });
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    // Registrar en bitácora
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_PRODUCTOS,
+        id_usuario: user.id_usuario,
+        accion: "PUT",
+        descripcion: `Se actualizó producto id=${id}`,
+        usuario: user.nombre_usuario,
+      }
+    );
+
+    return res.json({ message: "Producto actualizado correctamente" });
   });
 });
 
-// Eliminar un producto
-app.delete('/api/productos/:id', (req, res) => {
-  const query = "DELETE FROM tbl_productos WHERE id_producto = ?";
-  conexion.query(query, [req.params.id], (err) => {
+
+// ============================
+//  DELETE /api/productos/:id
+// ============================
+app.delete('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
+  const id = req.params.id;
+  const user = req.user;
+
+  conexion.query("DELETE FROM tbl_productos WHERE id_producto = ?", [id], (err, result) => {
     if (err) {
       console.error("Error al eliminar producto:", err);
-      res.status(500).json({ error: "Error al eliminar producto" });
-      return;
+      return res.status(500).json({ error: "Error al eliminar producto" });
     }
-    res.json({ message: "Producto eliminado correctamente" });
+
+    // Registrar en bitácora
+    logBitacora(
+      conexion,
+      {
+        id_objeto: ID_OBJETO_PRODUCTOS,
+        id_usuario: user.id_usuario,
+        accion: "DELETE",
+        descripcion: `Se eliminó producto id=${id}`,
+        usuario: user.nombre_usuario,
+      }
+    );
+
+    return res.json({ message: "Producto eliminado correctamente" });
   });
 });
 
-//tabla kardex 
-//Get listado kardex
-
-app.get('/api/kardex', (req, res) => {
-  const query = "SELECT * FROM tbl_kardex";
-  conexion.query(query, (err, rows) => {
-    if (err) {
-      console.error("Error al listar kardex:", err);
-      res.status(500).json({ error: "Error al listar kardex" });
-      return;
-    }
-    res.json(rows);
-  });
-});
-
-//Get por el ID
-app.get('/api/kardex/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_kardex WHERE id_cardex = ?";
-  conexion.query(query, [req.params.id], (err, rows) => {
-    if (err) {
-      console.error("Error al obtener el kardex:", err);
-      res.status(500).json({ error: "Error al obtener kardex" });
-      return;
-    }
-    res.json(rows[0]);
-  });
-});
-
-//Post para kardex
-app.post('/api/kardex', (req, res) => {
-  const { id_usuario, id_producto, cantidad, fecha_hora, tipo_movimiento } = req.body;
-  const query = "INSERT INTO tbl_kardex ( id_usuario, id_producto, cantidad, fecha_hora, tipo_movimiento) VALUES (?, ?, ?, ?, ?)";
-  conexion.query(query, [ id_usuario, id_producto, cantidad, fecha_hora, tipo_movimiento], (err, result) => {
-    if (err) {
-      console.error("Error al insertar al kardex:", err);
-      res.status(500).json({ error: "Error al insertar al kardex" });
-      return;
-    }
-    res.json({ message: "Kardex insertado correctamente", id: result.insertId });
-  });
-});
-
-//Actualizar el kardex
-app.put('/api/kardex/:id', (req, res) => {
-  const {  id_usuario, id_producto, cantidad, fecha_hora, tipo_movimiento } = req.body;
-  const query = "UPDATE tbl_kardex SET  id_usuario, id_producto, cantidad, fecha_hora, tipo_movimiento = ?, ?, ?, ?, ? WHERE id_cardex = ?";
-  conexion.query(query, [id_usuario, id_producto, cantidad, fecha_hora, tipo_movimiento, req.params.id], (err) => {
-    if (err) {
-      console.error("Error al actualizar kardex:", err);
-      res.status(500).json({ error: "Error al actualizar kardex" });
-      return;
-    }
-    res.json({ message: "Kardex actualizado correctamente" });
-  });
-});
-
-//Eliminar kardex
-app.delete('/api/kardex/:id', (req, res) => {
-  const query = "DELETE FROM tbl_kardex WHERE id_cardex = ?";
-  conexion.query(query, [req.params.id], (err) => {
-    if (err) {
-      console.error("Error al eliminar kardex:", err);
-      res.status(500).json({ error: "Error al eliminar kardex" });
-      return;
-    }
-    res.json({ message: "Kardex eliminado correctamente" });
-  });
-});
-
-// Ruta para historial de kardex (read-only, usada por el frontend)
-app.get('/api/historial_kardex', (req, res) => {
-  // Devolvemos el historial de movimientos del kardex. Si en el futuro
-  // quieres joins con usuarios/productos, podemos ampliarlo aquí.
-  const query = "SELECT * FROM tbl_kardex ORDER BY fecha_hora DESC";
-  conexion.query(query, (err, rows) => {
-    if (err) {
-      console.error("Error al listar historial kardex:", err);
-      res.status(500).json({ error: "Error al listar historial kardex" });
-      return;
-    }
-    res.json(rows);
-  });
-});
 
 // ====== CRUD PARA tl_salida_productos ======
-
 // Listar todas las salidas de productos
 app.get('/api/salidas_productos', (req, res) => {
   const query = "SELECT * FROM tbl_salida_productos";
@@ -1442,7 +2023,7 @@ app.get('/api/salidas_productos/:id', (req, res) => {
 app.post('/api/salidas_productos', (req, res) => {
   const { id_usuario } = req.body;
   const query = `
-    INSERT INTO tbl_salida_productos (id_usuario, fecha_salida)
+    INSERT INTO tbl_salida_productos (id_usuario, fecha)
     VALUES (?, NOW())
   `;
   conexion.query(query, [id_usuario], (err, result) => {
@@ -1460,7 +2041,7 @@ app.put('/api/salidas_productos/:id', (req, res) => {
   const { id_usuario } = req.body;
   const query = `
     UPDATE tbl_salida_productos
-    SET id_usuario = ?, fecha_salida = NOW()
+    SET id_usuario = ?, fecha = NOW()
     WHERE id_salida_producto = ?
   `;
   conexion.query(query, [id_usuario, req.params.id], (err) => {
@@ -1486,71 +2067,2521 @@ app.delete('/api/salidas_productos/:id', (req, res) => {
   });
 });
 
-//Get tl_inventario
-// Rutas de inventario 
-// ====== CRUD PARA tl_inventario ======
 
-app.get('/api/inventario', (req, res) => {
-  const query = "SELECT * FROM tbl_inventario";
-  conexion.query(query, (err, rows) => {
+
+
+
+// =============== CONFIGURACIÓN BITÁCORA ===============
+const ID_OBJETO_PRODUCTOS = 6;
+
+
+// =============== INSERTAR PRODUCTO (SP_InsertarProducto) ===============
+app.post('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "insertar"), (req, res) => {
+  const { nombre_producto, cantidad_minima, cantidad_maxima, descripcion } = req.body;
+  const user = req.user;
+
+  if (!nombre_producto) {
+    return res.status(400).json({ error: "El nombre del producto es obligatorio" });
+  }
+
+  const query = "CALL SP_InsertarProducto(?, ?, ?, ?)";
+  const values = [nombre_producto, cantidad_minima, cantidad_maxima, descripcion];
+
+  conexion.query(query, values, (err, result) => {
     if (err) {
-      console.error("Error al listar el inventario:", err);
-      res.status(500).json({ error: "Error al listar el inventario" });
-      return;
+      console.error("Error al insertar producto con SP:", err);
+      return res.status(500).json({ error: err.message || "Error al insertar producto" });
+    }
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarProducto: Se creó el producto "${nombre_producto}"`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Producto insertado correctamente mediante SP" });
+  });
+});
+
+
+// =============== ACTUALIZAR PRODUCTO (SP_ActualizarProducto) ===============
+app.put('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "actualizar"), (req, res) => {
+  const { nombre_producto, cantidad_minima, cantidad_maxima, descripcion } = req.body;
+  const id_producto = parseInt(req.params.id);
+  const user = req.user;
+
+  const query = "CALL SP_ActualizarProducto(?, ?, ?, ?, ?)";
+  const values = [id_producto, nombre_producto, cantidad_minima, cantidad_maxima, descripcion];
+
+  conexion.query(query, values, (err) => {
+    if (err) {
+      console.error("Error al actualizar producto con SP:", err);
+      return res.status(500).json({ error: err.message || "Error al actualizar producto" });
+    }
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `SP_ActualizarProducto: Se actualizó producto ID=${id_producto}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Producto actualizado correctamente mediante SP" });
+  });
+});
+
+
+// =============== ELIMINAR PRODUCTO (SP_EliminarProducto) ===============
+app.delete('/api/productos/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "eliminar"), (req, res) => {
+  const id_producto = parseInt(req.params.id);
+  const user = req.user;
+
+  const query = "CALL SP_EliminarProducto(?)";
+
+  conexion.query(query, [id_producto], (err) => {
+    if (err) {
+      console.error("Error al eliminar producto con SP:", err);
+      return res.status(500).json({ error: err.message || "Error al eliminar producto" });
+    }
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `SP_EliminarProducto: Se eliminó producto ID=${id_producto}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Producto eliminado correctamente mediante SP" });
+  });
+});
+
+
+// =============== MOSTRAR PRODUCTOS (SP_MostrarProductos) ===============
+app.get('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarProductos()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error al listar productos con SP:", err);
+      return res.status(500).json({ error: "Error al listar productos" });
+    }
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `SP_MostrarProductos: Se consultó listado de productos`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);  // SP retorna arrays internos
+  });
+});
+
+
+// ==========================
+//  CONFIGURACIÓN BITÁCORA
+// ==========================
+const ID_OBJETO_PROVEEDOR = 2;
+
+
+// ==========================
+//  INSERTAR PROVEEDOR (SP)
+// ==========================
+app.post('/api/proveedor', verificarToken, SOLO_ALMACEN_O_ADMIN,  autorizarPermiso("Proveedores", "insertar"), (req, res) => {
+  const { nombre, telefono, direccion } = req.body;
+  const user = req.user;
+
+  if (!nombre) {
+    return res.status(400).json({ error: "El nombre del proveedor es obligatorio" });
+  }
+
+  const query = "CALL SP_InsertarProveedor(?, ?, ?)";
+  const values = [nombre, telefono, direccion];
+
+  conexion.query(query, values, (err) => {
+    if (err) {
+      console.error("Error al insertar proveedor:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PROVEEDOR,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarProveedor: Se creó proveedor "${nombre}"`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Proveedor insertado correctamente mediante SP" });
+  });
+});
+
+
+// ==========================
+//  ACTUALIZAR PROVEEDOR (SP)
+// ==========================
+app.put('/api/proveedor/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Proveedores", "actualizar"), (req, res) => {
+  const { nombre, telefono, direccion } = req.body;
+  const id_proveedor = parseInt(req.params.id);
+  const user = req.user;
+
+  const query = "CALL SP_ActualizarProveedor(?, ?, ?, ?)";
+  const values = [id_proveedor, nombre, telefono, direccion];
+
+  conexion.query(query, values, (err) => {
+    if (err) {
+      console.error("Error al actualizar proveedor:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PROVEEDOR,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `SP_ActualizarProveedor: Se actualizó proveedor ID=${id_proveedor}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Proveedor actualizado correctamente mediante SP" });
+  });
+});
+
+
+// ==========================
+//  ELIMINAR PROVEEDOR (SP)
+// ==========================
+app.delete('/api/proveedor/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Proveedores", "eliminar"), (req, res) => {
+  const id_proveedor = parseInt(req.params.id);
+  const user = req.user;
+
+  const query = "CALL SP_EliminarProveedor(?)";
+
+  conexion.query(query, [id_proveedor], (err) => {
+    if (err) {
+      console.error("Error al eliminar proveedor:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PROVEEDOR,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `SP_EliminarProveedor: Se eliminó proveedor ID=${id_proveedor}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Proveedor eliminado correctamente mediante SP" });
+  });
+});
+
+
+// ==========================
+//  MOSTRAR PROVEEDORES (SP)
+// ==========================
+app.get('/api/proveedor', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Proveedores", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarProveedores()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error al listar proveedores:", err);
+      return res.status(500).json({ error: "Error al listar proveedores" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PROVEEDOR,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `SP_MostrarProveedores: Se consultó listado de proveedores`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);
+  });
+});
+
+// ==========================
+//  CONFIGURACIÓN BITÁCORA
+// ==========================
+const ID_OBJETO_INVENTARIO = 5;
+
+// ==========================
+//  INSERTAR INVENTARIO (SP)
+// ==========================
+app.post('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "insertar"), (req, res) => {
+  const { id_producto, cantidad } = req.body;
+  const user = req.user;
+
+  if (!id_producto) {
+    return res.status(400).json({ error: "El producto es obligatorio" });
+  }
+
+  const query = "CALL SP_InsertarInventario(?, ?)";
+  const values = [id_producto, cantidad];
+
+  conexion.query(query, values, (err) => {
+    if (err) {
+      console.error("Error al insertar inventario:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarInventario: Se agregó inventario del producto ID=${id_producto}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Inventario insertado correctamente mediante SP" });
+  });
+});
+
+
+// ==========================
+//  ACTUALIZAR INVENTARIO (SP)
+// ==========================
+app.put('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "actualizar"), (req, res) => {
+  const { cantidad } = req.body;
+  const id_inventario = parseInt(req.params.id);
+  const user = req.user;
+
+  const query = "CALL SP_ActualizarInventario(?, ?)";
+  const values = [id_inventario, cantidad];
+
+  conexion.query(query, values, (err) => {
+    if (err) {
+      console.error("Error al actualizar inventario:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `SP_ActualizarInventario: Se actualizó inventario ID=${id_inventario}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Inventario actualizado correctamente mediante SP" });
+  });
+});
+
+
+// ==========================
+//  ELIMINAR INVENTARIO (SP)
+// ==========================
+app.delete('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "eliminar"), (req, res) => {
+  const id_inventario = parseInt(req.params.id);
+  const user = req.user;
+
+  const query = "CALL SP_EliminarInventario(?)";
+
+  conexion.query(query, [id_inventario], (err) => {
+    if (err) {
+      console.error("Error al eliminar inventario:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `SP_EliminarInventario: Se eliminó inventario ID=${id_inventario}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Inventario eliminado correctamente mediante SP" });
+  });
+});
+
+// =======================
+//   MOSTRAR INVENTARIO
+// =======================
+app.get("/api/inventario", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
+  const sql = "CALL SP_MostrarInventario()";
+
+  conexion.query(sql, (err, result) => {
+    if (err) {
+      console.error("Error al mostrar inventario:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    const inventario = result[0]; // El SP regresa un arreglo
+
+    // Bitácora
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: req.user.id_usuario,
+      accion: "GET",
+      descripcion: "Consultó el inventario"
+    });
+
+    res.json(inventario);
+  });
+});
+
+
+
+// =============================
+//  BITÁCORA - CONFIG
+// =============================
+const ID_OBJETO_KARDEX = 7;
+const ID_OBJETO_DETALLE_COMPRA = 8;
+
+
+// =============================
+//  INSERTAR KARDEX (SP)
+// =============================
+app.post('/api/kardex', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex", "insertar"), (req, res) => {
+  const { 
+    id_producto, cantidad, tipo_movimiento, estado, descripcion, id_proveedor, monto_total
+  } = req.body;
+
+  const user = req.user;
+
+  if (!id_producto || !cantidad || !tipo_movimiento) {
+    return res.status(400).json({ error: "Faltan campos obligatorios" });
+  }
+
+  const query = "CALL SP_InsertarKardex(?, ?, ?, ?, ?, ?)";
+  const values = [
+    user.id_usuario,
+    id_producto,
+    cantidad,
+    tipo_movimiento,
+    estado || 'Pendiente',
+    descripcion,
+    id_proveedor || null,
+    monto_total || null
+  ];
+
+  conexion.query(query, values, (err) => {
+    if (err) {
+      console.error("Error al insertar kardex:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_KARDEX,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarKardex: Movimiento de ${tipo_movimiento} para producto ID=${id_producto}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Kardex insertado correctamente mediante SP" });
+  });
+});
+
+
+// =============================
+//  ACTUALIZAR KARDEX (SP)
+// =============================
+app.put('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex", "actualizar"), (req, res) => {
+  const { estado } = req.body;
+  const id_kardex = parseInt(req.params.id);
+  const user = req.user;
+
+  if (!estado) {
+    return res.status(400).json({ error: "El estado es obligatorio" });
+  }
+
+  const query = "CALL SP_ActualizarKardex(?, ?)";
+  const values = [id_kardex, estado];
+
+  conexion.query(query, values, (err) => {
+    if (err) {
+      console.error("Error al actualizar kardex:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_KARDEX,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `SP_ActualizarKardex: Cambio de estado a "${estado}" del kardex ID=${id_kardex}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Kardex actualizado correctamente mediante SP" });
+  });
+});
+
+
+// =============================
+//  ELIMINAR KARDEX (SP)
+// =============================
+app.delete('/api/kardex/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex", "eliminar"),(req, res) => {
+  const id_kardex = parseInt(req.params.id);
+  const user = req.user;
+
+  const query = "CALL SP_EliminarKardex(?)";
+
+  conexion.query(query, [id_kardex], (err) => {
+    if (err) {
+      console.error("Error al eliminar kardex:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_KARDEX,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `SP_EliminarKardex: Se eliminó kardex ID=${id_kardex}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Kardex eliminado correctamente mediante SP" });
+  });
+});
+
+
+
+// =============================
+//  MOSTRAR KARDEX (SP)
+// =============================
+// =======================
+//   KARDEX POR PRODUCTO
+// =======================
+app.get("/api/kardex/producto/:id", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0)
+    return res.status(400).json({ error: "ID inválido" });
+
+  const sql = "CALL SP_KardexPorProducto(?)";
+
+  conexion.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error("Error al obtener kardex:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    const kardex = result[0];
+
+    // Bitácora
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: req.user.id_usuario,
+      accion: "GET",
+      descripcion: `Consultó el kardex del producto ${id}`
+    });
+
+    res.json(kardex);
+  });
+});
+
+
+
+// =============================
+//  INSERTAR DETALLE DE COMPRA (SP)
+// =============================
+// ===============================
+//   DETALLE COMPRA (INSERTAR)
+// ===============================
+app.post("/api/compra/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compras", "insertar"), (req, res) => {
+  const { id_compra, id_producto, cantidad, precio_unitario } = req.body;
+
+  if (!id_compra || !id_producto || !cantidad)
+    return res.status(400).json({ error: "Datos incompletos" });
+
+  const sql = `
+    INSERT INTO tbl_detalle_compra (id_compra, id_producto, cantidad, precio_unitario)
+    VALUES (?, ?, ?, ?)
+  `;
+
+  conexion.query(sql, [id_compra, id_producto, cantidad, precio_unitario], (err) => {
+    if (err) {
+      console.error("Error al insertar detalle compra:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    // El trigger INSERTA en kardex y actualiza inventario
+
+    // Bitácora
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_COMPRAS,
+      id_usuario: req.user.id_usuario,
+      accion: "INSERT",
+      descripcion: `Insertó detalle a compra #${id_compra}`
+    });
+
+    res.json({ mensaje: "Detalle agregado correctamente" });
+  });
+});
+
+
+// =============================
+//  ACTUALIZAR DETALLE DE COMPRA (SP)
+// =============================
+app.put('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "actualizar"), (req, res) => {
+  const { monto_total } = req.body;
+  const id_detalle = parseInt(req.params.id);
+  const user = req.user;
+
+  if (!monto_total) {
+    return res.status(400).json({ error: "El monto total es obligatorio" });
+  }
+
+  const query = "CALL SP_ActualizarDetalleCompra(?, ?)";
+  const values = [id_detalle, monto_total];
+
+  conexion.query(query, values, (err) => {
+    if (err) {
+      console.error("Error al actualizar detalle compra:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_DETALLE_COMPRA,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `SP_ActualizarDetalleCompra: ID=${id_detalle}, nuevo monto=${monto_total}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Detalle de compra actualizado correctamente mediante SP" });
+  });
+});
+
+
+// =============================
+//  ELIMINAR DETALLE DE COMPRA (SP)
+// =============================
+app.delete('/api/detalle_compra/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "eliminar"), (req, res) => {
+  const id_detalle = parseInt(req.params.id);
+  const user = req.user;
+
+  const query = "CALL SP_EliminarDetalleCompra(?)";
+
+  conexion.query(query, [id_detalle], (err) => {
+    if (err) {
+      console.error("Error al eliminar detalle compra:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_DETALLE_COMPRA,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `SP_EliminarDetalleCompra: Se eliminó detalle_compra ID=${id_detalle}`,
+      usuario: user.nombre_usuario
+    });
+
+    res.json({ mensaje: "Detalle de compra eliminado correctamente mediante SP" });
+  });
+});
+
+
+// =============================
+//  MOSTRAR DETALLE DE COMPRA (SP)
+// =============================
+app.get('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "consultar"), (req, res) => {
+  const user = req.user;
+
+  const query = "CALL SP_MostrarDetalleCompra()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error al listar detalle compra:", err);
+      return res.status(500).json({ error: "Error al listar detalle compra" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_DETALLE_COMPRA,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarDetalleCompra: Consulta de detalle de compra",
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);
+  });
+});
+
+
+
+// =======================================================  
+// ============ Estados de Ticket (CRUD) =================
+// =======================================================
+
+const ID_OBJETO_ESTADO_TICKET = 12;
+
+app.get('/api/estado_ticket', (req, res) => { 
+  const query = "SELECT * FROM tbl_estado_ticket";
+  conexion.query(query, (err, rows) => {
+    if (err) return res.status(500).json({ error: "ERROR EN LISTADO DE ESTADOS DE TICKET" });
+    
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GETT",
+      descripcion: `Se listó el contenido de estado ticket`,
+      usuario: user.nombre_usuario
+    });
+    res.json(rows);
+  });
+});
+
+app.get('/api/estado_ticket/:id', (req, res) => {
+  const query = "SELECT * FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
+  conexion.query(query, [Number(req.params.id)], (err, rows) => {
+    if (err) return res.status(500).json({ error: "ERROR EN LISTADO DE ESTADO DE TICKET" });
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `Se consultó el estado_ticket id=${estado}`,
+      usuario: user.nombre_usuario
+    });
+    res.json(rows[0] || null);
+  });
+});
+
+app.post('/api/estado_ticket', (req, res) => {
+  const query = "INSERT INTO tbl_estado_ticket (estado) VALUES (?)";
+  conexion.query(query, [req.body.estado], (err, r) => {
+    if (err) return res.status(500).json({ error: err.message });
+        // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `Se agregó un nuevo estado de ticket = ${estado}`,
+      usuario: user.nombre_usuario
+    });
+    res.json({ message: "INSERT EXITOSO!", id: r.insertId });
+  });
+});
+
+app.put('/api/estado_ticket/:id', (req, res) => {
+  const query = "UPDATE tbl_estado_ticket SET estado = ? WHERE id_estado_ticket = ?";
+  conexion.query(query, [req.body.estado, Number(req.params.id)], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `Se actualizó el estado de ticket = ${estado}`,
+      usuario: user.nombre_usuario
+    });
+    res.json({ message: "UPDATE EXITOSO!" });
+  });
+});
+
+app.delete('/api/estado_ticket/:id', (req, res) => {
+  const query = "DELETE FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
+  conexion.query(query, [Number(req.params.id)], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+        // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_ESTADO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `Se eliminó el estado de ticket = ${estado}`,
+      usuario: user.nombre_usuario
+    });
+    res.json({ message: "DELETE EXITOSO!" });
+  });
+});
+
+// =======================================================
+// ============== Tipo Ticket (CRUD) =====================
+// =======================================================
+
+const ID_OBJETO_TIPO_TICKET = 11;
+
+app.get("/api/tipo_ticket", (req, res) => {
+  const sql = "SELECT id_tipo_ticket, tipo_ticket, prefijo FROM tbl_tipo_ticket WHERE estado='ACTIVO'";
+  conexion.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error al obtener tipos de ticket" });
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `Se consultó la lista de tipo ticket`,
+      usuario: user.nombre_usuario
+    });
+    res.json(rows);
+  });
+});
+
+app.get('/api/tipo_ticket/:id', (request, response) => {
+  const query = "SELECT * FROM tbl_tipo_ticket WHERE id_tipo_ticket= ?";
+  const values = [parseInt(request.params.id)];
+  conexion.query(query, values, (err, rows) => {
+    if (err) return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `Se consultó el tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
+    response.json(rows);
+  });
+});
+
+app.post('/api/tipo_ticket', (request, response) => {
+  try {
+    const { tipo_ticket , estado, prefijo } = request.body;
+    const query = `
+      INSERT INTO tbl_tipo_ticket (tipo_ticket , estado, prefijo) 
+      VALUES (?, ?, ?)
+    `;
+    const values = [tipo_ticket , estado, prefijo];
+    conexion.query(query, values, (err) => {
+      if (err) return handleDatabaseError(err, response, "Error en inserción de tipo ticket:");
+      // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `Se agregó un nuevo tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
+      response.json("INSERT EXITOSO!");
+    });
+  } catch (error) {
+    console.error(error);
+    response.status(400).json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
+  }
+});
+
+app.put('/api/tipo_ticket', (request, response) => {
+  try {
+    const { id_tipo_ticket, tipo_ticket, estado, prefijo } = request.body;
+    if (!id_tipo_ticket) {
+      return response.status(400).json({ error: "id_tipo_ticket es requerido" });
+    }
+    const query = `
+      UPDATE tbl_tipo_ticket 
+      SET tipo_ticket = ?, estado = ?, prefijo = ?
+      WHERE id_tipo_ticket = ?
+    `;
+    const values = [tipo_ticket, estado, prefijo, id_tipo_ticket];
+    conexion.query(query, values, (err) => {
+      if (err) return handleDatabaseError(err, response, "Error en actualización de tipo ticket:");
+      // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: `Se actualizó el tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
+      response.json("UPDATE EXITOSO!");
+    });
+  } catch (error) {
+    console.error(error);
+    response.status(400).json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
+  }
+});
+
+app.delete('/api/tipo_ticket/:id', (request, response) => {
+  const query = "DELETE FROM tbl_tipo_ticket WHERE id_tipo_ticket = ?";
+  const values = [parseInt(request.params.id)];
+  conexion.query(query, values, (err) => {
+    if (err) return handleDatabaseError(err, response, "Error en eliminación de tipo ticket:");
+    // BITÁCORA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIPO_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: `Se eliminó el tipo de ticket = ${tipo_ticket}`,
+      usuario: user.nombre_usuario
+    });
+    response.json("DELETE EXITOSO!");
+  });
+});
+
+// =======================================================
+// ===== Helpers de Tickets: estados y secuencias ========
+// =======================================================
+// Busca id_estado_ticket por su nombre (EN_COLA, EN_ATENCION, ATENDIDO, CANCELADO)
+function getEstadoIdByName(nombre, cb) {
+  const sql = "SELECT id_estado_ticket FROM tbl_estado_ticket WHERE UPPER(estado)=UPPER(?) LIMIT 1";
+  conexion.query(sql, [nombre], (err, rows) => {
+    if (err) return cb(err);
+    if (!rows.length) return cb(new Error("Estado no encontrado: " + nombre));
+    cb(null, rows[0].id_estado_ticket);
+  });
+}
+
+// Genera NO_ticket usando el prefijo del tipo de ticket + consecutivo diario
+function generarNoTicket(id_tipo_ticket, cb) {
+  // 1) obtener prefijo
+  const qPref = "SELECT prefijo FROM tbl_tipo_ticket WHERE id_tipo_ticket=? LIMIT 1";
+  conexion.query(qPref, [id_tipo_ticket], (e1, r1) => {
+    if (e1) return cb(e1);
+    if (!r1.length) return cb(new Error("Tipo ticket no encontrado"));
+
+    const prefijo = (r1[0].prefijo || "").toString().trim() || "N";
+    // 2) calcular consecutivo del día
+    const qCons = `
+      SELECT COUNT(*) AS cnt
+      FROM tbl_ticket
+      WHERE id_tipo_ticket=? AND DATE(creado_en)=CURDATE()
+    `;
+    conexion.query(qCons, [id_tipo_ticket], (e2, r2) => {
+      if (e2) return cb(e2);
+      const consecutivo = (r2[0].cnt || 0) + 1;
+      const numero = String(consecutivo).padStart(3, "0");  // N001, P007, etc.
+      cb(null, `${prefijo}${numero}`);
+    });
+  });
+}
+
+// ========= NUEVO: obtener/crear id_tramite a partir del texto =========
+function obtenerIdTramite(nombreTramite, cb) {
+  if (!nombreTramite) return cb(null, null);
+  const limpio = nombreTramite.toString().trim();
+  if (!limpio) return cb(null, null);
+
+  const qSel = "SELECT id_tramite FROM tbl_tramite WHERE nombre_tramite = ? LIMIT 1";
+  conexion.query(qSel, [limpio], (err, rows) => {
+    if (err) return cb(err);
+    if (rows.length) return cb(null, rows[0].id_tramite);
+
+    const qIns = "INSERT INTO tbl_tramite (nombre_tramite) VALUES (?)";
+    conexion.query(qIns, [limpio], (err2, r2) => {
+      if (err2) return cb(err2);
+      cb(null, r2.insertId);
+    });
+  });
+}
+
+// Valida y parsea :id en rutas con parámetro
+function requireIdParam(req, res, next) {
+  const raw = req.params.id;
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ mensaje: "ID inválido" });
+  }
+  req.id = id;
+  next();
+}
+
+// =======================================================
+// ============== Trámites (CRUD catálogo) ===============
+// =======================================================
+// Tabla: tbl_tramite (id_tramite, nombre_tramite, descripcion, activo, creado_en)
+
+app.get("/api/tramites", (req, res) => {
+  const { from, to } = req.query;
+  const params = [];
+  let filtroFecha = "";
+
+  if (from && to) {
+    filtroFecha = "AND DATE(t.creado_en) BETWEEN ? AND ?";
+    params.push(from, to);
+  }
+
+  const sql = `
+    SELECT 
+      tr.id_tramite,
+      tr.nombre_tramite,
+      tr.descripcion,
+      tr.activo,
+      tr.creado_en,
+      COUNT(t.id_ticket) AS total_personas
+    FROM tbl_tramite tr
+    LEFT JOIN tbl_ticket t 
+      ON t.id_tramite = tr.id_tramite
+      ${filtroFecha}
+    GROUP BY 
+      tr.id_tramite,
+      tr.nombre_tramite,
+      tr.descripcion,
+      tr.activo,
+      tr.creado_en
+    ORDER BY tr.nombre_tramite ASC
+  `;
+
+  conexion.query(sql, params, (err, rows) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ mensaje: "Error al obtener trámites" });
     }
     res.json(rows);
   });
 });
 
-app.get('/api/inventario/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_inventario WHERE id_inventario = ?";
-  conexion.query(query, [req.params.id], (err, rows) => {
+app.get("/api/tramites/:id", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ mensaje: "ID inválido" });
+  }
+  const sql = `
+    SELECT id_tramite, nombre_tramite, descripcion, activo, creado_en
+    FROM tbl_tramite
+    WHERE id_tramite = ?
+    LIMIT 1
+  `;
+  conexion.query(sql, [id], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, "Error al obtener trámite");
+    if (!rows.length) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json(rows[0]);
+  });
+});
+
+app.post("/api/tramites", (req, res) => {
+  let { nombre_tramite, descripcion } = req.body;
+  if (!nombre_tramite || !nombre_tramite.toString().trim()) {
+    return res.status(400).json({ mensaje: "El nombre del trámite es requerido" });
+  }
+  nombre_tramite = nombre_tramite.toString().trim();
+  descripcion = (descripcion ?? "").toString().trim() || null;
+
+  const sql = `
+    INSERT INTO tbl_tramite (nombre_tramite, descripcion, activo)
+    VALUES (?, ?, 1)
+  `;
+  conexion.query(sql, [nombre_tramite, descripcion], (err, r) => {
+    if (err) return handleDatabaseError(err, res, "Error al crear trámite");
+    res.status(201).json({
+      mensaje: "Trámite creado correctamente",
+      id_tramite: r.insertId,
+      nombre_tramite,
+      descripcion,
+    });
+  });
+});
+
+app.put("/api/tramites/:id", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ mensaje: "ID inválido" });
+  }
+
+  let { nombre_tramite, descripcion, activo } = req.body;
+  if (!nombre_tramite || !nombre_tramite.toString().trim()) {
+    return res.status(400).json({ mensaje: "El nombre del trámite es requerido" });
+  }
+  nombre_tramite = nombre_tramite.toString().trim();
+  descripcion = (descripcion ?? "").toString().trim() || null;
+  activo = activo ? 1 : 0;
+
+  const sql = `
+    UPDATE tbl_tramite
+    SET nombre_tramite = ?, descripcion = ?, activo = ?
+    WHERE id_tramite = ?
+  `;
+  conexion.query(sql, [nombre_tramite, descripcion, activo, id], (err, r) => {
+    if (err) return handleDatabaseError(err, res, "Error al actualizar trámite");
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite actualizado correctamente" });
+  });
+});
+
+app.delete("/api/tramites/:id", (req, res) => {
+  const { id } = req.params;
+
+  const sql = "DELETE FROM tbl_tramite WHERE id_tramite = ?";
+
+  conexion.query(sql, [id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al eliminar trámite", error: err });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite eliminado correctamente" });
+  });
+});
+
+
+app.patch("/api/tramites/:id/desactivar", (req, res) => {
+  const { id } = req.params;
+
+  const sql = `
+    UPDATE tbl_tramite
+    SET activo = 0
+    WHERE id_tramite = ?
+  `;
+
+  conexion.query(sql, [id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al desactivar trámite" });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite desactivado" });
+  });
+});
+
+app.patch("/api/tramites/:id/activar", (req, res) => {
+  const { id } = req.params;
+
+  const sql = `
+    UPDATE tbl_tramite
+    SET activo = 1
+    WHERE id_tramite = ?
+  `;
+
+  conexion.query(sql, [id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al activar trámite" });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite activado" });
+  });
+});
+
+
+// =======================================================
+// ============ SISTEMA DE LLAMADO DE TICKETS ============
+// (Orden correcto evita colisiones con :id)             //
+// =======================================================
+
+// ---------- (1) RUTAS FIJAS (van primero) --------------
+app.get("/api/tickets/cola", (req, res) => {
+  const sql = `
+    SELECT 
+      t.id_ticket,
+      t.NO_ticket,
+      tr.nombre_tramite AS tramite,
+      t.creado_en,
+      tt.tipo_ticket AS tipo
+    FROM tbl_ticket t
+    JOIN tbl_estado_ticket et ON et.id_estado_ticket = t.id_estado_ticket
+    JOIN tbl_tipo_ticket tt   ON tt.id_tipo_ticket   = t.id_tipo_ticket
+    LEFT JOIN tbl_tramite tr  ON tr.id_tramite       = t.id_tramite
+    WHERE et.estado = 'EN_COLA'
+      ORDER BY 
+    TIMESTAMPDIFF(MINUTE, t.creado_en, NOW()) DESC,
+    CASE 
+      WHEN tt.tipo_ticket = 'PREFERENCIAL' THEN 0
+      ELSE 1
+    END,
+    t.creado_en ASC
+
+  `;
+  conexion.query(sql, (err, rows) => {
     if (err) {
-      console.error("Error al obtener el inventario:", err);
-      res.status(500).json({ error: "Error al obtener el inventario" });
-      return;
+      console.error("[/tickets/cola] SQL error:", err);
+      return res.status(500).json({ mensaje: "Error al listar cola" });
+    }
+    res.json(rows);
+  });
+});
+
+app.get("/api/tickets/en-atencion", (req, res) => {
+  const sql = `
+    SELECT 
+      t.id_ticket,
+      t.NO_ticket,
+      tr.nombre_tramite AS tramite,
+      t.creado_en,
+      v.ventanilla,
+      t.llamado_en,
+      tt.tipo_ticket AS tipo
+    FROM tbl_ticket t
+    JOIN tbl_estado_ticket et ON et.id_estado_ticket = t.id_estado_ticket
+    LEFT JOIN tbl_visualizacion v ON v.id_ticket = t.id_ticket
+    JOIN tbl_tipo_ticket tt ON tt.id_tipo_ticket = t.id_tipo_ticket
+    LEFT JOIN tbl_tramite tr ON tr.id_tramite = t.id_tramite
+    WHERE et.estado = 'EN_ATENCION'
+    ORDER BY t.llamado_en DESC, t.llamado_veces DESC, t.id_ticket DESC
+    LIMIT 1
+  `;
+
+  conexion.query(sql, (err, rows) => {
+    if (err) {
+      console.error("[/tickets/en-atencion] SQL error:", err);
+      return res.status(500).json({ mensaje: "Error al leer en atención" });
+    }
+    res.json(rows[0] || null);
+  });
+});
+
+
+// Llamar siguiente
+// Llamar siguiente (protegid@ y asigna operador)
+app.post("/api/tickets/siguiente", verificarToken, (req, res) => {
+  const { ventanilla = "A1" } = req.body;
+  const idOperador = req.user?.id_usuario || null;
+
+  const qEstados = `
+    SELECT estado, id_estado_ticket
+    FROM tbl_estado_ticket
+    WHERE estado IN ('EN_COLA','EN_ATENCION')
+  `;
+  conexion.query(qEstados, (e0, est) => {
+    if (e0) return res.status(500).json({ mensaje: "Error leyendo estados" });
+    const idEnCola = est.find(r => r.estado === 'EN_COLA')?.id_estado_ticket;
+    const idEnAtencion = est.find(r => r.estado === 'EN_ATENCION')?.id_estado_ticket;
+    if (!idEnCola || !idEnAtencion) {
+      return res.status(500).json({ mensaje: "Faltan estados EN_COLA / EN_ATENCION" });
+    }
+
+        const qFind = `
+      SELECT 
+        t.id_ticket, 
+        t.NO_ticket, 
+        tr.nombre_tramite AS tramite, 
+        t.creado_en, 
+        t.id_tipo_ticket,
+        tt.tipo_ticket AS tipo
+      FROM tbl_ticket t
+      JOIN tbl_tipo_ticket tt ON tt.id_tipo_ticket = t.id_tipo_ticket
+      LEFT JOIN tbl_tramite tr ON tr.id_tramite = t.id_tramite
+      WHERE t.id_estado_ticket = ?
+      ORDER BY 
+        TIMESTAMPDIFF(MINUTE, t.creado_en, NOW()) DESC,  -- más tiempo esperando primero
+        CASE                                             -- si empatan, preferencial primero
+          WHEN tt.tipo_ticket = 'PREFERENCIAL' THEN 0
+          ELSE 1
+        END,
+        t.creado_en ASC
+      LIMIT 1
+    `;
+
+    conexion.query(qFind, [idEnCola], (e1, r1) => {
+      if (e1) return res.status(500).json({ mensaje: "Error buscando siguiente ticket" });
+      if (!r1.length) return res.status(404).json({ mensaje: "No hay tickets en cola" });
+
+      const tk = r1[0];
+      const qUpd = `
+        UPDATE tbl_ticket
+        SET llamado_veces = COALESCE(llamado_veces,0) + 1,
+            llamado_en     = NOW(),
+            id_estado_ticket = ?,
+            id_usuario     = IFNULL(id_usuario, ?)  -- <--- asigna operador
+        WHERE id_ticket = ?
+      `;
+      conexion.query(qUpd, [idEnAtencion, idOperador, tk.id_ticket], (e2) => {
+        if (e2) return res.status(500).json({ mensaje: "Error al actualizar ticket" });
+
+        // Registrar/actualizar visualización
+        const qVis = `
+          INSERT INTO tbl_visualizacion (id_ticket, ventanilla)
+          VALUES (?, ?)
+          ON DUPLICATE KEY UPDATE ventanilla = VALUES(ventanilla)
+        `;
+        conexion.query(qVis, [tk.id_ticket, ventanilla], (e3) => {
+          if (e3) {
+            console.error("[visualizacion] error:", e3);
+            return res.status(500).json({ mensaje: "Error registrando visualización" });
+          }
+          res.json({ mensaje: "Ticket llamado", ticket: { ...tk, ventanilla } });
+        });
+      });
+    });
+  });
+});
+
+
+// Saltar (cancela el actual y llama el siguiente)
+app.post("/api/tickets/saltar", (req, res) => {
+  const { ventanilla = "A1" } = req.body;
+
+  const qEstadoCancel = `
+    SELECT id_estado_ticket 
+    FROM tbl_estado_ticket 
+    WHERE estado='CANCELADO' 
+    LIMIT 1
+  `;
+  conexion.query(qEstadoCancel, (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error obteniendo estado CANCELADO" });
+    const id_estado_cancelado = rows[0]?.id_estado_ticket;
+    if (!id_estado_cancelado) return res.status(500).json({ mensaje: "Falta estado CANCELADO" });
+
+    const qUpd = `
+      UPDATE tbl_ticket
+      SET id_estado_ticket = ?
+      WHERE id_estado_ticket = (SELECT id_estado_ticket FROM tbl_estado_ticket WHERE estado='EN_ATENCION' LIMIT 1)
+      ORDER BY creado_en DESC
+      LIMIT 1
+    `;
+    conexion.query(qUpd, [id_estado_cancelado], (e2) => {
+      if (e2) return res.status(500).json({ mensaje: "Error al cancelar ticket actual" });
+
+      const qFind = `
+  SELECT 
+    t.id_ticket, 
+    t.NO_ticket, 
+    tr.nombre_tramite AS tramite, 
+    t.creado_en,
+    tt.tipo_ticket AS tipo
+  FROM tbl_ticket t
+  JOIN tbl_estado_ticket et ON et.id_estado_ticket = t.id_estado_ticket
+  JOIN tbl_tipo_ticket tt   ON tt.id_tipo_ticket   = t.id_tipo_ticket
+  LEFT JOIN tbl_tramite tr  ON tr.id_tramite       = t.id_tramite
+  WHERE et.estado = 'EN_COLA'
+  ORDER BY (tt.tipo_ticket = 'PREFERENCIAL') DESC, t.creado_en ASC
+  LIMIT 1
+`;
+
+      conexion.query(qFind, (e3, rowsNext) => {
+        if (e3) return res.status(500).json({ mensaje: "Error buscando siguiente ticket" });
+        if (rowsNext.length === 0) return res.status(404).json({ mensaje: "No hay más tickets en cola" });
+
+        const tk = rowsNext[0];
+        const qEstadoAt = `
+          SELECT id_estado_ticket 
+          FROM tbl_estado_ticket 
+          WHERE estado='EN_ATENCION' 
+          LIMIT 1
+        `;
+        conexion.query(qEstadoAt, (e4, est2) => {
+          if (e4) return res.status(500).json({ mensaje: "Error leyendo estado EN_ATENCION" });
+          const id_estado_atencion = est2[0]?.id_estado_ticket;
+          if (!id_estado_atencion) return res.status(500).json({ mensaje: "Falta estado EN_ATENCION" });
+
+          const qUpd2 = `
+            UPDATE tbl_ticket
+            SET llamado_veces = llamado_veces + 1,
+                llamado_en = NOW(),
+                id_estado_ticket = ?
+            WHERE id_ticket = ?
+          `;
+          conexion.query(qUpd2, [id_estado_atencion, tk.id_ticket], (e5) => {
+            if (e5) return res.status(500).json({ mensaje: "Error al actualizar ticket siguiente" });
+
+            const qVis = `
+              INSERT INTO tbl_visualizacion (id_ticket, ventanilla)
+              VALUES (?, ?)
+              ON DUPLICATE KEY UPDATE 
+                ventanilla = VALUES(ventanilla)
+            `;
+            conexion.query(qVis, [tk.id_ticket, ventanilla], (e6) => {
+              if (e6) {
+                console.error("[visualizacion] error:", e6);
+                return res.status(500).json({ mensaje: "Error registrando visualización" });
+              }
+
+              res.json({
+                mensaje: "Ticket actual cancelado, siguiente llamado",
+                ticket: {
+                  id_ticket: tk.id_ticket,
+                  no_ticket: tk.NO_ticket,
+                  tramite: tk.tramite,
+                  tipo: tk.tipo,
+                  ventanilla,
+                },
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
+// ---------- (2) CRUD sin ID ---------------------------
+app.post("/api/tickets", (req, res) => {
+  const { id_tipo_ticket, id_tramite, nota = null, tramite = null } = req.body;
+  if (!id_tipo_ticket) {
+    return res.status(400).json({ mensaje: "id_tipo_ticket es requerido" });
+  }
+
+  // Prioridad: si viene id_tramite lo usamos; si no, intentamos con texto "tramite"
+  const usarTextoTramite = !id_tramite && tramite;
+
+  const continuarConInsert = (idTramiteFinal) => {
+    getEstadoIdByName("EN_COLA", (e0, idEnCola) => {
+      if (e0) return handleDatabaseError(e0, res, "Estado EN_COLA no encontrado");
+
+      generarNoTicket(id_tipo_ticket, (e1, NO_ticket) => {
+        if (e1) return handleDatabaseError(e1, res, "Error generando NO_ticket");
+
+        const q = `
+          INSERT INTO tbl_ticket
+            (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket, id_tramite, creado_en, llamado_veces, nota)
+          VALUES
+            (NULL, ?, ?, ?, ?, NOW(), 0, ?)
+        `;
+        conexion.query(
+          q,
+          [idEnCola, id_tipo_ticket, NO_ticket, idTramiteFinal, nota],
+          (e2, r2) => {
+            if (e2) {
+              if (e2.code === "ER_DUP_ENTRY") {
+                return res.status(409).json({ mensaje: "Colisión de número, intente de nuevo" });
+              }
+              return handleDatabaseError(e2, res, "Error al crear ticket");
+            }
+            res.status(201).json({ id_ticket: r2.insertId, NO_ticket });
+          }
+        );
+      });
+    });
+  };
+
+  if (id_tramite) {
+    // viene el id_tramite directo del frontend
+    return continuarConInsert(Number(id_tramite));
+  }
+
+  if (usarTextoTramite) {
+    // kiosko o algún cliente que mande texto
+    return obtenerIdTramite(tramite, (err, idT) => {
+      if (err) return handleDatabaseError(err, res, "Error resolviendo trámite");
+      continuarConInsert(idT);
+    });
+  }
+
+  // sin trámite (opcional)
+  continuarConInsert(null);
+});
+
+// Listado con filtros/paginación
+app.get("/api/tickets", (req, res) => {
+  const { from, to, empleado_id, estado, q, page = 1, pageSize = 20 } = req.query;
+  const off = (Number(page) - 1) * Number(pageSize);
+
+  const params = [];
+  let where = "1=1";
+  if (from && to) { where += " AND DATE(t.creado_en) BETWEEN ? AND ?"; params.push(from, to); }
+  if (empleado_id) { where += " AND t.id_usuario = ?"; params.push(Number(empleado_id)); }
+  if (estado) { where += " AND UPPER(es.estado)=UPPER(?)"; params.push(estado); }
+  if (q) { where += " AND (t.NO_ticket LIKE CONCAT('%', ?, '%'))"; params.push(q); }
+
+  const sel = `
+    SELECT
+      t.id_ticket,
+      t.NO_ticket,
+      t.creado_en,
+      t.llamado_en,
+      t.llamado_veces,
+      t.iniciado_en,
+      t.finalizado_en,
+      t.nota,
+      t.id_tramite,
+      tr.nombre_tramite,
+      es.estado,
+      tt.tipo_ticket,
+      tt.prefijo,
+      t.id_usuario,
+      CONCAT(u.nombre, ' ', u.apellido) AS empleado
+    FROM tbl_ticket t
+    JOIN tbl_estado_ticket es ON es.id_estado_ticket = t.id_estado_ticket
+    JOIN tbl_tipo_ticket   tt ON tt.id_tipo_ticket   = t.id_tipo_ticket
+    LEFT JOIN tbl_tramite  tr ON tr.id_tramite      = t.id_tramite
+    LEFT JOIN tbl_usuario   u ON u.id_usuario        = t.id_usuario
+    WHERE ${where}
+    ORDER BY t.creado_en DESC
+    LIMIT ? OFFSET ?
+  `;
+  const cnt = `
+    SELECT COUNT(*) AS total
+    FROM tbl_ticket t
+    JOIN tbl_estado_ticket es ON es.id_estado_ticket = t.id_estado_ticket
+    JOIN tbl_tipo_ticket   tt ON tt.id_tipo_ticket   = t.id_tipo_ticket
+    LEFT JOIN tbl_tramite  tr ON tr.id_tramite      = t.id_tramite
+    LEFT JOIN tbl_usuario   u ON u.id_usuario        = t.id_usuario
+    WHERE ${where}
+  `;
+
+  conexion.query(sel, [...params, Number(pageSize), off], (e1, rows) => {
+    if (e1) return handleDatabaseError(e1, res, "Error listando tickets");
+    conexion.query(cnt, params, (e2, r2) => {
+      if (e2) return handleDatabaseError(e2, res, "Error contando tickets");
+      res.json({ data: rows, page: Number(page), pageSize: Number(pageSize), total: r2[0].total });
+    });
+  });
+});
+
+
+// ---------- (3) RUTAS con ID (regex numérica) ----------
+// ---------- (3) RUTAS con ID (regex numérica) ----------
+app.get("/api/tickets/:id", requireIdParam, (req, res) => {
+  const id = req.id;
+  const sql = `
+    SELECT
+      t.*,
+      es.estado,
+      tt.tipo_ticket,
+      tt.prefijo,
+      tr.nombre_tramite,
+      u.nombre_usuario AS usuario
+    FROM tbl_ticket t
+    JOIN tbl_estado_ticket es ON es.id_estado_ticket = t.id_estado_ticket
+    JOIN tbl_tipo_ticket tt    ON tt.id_tipo_ticket = t.id_tipo_ticket
+    LEFT JOIN tbl_tramite tr   ON tr.id_tramite     = t.id_tramite
+    LEFT JOIN tbl_usuario u    ON u.id_usuario      = t.id_usuario
+    WHERE t.id_ticket = ? LIMIT 1
+  `;
+  conexion.query(sql, [id], (err, rows) => {
+    if (err) return handleDatabaseError(err, res, "Error al obtener ticket");
+    if (!rows.length) {
+      return res.status(404).json({ mensaje: "No encontrado" });
     }
     res.json(rows[0]);
   });
 });
 
-app.post('/api/inventario', (req, res) => {
-  const { estado } = req.body;
-  const query = "INSERT INTO tbl_inventario (estado) VALUES (?)";
-  conexion.query(query, [estado], (err, result) => {
-    if (err) {
-      console.error("Error al insertar el inventario:", err);
-      res.status(500).json({ error: "Error al insertar el inventario" });
-      return;
+// Actualizar (nota / reasignar)
+app.put("/api/tickets/:id", requireIdParam, (req, res) => {
+  const id = req.id;
+  const { nota = null, id_usuario = null } = req.body;
+  conexion.query(
+    "UPDATE tbl_ticket SET nota = ?, id_usuario = ? WHERE id_ticket = ?",
+    [nota, id_usuario, id],
+    (err, r) => {
+      if (err) return handleDatabaseError(err, res, "Error al actualizar ticket");
+      if (!r.affectedRows) {
+        return res.status(404).json({ mensaje: "No encontrado" });
+      }
+      res.json({ ok: true });
     }
-    res.json({ message: "Invetario insertado correctamente", id: result.insertId });
+  );
+});
+
+
+// LLAMAR → EN_ATENCION + asigna operador
+app.patch("/api/tickets/:id/llamar", requireIdParam, verificarToken, (req, res) => {
+  const id = req.id;
+  const idOperador = req.user?.id_usuario || null; // ← del JWT
+
+  getEstadoIdByName("EN_ATENCION", (e0, idAt) => {
+    if (e0) return handleDatabaseError(e0, res, "Falta estado EN_ATENCION");
+
+    const q = `
+      UPDATE tbl_ticket
+      SET id_estado_ticket=?,
+          id_usuario=IFNULL(id_usuario, ?),
+          llamado_en=IFNULL(llamado_en, NOW()),
+          llamado_veces = COALESCE(llamado_veces,0)+1
+      WHERE id_ticket=?
+    `;
+    conexion.query(q, [idAt, idOperador, id], (err, r) => {
+      if (err) return handleDatabaseError(err, res, "Error al llamar");
+      if (!r.affectedRows) return res.status(404).json({ mensaje: "No encontrado" });
+      res.json({ ok: true });
+    });
   });
 });
 
-app.put('/api/inventario/:id', (req, res) => {
-  const { estado } = req.body;
-  const query = "UPDATE tbl_inventario SET estado = ? WHERE id_inventario = ?";
-  conexion.query(query, [estado, req.params.id], (err) => {
-    if (err) {
-      console.error("Error al actualizar el inventario:", err);
-      res.status(500).json({ error: "Error al actualizar el inventario" });
-      return;
-    }
-    res.json({ message: "Inventario actualizado correctamente" });
+
+// INICIAR
+app.patch("/api/tickets/:id/iniciar", requireIdParam, verificarToken, (req, res) => {
+  const id = req.id;
+  const idOperador = req.user?.id_usuario || null;
+
+  const sql = `
+    UPDATE tbl_ticket
+    SET iniciado_en = IFNULL(iniciado_en, NOW()),
+        id_usuario  = IFNULL(id_usuario, ?)
+    WHERE id_ticket = ?
+  `;
+  conexion.query(sql, [idOperador, id], (err, r) => {
+    if (err) return handleDatabaseError(err, res, "Error al iniciar");
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "No encontrado" });
+    res.json({ ok: true });
   });
 });
 
-app.delete('/api/inventario/:id', (req, res) => {
-  const query = "DELETE FROM tbl_inventario WHERE id_inventario = ?";
-  conexion.query(query, [req.params.id], (err) => {
-    if (err) {
-      console.error("Error al eliminar el Inventario:", err);
-      res.status(500).json({ error: "Error al eliminar el Inventario" });
-      return;
-    }
-    res.json({ message: "Inventario eliminado correctamente" });
+
+// FINALIZAR (PATCH canónico)
+app.patch("/api/tickets/:id/finalizar", requireIdParam, verificarToken, (req, res) => {
+  const id = req.id;
+  const sql = `
+    UPDATE tbl_ticket
+    SET id_estado_ticket = (SELECT id_estado_ticket FROM tbl_estado_ticket WHERE estado='ATENDIDO' LIMIT 1),
+        finalizado_en    = IFNULL(finalizado_en, NOW()),
+        iniciado_en      = IFNULL(iniciado_en, llamado_en)
+    WHERE id_ticket = ?
+  `;
+  conexion.query(sql, [id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al finalizar ticket" });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Ticket no encontrado" });
+    res.json({ mensaje: "Ticket finalizado" });
   });
 });
+
+// ========== CANCELAR TICKET (reutilizable) ==========
+function cancelarTicketSQL(id_ticket, done) {
+  // 1) marcar CANCELADO y congelar tiempos
+  const sql1 = `
+    UPDATE tbl_ticket
+    SET 
+      id_estado_ticket = (
+        SELECT id_estado_ticket 
+        FROM tbl_estado_ticket 
+        WHERE estado='CANCELADO' 
+        LIMIT 1
+      ),
+      -- si nunca se inició, usa el llamado_en como mejor estimación;
+      -- si tampoco hay llamado_en, usa NOW()
+      iniciado_en = COALESCE(iniciado_en, llamado_en, NOW()),
+      finalizado_en = COALESCE(finalizado_en, NOW())
+    WHERE id_ticket = ?
+  `;
+  conexion.query(sql1, [id_ticket], (err1, r1) => {
+    if (err1) return done(err1);
+    if (!r1.affectedRows) return done({ notFound: true });
+
+    // 2) limpiar cualquier visualización activa para ese ticket
+    const sql2 = `DELETE FROM tbl_visualizacion WHERE id_ticket = ?`;
+    conexion.query(sql2, [id_ticket], (err2) => {
+      if (err2) return done(err2);
+      return done(null, { ok: true });
+    });
+  });
+}
+
+// PATCH canónico
+app.patch("/api/tickets/:id/cancelar", requireIdParam, (req, res) => {
+  const id = req.id;
+  cancelarTicketSQL(id, (err, result) => {
+    if (err && err.notFound) return res.status(404).json({ mensaje: "Ticket no encontrado" });
+    if (err) {
+      console.error("Error al cancelar ticket:", err);
+      return res.status(500).json({ mensaje: "Error al cancelar ticket" });
+    }
+    res.json({ mensaje: "Ticket cancelado correctamente" });
+  });
+});
+
+// POST alias (por compatibilidad con tu panel)
+app.post("/api/tickets/:id/cancelar", requireIdParam, (req, res) => {
+  const id = req.id;
+  cancelarTicketSQL(id, (err, result) => {
+    if (err && err.notFound) return res.status(404).json({ mensaje: "Ticket no encontrado" });
+    if (err) {
+      console.error("Error al cancelar ticket (POST):", err);
+      return res.status(500).json({ mensaje: "Error al cancelar ticket" });
+    }
+    res.json({ mensaje: "Ticket cancelado correctamente" });
+  });
+});
+
+// REPETIR LLAMADO
+app.post("/api/tickets/:id/repetir", requireIdParam, (req, res) => {
+  const id = req.id;
+  const { ventanilla = "A1" } = req.body;
+  const sql = `
+    UPDATE tbl_ticket
+    SET llamado_veces = llamado_veces + 1, llamado_en = NOW()
+    WHERE id_ticket = ?
+  `;
+  conexion.query(sql, [id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al marcar repetición" });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Ticket no encontrado" });
+
+    const qVis = `
+      INSERT INTO tbl_visualizacion (id_ticket, ventanilla)
+      VALUES (?, ?)
+      ON DUPLICATE KEY UPDATE ventanilla = VALUES(ventanilla)
+    `;
+    conexion.query(qVis, [id, ventanilla], (e2) => {
+      if (e2) {
+        console.error("[visualizacion] error:", e2);
+        return res.status(500).json({ mensaje: "Error registrando visualización" });
+      }
+      res.json({ mensaje: "Repetido", ventanilla });
+    });
+  });
+});
+
+// DELETE lógico → CANCELADO
+// DELETE físico → elimina fila del ticket
+app.delete("/api/tickets/:id", requireIdParam, (req, res) => {
+  const id = req.id;
+
+  const sql = "DELETE FROM tbl_ticket WHERE id_ticket = ?";
+  conexion.query(sql, [id], (err, r) => {
+    if (err) {
+      console.error("Error al eliminar ticket:", err);
+      return res.status(500).json({ mensaje: "Error al eliminar ticket" });
+    }
+    if (!r.affectedRows) {
+      return res.status(404).json({ mensaje: "Ticket no encontrado" });
+    }
+    res.json({ mensaje: "Ticket eliminado correctamente" });
+  });
+});
+
+// Obtener trámites activos
+app.get("/api/tramites", (req, res) => {
+  conexion.query(
+    "SELECT id_tramite, nombre_tramite FROM tbl_tramite WHERE activo = 1 ORDER BY nombre_tramite",
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "Error al cargar trámites" });
+      res.json(rows);
+    }
+  );
+});
+
+app.get("/api/tramites/:id", (req, res) => {
+  const sql = `
+    SELECT id_tramite, nombre_tramite, descripcion, activo, creado_en
+    FROM tbl_tramite
+    WHERE id_tramite = ?
+    LIMIT 1
+  `;
+  conexion.query(sql, [req.params.id], (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error al obtener trámite", error: err });
+    if (!rows.length) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json(rows[0]);
+  });
+});
+
+// Crear un nuevo trámite
+app.post("/api/tramites", (req, res) => {
+  const { nombre_tramite, descripcion } = req.body;
+
+  if (!nombre_tramite)
+    return res.status(400).json({ mensaje: "El nombre del trámite es obligatorio" });
+
+  const sql = `
+    INSERT INTO tbl_tramite (nombre_tramite, descripcion, activo, creado_en)
+    VALUES (?, ?, 1, NOW())
+  `;
+  conexion.query(sql, [nombre_tramite, descripcion], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al crear trámite", error: err });
+
+    res.status(201).json({
+      mensaje: "Trámite creado correctamente",
+      id_tramite: r.insertId,
+    });
+  });
+});
+
+// Actualizar un trámite
+app.put("/api/tramites/:id", (req, res) => {
+  const { nombre_tramite, descripcion, activo } = req.body;
+
+  if (!nombre_tramite)
+    return res.status(400).json({ mensaje: "El nombre del trámite es obligatorio" });
+
+  const sql = `
+    UPDATE tbl_tramite
+    SET nombre_tramite = ?, descripcion = ?, activo = ?
+    WHERE id_tramite = ?
+  `;
+  conexion.query(sql, [nombre_tramite, descripcion, activo ? 1 : 0, req.params.id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al actualizar trámite", error: err });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite actualizado correctamente" });
+  });
+});
+
+// Desactivar trámite (DELETE lógico)
+app.delete("/api/tramites/:id", (req, res) => {
+  const sql = `
+    UPDATE tbl_tramite
+    SET activo = 0
+    WHERE id_tramite = ?
+  `;
+  conexion.query(sql, [req.params.id], (err, r) => {
+    if (err) return res.status(500).json({ mensaje: "Error al eliminar trámite", error: err });
+    if (!r.affectedRows) return res.status(404).json({ mensaje: "Trámite no encontrado" });
+    res.json({ mensaje: "Trámite eliminado (desactivado)" });
+  });
+});
+
+// =======================================================
+// ================= MONITOR DEL PANEL ===================
+// =======================================================
+app.get("/api/monitor/estado", (req, res) => {
+  const qActual = `
+  SELECT 
+    v.id_visualizacion,
+    t.NO_ticket AS no_ticket,
+    tr.nombre_tramite AS tramite,
+    tt.tipo_ticket AS tipo,
+    v.ventanilla,
+    t.llamado_en
+  FROM tbl_visualizacion v
+  JOIN tbl_ticket t       ON t.id_ticket = v.id_ticket
+  JOIN tbl_tipo_ticket tt ON tt.id_tipo_ticket = t.id_tipo_ticket
+  LEFT JOIN tbl_tramite tr ON tr.id_tramite = t.id_tramite
+  ORDER BY 
+    t.llamado_en DESC,
+    v.id_visualizacion DESC
+  LIMIT 1
+`;
+  conexion.query(qActual, (e1, rAct) => {
+    if (e1) {
+      console.error("[/monitor/estado] actual:", e1);
+      return res.status(500).json({ mensaje: "Error actual" });
+    }
+    const actual = rAct[0] || null;
+
+    const qHist = `
+  SELECT 
+    v.id_visualizacion,
+    t.NO_ticket AS no_ticket,
+    tr.nombre_tramite AS tramite,
+    tt.tipo_ticket AS tipo,
+    v.ventanilla,
+    t.llamado_en
+  FROM tbl_visualizacion v
+  JOIN tbl_ticket t       ON t.id_ticket = v.id_ticket
+  JOIN tbl_tipo_ticket tt ON tt.id_tipo_ticket = t.id_tipo_ticket
+  LEFT JOIN tbl_tramite tr ON tr.id_tramite = t.id_tramite
+  ORDER BY 
+    t.llamado_en DESC,
+    v.id_visualizacion DESC
+  LIMIT 10 OFFSET 1
+`;
+    conexion.query(qHist, (e2, rHist) => {
+      if (e2) {
+        console.error("[/monitor/estado] historial:", e2);
+        return res.status(500).json({ mensaje: "Error historial" });
+      }
+      res.json({ actual, historial: rHist });
+    });
+  });
+});
+
+// =======================================================
+// ================== KIOSKO: TOMAR ======================
+// =======================================================
+function pad3(n) { return String(n).padStart(3, "0"); }
+
+app.post("/api/kiosko/tomar", (req, res) => {
+  const { id_tipo_ticket, id_tramite, tramite } = req.body;
+
+  if (!id_tipo_ticket) {
+    return res.status(400).json({ mensaje: "Faltan datos: id_tipo_ticket" });
+  }
+
+  // Ahora la prioridad es usar id_tramite que viene del kiosko;
+  // si no viene, opcionalmente puede resolver por texto "tramite"
+  const resolverIdTramite = (cb) => {
+    if (id_tramite) return cb(null, Number(id_tramite));
+    if (tramite) return obtenerIdTramite(tramite, cb);
+    return cb(null, null); // sin trámite
+  };
+
+  const qTipo = `
+    SELECT prefijo
+    FROM tbl_tipo_ticket
+    WHERE id_tipo_ticket = ? AND estado = 'ACTIVO'
+    LIMIT 1
+  `;
+  conexion.query(qTipo, [id_tipo_ticket], (eTipo, rTipo) => {
+    if (eTipo) return handleDatabaseError(eTipo, res, "Error leyendo tipo de ticket");
+    if (!rTipo.length)
+      return res.status(404).json({ mensaje: "Tipo de ticket inexistente o INACTIVO" });
+
+    const prefijo = (rTipo[0].prefijo || "GN").trim().toUpperCase();
+
+    const qSeq = `
+      INSERT INTO tbl_ticket_seq (prefijo, fecha, consecutivo)
+      VALUES (?, CURDATE(), 1)
+      ON DUPLICATE KEY UPDATE consecutivo = consecutivo + 1
+    `;
+    conexion.query(qSeq, [prefijo], (eSeq) => {
+      if (eSeq) return handleDatabaseError(eSeq, res, "Error actualizando secuencia");
+
+      const qGet = `
+        SELECT consecutivo
+        FROM tbl_ticket_seq
+        WHERE prefijo = ? AND fecha = CURDATE()
+        LIMIT 1
+      `;
+      conexion.query(qGet, [prefijo], (eGet, rGet) => {
+        if (eGet) return handleDatabaseError(eGet, res, "Error leyendo secuencia");
+        const consecutivo = rGet[0]?.consecutivo || 1;
+        const NO_ticket = `${prefijo}${pad3(consecutivo)}`;
+
+        const qEstado = `
+          SELECT id_estado_ticket
+          FROM tbl_estado_ticket
+          WHERE estado = 'EN_COLA'
+          LIMIT 1
+        `;
+        conexion.query(qEstado, (eEst, rEst) => {
+          if (eEst) return handleDatabaseError(eEst, res, "Error leyendo estado EN_COLA");
+          const id_estado_ticket = rEst[0]?.id_estado_ticket;
+          if (!id_estado_ticket)
+            return res.status(500).json({ mensaje: "No existe estado EN_COLA" });
+
+          resolverIdTramite((errT, idTramiteFinal) => {
+            if (errT) return handleDatabaseError(errT, res, "Error resolviendo trámite");
+
+            const qIns = `
+              INSERT INTO tbl_ticket
+                (id_cliente, id_estado_ticket, id_tipo_ticket, NO_ticket, id_tramite, creado_en, llamado_veces)
+              VALUES
+                (NULL, ?, ?, ?, ?, NOW(), 0)
+            `;
+            const vals = [id_estado_ticket, id_tipo_ticket, NO_ticket, idTramiteFinal];
+
+            conexion.query(qIns, vals, (eIns, rIns) => {
+              if (eIns) {
+                if (eIns.code === "ER_DUP_ENTRY") {
+                  return res
+                    .status(409)
+                    .json({ mensaje: "Colisión de número, intente de nuevo" });
+                }
+                return handleDatabaseError(eIns, res, "Error al crear ticket");
+              }
+
+              // Generar fecha/hora para mandarla al kiosko
+              const ahora = new Date();
+              const pad = (n) => String(n).padStart(2, "0");
+              const fecha = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(
+                ahora.getDate()
+              )}`;
+              const hora = `${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(
+                ahora.getSeconds()
+              )}`;
+
+              res.status(201).json({
+                mensaje: "Ticket generado",
+                id_ticket: rIns.insertId,
+                no_ticket: NO_ticket,
+                fecha,
+                hora,
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
+app.get("/api/historial_kardex", (req, res) => {
+    const sql = "SELECT * FROM tbl_kardex ORDER BY fecha_hora DESC";
+
+    conexion.query(sql, (err, results) => {
+        if (err) {
+            console.error("Error al obtener historial kardex:", err);
+            return res.status(500).json({ mensaje: "Error al obtener historial" });
+        }
+        res.json(results);
+    });
+});
+
+// ===== CRUD PARA tbl_tipo_ticket =====
+
+// Listar todos los tipos de ticket
+// LISTAR TODOS LOS TIPOS DE TICKET
+// LISTAR TODOS LOS TIPOS DE TICKET (ACTIVOS E INACTIVOS)
+app.get("/api/tipo_ticket", async (req, res) => {
+  try {
+    const [rows] = await conexion.promise().query(`
+      SELECT 
+        id_tipo_ticket,
+        tipo_ticket,
+        prefijo,
+        estado
+      FROM tbl_tipo_ticket
+      ORDER BY id_tipo_ticket DESC
+    `);
+
+    res.json(rows);          
+  } catch (err) {
+    handleDatabaseError(err, res, "Error en listado de tipo_ticket:");
+  }
+});
+
+
+
+// Obtener un tipo_ticket por ID
+// LISTAR
+app.get("/api/tipo_ticket", async (req, res) => {
+  try {
+    const [rows] = await conexion.promise().query(
+      "SELECT * FROM tbl_tipo_ticket ORDER BY id_tipo_ticket DESC"
+    );
+    res.json(rows);
+  } catch (err) {
+    handleDatabaseError(err, res, "Error en listado de tipo_ticket:");
+  }
+});
+
+// INSERTAR
+app.post("/api/tipo_ticket", async (req, res) => {
+  const { tipo_ticket, prefijo, estado } = req.body;
+
+  if (!tipo_ticket || !prefijo) {
+    return res
+      .status(400)
+      .json({ error: "tipo_ticket y prefijo son obligatorios." });
+  }
+
+  const query = `
+    INSERT INTO tbl_tipo_ticket (tipo_ticket, estado, prefijo)
+    VALUES (?, ?, ?)
+  `;
+  const values = [tipo_ticket, estado || "ACTIVO", prefijo];
+
+  try {
+    const [result] = await conexion.promise().query(query, values);
+    res.json({
+      mensaje: "Tipo de ticket agregado correctamente",
+      id: result.insertId,
+    });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al insertar tipo_ticket:");
+  }
+});
+
+// ACTUALIZAR
+app.put("/api/tipo_ticket/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { tipo_ticket, prefijo, estado } = req.body;
+
+  if (!tipo_ticket || !prefijo) {
+    return res
+      .status(400)
+      .json({ error: "tipo_ticket y prefijo son obligatorios." });
+  }
+
+  const query = `
+    UPDATE tbl_tipo_ticket
+    SET tipo_ticket = ?, estado = ?, prefijo = ?
+    WHERE id_tipo_ticket = ?
+  `;
+  const values = [tipo_ticket, estado || "ACTIVO", prefijo, id];
+
+  try {
+    const [result] = await conexion.promise().query(query, values);
+
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ mensaje: "Tipo de ticket no encontrado" });
+    }
+
+    res.json({ mensaje: "Tipo de ticket actualizado correctamente" });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al actualizar tipo_ticket:");
+  }
+});
+
+
+// Eliminar tipo_ticket
+app.delete("/api/tipo_ticket/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { id_usuario: id_admin } = req.body || {};
+
+  try {
+    const [result] = await conexion
+      .promise()
+      .query("DELETE FROM tbl_tipo_ticket WHERE id_tipo_ticket = ?", [id]);
+
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ mensaje: "Tipo de ticket no encontrado" });
+    }
+
+    if (id_admin) {
+      await conexion.promise().query("CALL event_bitacora(?, ?, ?, ?)", [
+        id_admin,
+        3,
+        "DELETE",
+        `Se eliminó el tipo_ticket con ID ${id}`,
+      ]);
+    }
+
+    res.json({ mensaje: "Tipo de ticket eliminado correctamente" });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al eliminar tipo_ticket:");
+  }
+});
+
+// =============================================================================================
+// ============ ENDPOINTS COMPLETOS PARA PROCEDIMIENTOS ALMACENADOS DE INVENTARIO =============
+// =============================================================================================
+
+// =====================
+// PRODUCTOS CON SP
+// =====================
+
+// GET: Obtener todos los productos
+app.get('/api/sp-productos', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarProductos()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error en SP_MostrarProductos:", err);
+      return res.status(500).json({ error: "Error al listar productos" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarProductos: Consulta de productos",
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);
+  });
+});
+
+// POST: Insertar nuevo producto
+app.post('/api/sp-productos', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Productos", "insertar"), (req, res) => {
+  const { nombre, min, max, descripcion } = req.body;
+  const user = req.user;
+
+  if (!nombre) {
+    return res.status(400).json({ error: "El nombre del producto es obligatorio" });
+  }
+
+  const query = "CALL SP_InsertarProducto(?, ?, ?, ?)";
+  const values = [nombre, min || 0, max || 0, descripcion || null];
+
+  conexion.query(query, values, (err) => {
+    if (err) {
+      console.error("Error en SP_InsertarProducto:", err);
+      return res.status(500).json({ error: err.message || "Error al insertar producto" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_PRODUCTOS,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarProducto: Producto "${nombre}" creado`,
+      usuario: user.nombre_usuario
+    });
+
+    res.status(201).json({ mensaje: "Producto insertado correctamente" });
+  });
+});
+
+// =====================
+// INVENTARIO CON SP
+// =====================
+
+// GET: Obtener inventario completo con nombre de producto
+app.get('/api/sp-inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarInventario()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error en SP_MostrarInventario:", err);
+      return res.status(500).json({ error: "Error al listar inventario" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarInventario: Consulta de inventario",
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);
+  });
+});
+// =============================
+//  COMPRAS (CABECERA)
+// =============================
+
+const ID_OBJETO_COMPRAS = 20; // o el ID que uses para Compras en tbl_objeto
+
+// LISTAR COMPRAS
+app.get( "/api/compra", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compras", "consultar"), (req, res) => {
+    const sql = `
+      SELECT 
+        c.id_compra,
+        c.fecha,
+        p.id_proveedor
+        c.total,
+        u.nombre_usuario
+      FROM tbl_compra c
+      JOIN tbl_proveedor p ON p.id_proveedor = c.id_proveedor
+      JOIN tbl_usuario   u ON u.id_usuario   = c.id_usuario
+      ORDER BY c.fecha DESC
+    `;
+
+    conexion.query(sql, (err, rows) => {
+      if (err) {
+        console.error("Error listando compras:", err);
+        return res
+          .status(500)
+          .json({ error: "Error al listar compras" });
+      }
+
+      // Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_COMPRAS,
+        id_usuario: req.user.id_usuario,
+        accion: "GET",
+        descripcion: "Consultó la lista de compras",
+        usuario: req.user.nombre_usuario,
+      });
+
+      res.json(rows);
+    });
+  }
+);
+
+// INSERTAR COMPRA
+app.post(
+  "/api/compra", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compras", "insertar"),(req, res) => {
+    const user = req.user;
+    const { id_proveedor, total } = req.body;
+
+    if (!id_proveedor || !total) {
+      return res
+        .status(400)
+        .json({ error: "Proveedor y total son obligatorios" });
+    }
+
+    const sql = `
+      INSERT INTO tbl_compra (fecha, id_proveedor, total, id_usuario)
+      VALUES (NOW(), ?, ?, ?)
+    `;
+    const values = [id_proveedor, total, user.id_usuario];
+
+    conexion.query(sql, values, (err, result) => {
+      if (err) {
+        console.error("Error al insertar compra:", err);
+        return res
+          .status(500)
+          .json({ error: "Error al insertar compra" });
+      }
+
+      const id_compra = result.insertId;
+
+      // Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_COMPRAS,
+        id_usuario: user.id_usuario,
+        accion: "INSERT",
+        descripcion: `Creó compra #${id_compra} (proveedor ${id_proveedor}, total ${total})`,
+        usuario: user.nombre_usuario,
+      });
+
+      res.json({ id_compra, mensaje: "Compra registrada correctamente" });
+    });
+  }
+);
+
+
+// =====================
+// COMPRAS CON SP
+// =====================
+
+const ID_OBJETO_COMPRAS_SP = 18; // Asignar un ID único para el objeto "Compras con SP"
+// GET: Obtener todas las compras
+app.get('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compra de producto", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarCompras()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error en SP_MostrarCompras:", err);
+      return res.status(500).json({ error: "Error al listar compras" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_COMPRAS_SP,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarCompras: Consulta de compras",
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);
+  });
+});
+
+// POST: Crear nueva compra (devuelve id_compra)
+app.post('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compra de producto", "insertar"), (req, res) => {
+  const { id_proveedor, total, id_usuario } = req.body;
+  const user = req.user;
+
+  if (!id_proveedor || !total || !id_usuario) {
+    return res.status(400).json({ error: "Campos requeridos: id_proveedor, total, id_usuario" });
+  }
+
+  const query = "CALL SP_InsertarCompra(?, ?, ?)";
+  conexion.query(query, [id_proveedor, total, id_usuario], (err, results) => {
+    if (err) {
+      console.error("Error en SP_InsertarCompra:", err);
+      return res.status(500).json({ error: err.message || "Error al insertar compra" });
+    }
+
+    const id_compra = results[0][0].id_compra;
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_COMPRAS_SP,
+      id_usuario: user.id_usuario,
+      accion: "POST",
+      descripcion: `SP_InsertarCompra: Compra #${id_compra} creada`,
+      usuario: user.nombre_usuario
+    });
+
+    res.status(201).json({ 
+      mensaje: "Compra creada correctamente", 
+      id_compra 
+    });
+  });
+});
+
+// =====================
+// DETALLE COMPRA CON SP
+// =====================
+
+// GET: Obtener todos los detalles de compras con nombre de producto
+  app.get('/api/sp-detalle-compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "consultar"), (req, res) => {
+    const user = req.user;
+    const query = "CALL SP_MostrarDetalleCompra()";
+
+    conexion.query(query, (err, results) => {
+      if (err) {
+        console.error("Error en SP_MostrarDetalleCompra:", err);
+        return res.status(500).json({ error: "Error al listar detalle de compras" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_DETALLE_COMPRA,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: "SP_MostrarDetalleCompra: Consulta de detalle de compras",
+        usuario: user.nombre_usuario
+      });
+
+      res.json(results[0]);
+    });
+  });
+
+  // POST: Agregar detalle a una compra
+  app.post('/api/sp-detalle-compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "insertar"), (req, res) => {
+    const { id_compra, id_producto, cantidad, precio } = req.body;
+    const user = req.user;
+
+    if (!id_compra || !id_producto || !cantidad || !precio) {
+      return res.status(400).json({ error: "Campos requeridos: id_compra, id_producto, cantidad, precio" });
+    }
+
+    const query = "CALL SP_InsertarDetalleCompra(?, ?, ?, ?)";
+    conexion.query(query, [id_compra, id_producto, cantidad, precio], (err) => {
+      if (err) {
+        console.error("Error en SP_InsertarDetalleCompra:", err);
+        return res.status(500).json({ error: err.message || "Error al insertar detalle de compra" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_DETALLE_COMPRA,
+        id_usuario: user.id_usuario,
+        accion: "POST",
+        descripcion: `SP_InsertarDetalleCompra: Detalle agregado a compra #${id_compra}`,
+        usuario: user.nombre_usuario
+      });
+
+      res.status(201).json({ mensaje: "Detalle de compra agregado correctamente" });
+    });
+  });
+
+  // POST: Registrar entrada de compra al inventario (actualiza stock + kardex)
+  app.post('/api/sp-registrar-entrada/:id_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Compra", "insertar"), (req, res) => {
+    const id_compra = parseInt(req.params.id_compra);
+    const user = req.user;
+    const id_usuario = user.id_usuario;
+
+    if (!id_usuario) {
+      return res.status(400).json({ error: "Usuario no identificado" });
+    }
+
+    const query = "CALL SP_RegistrarEntradaCompra(?, ?)";
+    conexion.query(query, [id_compra, id_usuario], (err) => {
+      if (err) {
+        console.error("Error en SP_RegistrarEntradaCompra:", err);
+        return res.status(500).json({ error: err.message || "Error al registrar entrada" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_COMPRAS_SP,
+        id_usuario: user.id_usuario,
+        accion: "POST",
+        descripcion: `SP_RegistrarEntradaCompra: Entrada registrada para compra #${id_compra}`,
+        usuario: user.nombre_usuario
+      });
+
+      res.json({ 
+        mensaje: "Entrada registrada correctamente. Inventario y kardex actualizados." 
+      });
+    });
+  });
+
+// =====================
+// SALIDAS CON SP
+// =====================
+
+const ID_OBJETO_SALIDAS_SP = 17;
+
+// =======================
+//   LISTAR SALIDAS
+// =======================
+app.get("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "consultar"), (req, res) => {
+  const sql = `
+    SELECT s.id_salida, s.fecha, s.motivo, u.nombre_usuario
+    FROM tbl_salida s
+    JOIN tbl_usuario u ON u.id_usuario = s.id_usuario
+    ORDER BY s.fecha DESC
+  `;
+
+  conexion.query(sql, (err, rows) => {
+    if (err) {
+      console.error("Error listando salidas:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json(rows);
+  });
+});
+
+
+// =======================
+//   CREAR SALIDA
+// =======================
+app.post("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "insertar"), (req, res) => {
+  const id_usuario = req.user.id_usuario;
+  const { motivo } = req.body;
+
+  const sql = `
+    INSERT INTO tbl_salida (id_usuario, fecha, motivo)
+    VALUES (?, NOW(), ?)
+  `;
+
+  conexion.query(sql, [id_usuario, motivo || null], (err, result) => {
+    if (err) {
+      console.error("Error al crear salida:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    const id_salida = result.insertId;
+
+    // Bitácora
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_SALIDAS,
+      id_usuario,
+      accion: "INSERT",
+      descripcion: `Creó salida #${id_salida}`
+    });
+
+    res.json({ id_salida });
+  });
+});
+
+
+// =====================
+// DETALLE SALIDA CON SP
+// =====================
+
+const ID_OBJETO_DETALLE_SALIDA_SP = 9;
+
+
+// GET: Obtener todos los detalles de salidas con nombre de producto
+app.get('/api/sp-detalle-salida', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Detalle de Salida de Productos", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarDetalleSalida()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error en SP_MostrarDetalleSalida:", err);
+      return res.status(500).json({ error: "Error al listar detalle de salidas" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_DETALLE_SALIDA_SP,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "SP_MostrarDetalleSalida: Consulta de detalle de salidas",
+      usuario: user.nombre_usuario
+    });
+
+    res.json(results[0]);
+  });
+});
+
+// ===============================
+//   DETALLE SALIDA (INSERTAR)
+// ===============================
+app.post("/api/salida/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "insertar"), (req, res) => {
+  const { id_salida, id_producto, cantidad } = req.body;
+
+  if (!id_salida || !id_producto || !cantidad)
+    return res.status(400).json({ error: "Datos incompletos" });
+
+  const sql = `
+    INSERT INTO tbl_detalle_salida (id_salida, id_producto, cantidad)
+    VALUES (?, ?, ?)
+  `;
+
+  conexion.query(sql, [id_salida, id_producto, cantidad], (err) => {
+    if (err) {
+      console.error("Error al insertar detalle salida:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    // El trigger INSERTA en kardex y actualiza inventario
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_SALIDAS,
+      id_usuario: req.user.id_usuario,
+      accion: "INSERT",
+      descripcion: `Insertó detalle salida #${id_salida}`
+    });
+
+    res.json({ mensaje: "Salida registrada correctamente" });
+  });
+});
+
+
+
+
+app.post("/api/kardex/entrada", verificarToken, async (req, res) => {
+  const { id_compra } = req.body;
+  const user = req.user;
+
+  if (!id_compra) {
+    return res.status(400).json({ error: "El ID de compra es obligatorio" });
+  }
+
+  try {
+    await conexion.query(
+      "CALL SP_RegistrarEntradaCompra(?, ?)",
+      [id_compra, user.id_usuario]
+    );
+
+    res.json({ mensaje: "Entrada registrada y inventario actualizado" });
+  } catch (err) {
+    console.error("Error en entrada:", err);
+    res.status(500).json({ error: "Error registrando entrada" });
+  }
+});
+
+app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex","consultar"), (req,res)=>{
+  const sql = `
+    SELECT k.*, u.nombre_usuario
+    FROM tbl_kardex k
+    LEFT JOIN tbl_usuario u ON u.id_usuario = k.id_usuario
+    ORDER BY k.fecha DESC
+  `;
+
+  conexion.query(sql,(err,rows)=>{
+    if(err){
+      console.error("Error al mostrar kardex:", err);
+      return res.status(500).json({ mensaje:"Error al obtener kardex" });
+    }
+    res.json(rows);
+  });
+});
+
+
+
+
+
+// =============================================================================================
+// ================================ FIN ENDPOINTS CON SP =======================================
+// =============================================================================================
+
 
 // ===== 404 =====
 app.use((req, res) => res.status(404).json({ mensaje: "Ruta no encontrada" }));

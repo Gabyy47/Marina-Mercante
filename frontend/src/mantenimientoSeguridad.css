@@ -1,0 +1,121 @@
+/* src/mantenimientoSeguridad.css */
+
+.seguridad-wrap {
+  padding: 24px 32px;
+}
+
+.seguridad-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.seguridad-logo img {
+  height: 60px;
+}
+
+.seguridad-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.seguridad-header p {
+  margin: 2px 0 0;
+  color: #555;
+}
+
+.seguridad-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.seguridad-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.seguridad-card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.seguridad-tag {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.seguridad-table-wrap {
+  overflow-x: auto;
+}
+
+.seguridad-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.seguridad-table th,
+.seguridad-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.seguridad-table th {
+  background: #f3f4f6;
+  font-weight: 600;
+}
+
+.seguridad-codigo {
+  font-family: "Fira Code", monospace;
+  font-size: 13px;
+}
+
+.seguridad-descripcion {
+  max-width: 320px;
+}
+
+.seguridad-input {
+  width: 160px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+.seguridad-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+}
+
+.seguridad-btn-guardar {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: none;
+  background: #0f766e;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.seguridad-btn-guardar:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.seguridad-empty {
+  padding: 16px;
+  text-align: center;
+  color: #6b7280;
+}

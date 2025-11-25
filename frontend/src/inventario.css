@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 :root{
   --dgmm-cyan:#00BCE4;
   --dgmm-navy:#0E2A3B;
@@ -100,3 +101,140 @@
 .chart-card h4{ margin:0 0 8px 0; font-size:15px; color:var(--dgmm-navy); }
 
 .inventario-error pre{ margin:0; font-size:12px; }
+=======
+/* CONTENEDOR PRINCIPAL */
+.inventario-card {
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 14px;
+  box-shadow: 0px 2px 8px rgba(0,0,0,0.08);
+  margin-top: 20px;
+  width: 90%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* TÍTULO */
+.topbar-title {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #0b3540;
+}
+
+/* LEYENDA */
+.inv-legend {
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+  padding-left: 4px;
+}
+
+.legend-rojo { color:#e63946; font-weight:bold; }
+.legend-verde { color:#2a9d8f; font-weight:bold; }
+.legend-ambar { color:#ffb703; font-weight:bold; }
+
+/* BUSCADOR */
+.inventario-filtros {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  align-items: center;
+}
+
+.inventario-filtros input {
+  width: 300px;
+  padding: 8px 12px;
+  border: 1px solid #cfd8dc;
+  border-radius: 8px;
+}
+
+.checkbox-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+/* TABLA */
+.inventario-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.inventario-table th {
+  background: #0b3540;
+  color: white;
+  padding: 10px;
+  text-align: left;
+  font-weight: 500;
+}
+
+.inventario-table td {
+  padding: 10px;
+  border-bottom: 1px solid #eceff1;
+}
+
+/* CHIP ESTADO */
+.estado-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.estado-bajo {
+  background:#ffe6e6;
+  color:#d90429;
+}
+
+.estado-normal {
+  background:#fff4c2;
+  color:#8a6d00;
+}
+
+.estado-alto {
+  background:#d7ffd7;
+  color:#006400;
+}
+
+/* BARRA DE PROGRESO */
+.inv-progress {
+  width: 140px;
+  height: 10px;
+  background:#e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.inv-progress-bar {
+  height:100%;
+  border-radius: 8px;
+}
+
+.inv-progress-bar.estado-bajo { background:#e63946; }
+.inv-progress-bar.estado-normal { background:#ffb703; }
+.inv-progress-bar.estado-alto { background:#2a9d8f; }
+
+/* FILAS CON COLOR SUAVE DE FONDO */
+.row-estado-bajo { background:#fff5f5; }
+.row-estado-normal { background:#fffdf2; }
+.row-estado-alto { background:#f3fff3; }
+
+/* BOTÓN VER MÁS */
+.btn-ver-mas, 
+.btn-topbar-outline.btn-sm {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid #1976d2;
+  background: white;
+  color: #1976d2;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.btn-ver-mas:hover {
+  background:#e3f2fd;
+}
+>>>>>>> inventario

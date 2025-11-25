@@ -1,9 +1,16 @@
+<<<<<<< HEAD
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from 'react-router-dom';
+=======
+// src/Inventario.jsx
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+>>>>>>> inventario
 import api from "./api";
 import "./inventario.css";
 import { FaSyncAlt } from "react-icons/fa";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
+<<<<<<< HEAD
 import { Pie } from "react-chartjs-2";
 import Chart from 'chart.js/auto';
 import html2canvas from "html2canvas";
@@ -49,17 +56,68 @@ export default function Inventario() {
       console.error("Error cargando datos de inventario:", e);
       // Guardamos información útil para mostrar en la UI
       const info = {
+=======
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+
+const U = (s = "") => String(s).trim().toUpperCase();
+
+export default function Inventario() {
+  const navigate = useNavigate();
+
+  const [inventario, setInventario] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Filtros
+  const [filtros, setFiltros] = useState({
+    producto: "",
+    soloAlertas: false, // BAJO / ALTO
+  });
+
+  // Modal Kardex
+  const [showModal, setShowModal] = useState(false);
+  const [productoSel, setProductoSel] = useState(null);
+  const [movimientos, setMovimientos] = useState([]);
+  const [loadingMovs, setLoadingMovs] = useState(false);
+
+  const usuarioData = JSON.parse(localStorage.getItem("usuarioData") || "{}");
+
+  // ==========================
+  //   CARGAR INVENTARIO
+  // ==========================
+  const cargarInventario = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const params = {
+        id_usuario: usuarioData.id_usuario,
+        usuario: usuarioData.nombre_usuario,
+      };
+
+      const res = await api.get("/inventario", { params });
+      setInventario(res.data || []);
+    } catch (e) {
+      console.error("Error cargando inventario:", e);
+      setError({
+>>>>>>> inventario
         message: e.message,
         status: e.response?.status,
         data: e.response?.data,
         url: e.config?.url,
+<<<<<<< HEAD
       };
       setError(info);
+=======
+      });
+>>>>>>> inventario
     } finally {
       setLoading(false);
     }
   };
 
+<<<<<<< HEAD
   useEffect(() => { cargarTodo(); }, []);
   // Escuchar eventos globales para refrescar datos cuando otras pantallas hagan cambios
   useEffect(() => {
@@ -224,18 +282,257 @@ export default function Inventario() {
           <button className="btn btn-topbar-outline" onClick={()=>navigate('/')}>← Menú</button>
           <button className="btn btn-topbar-outline" onClick={cargarTodo} style={{marginLeft:8}}><FaSyncAlt/> Refrescar</button>
           <button className="btn btn-topbar-outline" onClick={generatePDF} style={{marginLeft:8}}>📄 Generar PDF</button>
+=======
+  useEffect(() => {
+    cargarInventario();
+  }, []);
+
+  useEffect(() => {
+    const handler = () => cargarInventario();
+    window.addEventListener("dataChanged", handler);
+    return () => window.removeEventListener("dataChanged", handler);
+  }, []);
+
+  // ==========================
+  //   VER MÁS (KÁRDEX)
+  // ==========================
+  const abrirKardex = async (row) => {
+    setProductoSel(row);
+    setShowModal(true);
+    setLoadingMovs(true);
+    setMovimientos([]);
+
+    try {
+      const params = {
+        id_usuario: usuarioData.id_usuario,
+        usuario: usuarioData.nombre_usuario,
+      };
+
+      const res = await api.get(`/kardex/producto/${row.id_producto}`, {
+        params,
+      });
+      setMovimientos(res.data || []);
+    } catch (e) {
+      console.error("Error cargando kardex del producto:", e);
+    } finally {
+      setLoadingMovs(false);
+    }
+  };
+
+  const cerrarModal = () => {
+    setShowModal(false);
+    setProductoSel(null);
+    setMovimientos([]);
+  };
+
+  // ==========================
+  //   MENSAJE + PROGRESO
+  // ==========================
+  function buildRowWithInfo(row) {
+    const cant = Number(row.cantidad ?? 0);
+    const min = Number(row.cantidad_minima ?? 0);
+    const max = Number(row.cantidad_maxima ?? 0);
+    const estado = U(row.estado || "");
+
+    let mensaje = "";
+    if (cant < min) {
+      mensaje = `Bajo stock: ${cant} < mínimo (${min}).`;
+    } else if (cant > max) {
+      mensaje = `Stock al tope o superior: ${cant} ≥ máximo (${max}).`;
+    } else {
+      mensaje = `Dentro del rango (${min}–${max}).`;
+    }
+
+    let porcentaje = 0;
+    if (max > 0) {
+      porcentaje = Math.round((cant / max) * 100);
+      if (porcentaje < 0) porcentaje = 0;
+      if (porcentaje > 100) porcentaje = 100;
+    }
+
+    return {
+      ...row,
+      estadoUpper: estado,
+      mensaje,
+      porcentaje,
+    };
+  }
+
+  // Construir filas con info extra
+  const filasBase = (inventario || []).map(buildRowWithInfo);
+
+  // ==========================
+  //   FILTROS
+  // ==========================
+  const aplicarFiltro = (row) => {
+    const { producto, soloAlertas } = filtros;
+
+    if (
+      producto &&
+      !String(row.nombre_producto || "")
+        .toLowerCase()
+        .includes(producto.toLowerCase())
+    ) {
+      return false;
+    }
+
+    if (
+      soloAlertas &&
+      row.estadoUpper !== "BAJO" &&
+      row.estadoUpper !== "ALTO"
+    ) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const filas = filasBase.filter(aplicarFiltro);
+
+  // ==========================
+  //   PDF INVENTARIO
+  // ==========================
+  const generatePDF = () => {
+    try {
+      const pdf = new jsPDF("landscape", "pt", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 40;
+      let y = 40;
+
+      pdf.setFontSize(18);
+      pdf.text("Reporte de Inventario", pageWidth / 2, y, {
+        align: "center",
+      });
+      pdf.setFontSize(10);
+      pdf.text(
+        `Generado: ${new Date().toLocaleString()}`,
+        pageWidth - margin,
+        y,
+        { align: "right" }
+      );
+      y += 25;
+
+      const body = filas.map((r) => [
+        String(r.nombre_producto ?? ""),
+        String(r.cantidad ?? ""),
+        String(r.cantidad_minima ?? ""),
+        String(r.cantidad_maxima ?? ""),
+        String(r.estadoUpper ?? ""),
+        String(r.mensaje ?? ""),
+      ]);
+
+      const head = [
+        ["Producto", "Cantidad", "Mínimo", "Máximo", "Estado", "Mensaje"],
+      ];
+
+      if (body.length > 0) {
+        pdf.autoTable({
+          startY: y,
+          head,
+          body,
+          theme: "striped",
+          headStyles: {
+            fillColor: [27, 144, 184],
+            textColor: 255,
+            fontStyle: "bold",
+          },
+          styles: {
+            fontSize: 9,
+            cellPadding: 4,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.1,
+          },
+          showHead: "everyPage",
+          margin: { left: margin, right: margin },
+        });
+      } else {
+        pdf.setFontSize(11);
+        pdf.text(
+          "No hay registros para los filtros actuales.",
+          margin,
+          y + 12
+        );
+      }
+
+      const pageCount = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.text(
+          `Página ${i} de ${pageCount}`,
+          pageWidth - margin,
+          pageHeight - 10,
+          { align: "right" }
+        );
+      }
+
+      pdf.save("inventario.pdf");
+    } catch (e) {
+      console.error("Error generando PDF:", e);
+      alert("Error al generar PDF. Revisa la consola.");
+    }
+  };
+
+  // ==========================
+  //   RENDER
+  // ==========================
+  return (
+    <div className="inventario-page">
+      <div className="inventario-logo-wrap">
+        <img src={logoDGMM} alt="DGMM" />
+      </div>
+
+      <div className="inventario-topbar">
+        <span className="topbar-title">Inventario</span>
+        <div className="topbar-actions">
+          <button
+            className="btn btn-topbar-outline"
+            onClick={() => navigate("/dashboard")}
+          >
+            ← Menú
+          </button>
+          <button
+            className="btn btn-topbar-outline"
+            onClick={cargarInventario}
+            style={{ marginLeft: 8 }}
+          >
+            <FaSyncAlt /> Refrescar
+          </button>
+          <button
+            className="btn btn-topbar-outline"
+            onClick={generatePDF}
+            style={{ marginLeft: 8 }}
+          >
+            📄 Generar PDF
+          </button>
+>>>>>>> inventario
         </div>
       </div>
 
       <div className="inventario-card">
+<<<<<<< HEAD
         {/* sección que se captura en PDF */}
         <div ref={reportRef}>
         {error && (
           <div className="inventario-error" style={{marginBottom:12, padding:12, borderRadius:6, background:'#fdecea', color:'#611a15'}}>
+=======
+        {/* Leyenda de colores */}
+        <div className="inv-legend">
+          <strong>Rango de colores:</strong>{" "}
+          <span className="legend-rojo">Rojo = Bajo</span>,{" "}
+          <span className="legend-verde">Verde = Alto</span>,{" "}
+          <span className="legend-ambar">Ámbar = Normal</span>.
+        </div>
+
+        {error && (
+          <div className="inventario-error">
+>>>>>>> inventario
             <strong>Error cargando datos:</strong>
             <div>Mensaje: {String(error.message)}</div>
             <div>URL: {error.url || "-"}</div>
             <div>Estado: {error.status || "-"}</div>
+<<<<<<< HEAD
             <div style={{marginTop:6}}>Respuesta: <pre style={{whiteSpace:'pre-wrap'}}>{JSON.stringify(error.data,null,2)}</pre></div>
           </div>
         )}
@@ -311,3 +608,168 @@ export default function Inventario() {
     </div>
   );
 }
+=======
+            <div className="inventario-error-json">
+              {JSON.stringify(error.data, null, 2)}
+            </div>
+          </div>
+        )}
+
+        {/* Filtros */}
+        <div className="inventario-filtros">
+          <input
+            placeholder="Buscar producto..."
+            value={filtros.producto}
+            onChange={(e) =>
+              setFiltros({ ...filtros, producto: e.target.value })
+            }
+          />
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={filtros.soloAlertas}
+              onChange={(e) =>
+                setFiltros({ ...filtros, soloAlertas: e.target.checked })
+              }
+            />
+            <span>Solo alertas (BAJO/ALTO)</span>
+          </label>
+        </div>
+
+        {loading ? (
+          <p className="loading">Cargando inventario...</p>
+        ) : (
+          <table className="inventario-table inv-style2">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Mín</th>
+                <th>Máx</th>
+                <th>Estado</th>
+                <th>Mensaje</th>
+                <th>Progreso</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f) => (
+                <tr
+                  key={f.id_inventario}
+                  className={`row-estado-${
+                    f.estadoUpper ? f.estadoUpper.toLowerCase() : "normal"
+                  }`}
+                >
+                  <td>{f.nombre_producto}</td>
+                  <td>{f.cantidad}</td>
+                  <td>{f.cantidad_minima}</td>
+                  <td>{f.cantidad_maxima}</td>
+                  <td>
+                    <span
+                      className={`estado-chip estado-${f.estadoUpper.toLowerCase()}`}
+                    >
+                      {f.estadoUpper}
+                    </span>
+                  </td>
+                  <td>{f.mensaje}</td>
+                  <td>
+                    <div className="inv-progress">
+                      <div
+                        className={`inv-progress-bar estado-${f.estadoUpper.toLowerCase()}`}
+                        style={{ width: `${f.porcentaje}%` }}
+                      />
+                    </div>
+                  </td>
+                  <td>
+                    <button
+                      className="btn btn-topbar-outline btn-sm"
+                      onClick={() => abrirKardex(f)}
+                    >
+                      Ver más
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!loading && filas.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="no-data">
+                    No hay registros de inventario.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* MODAL KÁRDEX POR PRODUCTO */}
+      {showModal && (
+        <div
+          className="inv-modal-overlay"
+          onClick={cerrarModal}
+        >
+          <div
+            className="inv-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="inv-modal-header">
+              <h3>
+                Movimientos de:{" "}
+                {productoSel ? productoSel.nombre_producto : ""}
+              </h3>
+              <button className="inv-modal-close" onClick={cerrarModal}>
+                ✕
+              </button>
+            </div>
+
+            <div className="inv-modal-body">
+              {loadingMovs ? (
+                <p>Cargando movimientos...</p>
+              ) : movimientos.length === 0 ? (
+                <p>No hay movimientos en el Kardex para este producto.</p>
+              ) : (
+                <table className="inventario-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Usuario</th>
+                      <th>Movimiento</th>
+                      <th>Cantidad</th>
+                      <th>Motivo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movimientos.map((m) => (
+                      <tr key={m.id_kardex}>
+                        <td>
+                          {m.fecha
+                            ? new Date(m.fecha).toLocaleString("es-HN")
+                            : ""}
+                        </td>
+                        <td>{m.usuario || m.nombre_usuario || m.id_usuario}</td>
+                        <td>{U(m.tipo_movimiento)}</td>
+                        <td>{m.cantidad}</td>
+                        <td>{m.motivo}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="inv-modal-footer">
+              <button
+                className="btn btn-topbar-outline"
+                onClick={cerrarModal}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+>>>>>>> inventario

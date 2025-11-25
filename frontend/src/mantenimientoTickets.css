@@ -1,0 +1,322 @@
+/* ===== Reset / tokens ===== */
+:root{
+  --bg: #eef3f6;
+  --card: #ffffff;
+  --ink: #0f172a;
+  --muted: #6b7280;
+  --brand-dark: #0d2935;
+  --line: #e5e7eb;
+
+  --primary: #1f6feb;
+  --danger: #e11d48;
+  --ok: #10b981;
+
+  --radius: 14px;
+  --shadow: 0 10px 22px rgba(2,15,24,.08);
+}
+
+*{ box-sizing: border-box; }
+html, body, #root { height: 100%; background: var(--bg); color: var(--ink); }
+a{ text-decoration: none; }
+
+/* ===== ROOT ===== */
+.tk-root{
+  padding: 18px 10px 40px;
+}
+
+/* ===== Banner con logo ===== */
+.tk-brand{
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 18px 0 6px;
+}
+.tk-brand img{
+  height: 70px;
+  object-fit: contain;
+  filter: saturate(1.05);
+}
+
+/* ===== Encabezado oscuro ===== */
+.tk-card-header{
+  max-width: 1120px;
+  margin: 0 auto 14px;
+  background: var(--brand-dark);
+  color: #fff;
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: var(--shadow);
+}
+.tk-card-header__title{ font-weight: 700; font-size: 18px; }
+.tk-card-header__actions{ display:flex; gap:10px; flex-wrap:wrap; }
+
+/* ===== Tarjeta principal ===== */
+.tk-card{
+  max-width: 1120px;
+  margin: 0 auto 16px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px 18px 8px;
+}
+
+/* ===== Botones ===== */
+.tk-btn{
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .05s ease, background .2s ease, border-color .2s;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.tk-btn:hover{ transform: translateY(-1px); }
+.tk-btn:active{ transform: translateY(0); }
+.tk-btn--primary{ background: var(--primary); color:#fff; border-color: transparent; }
+.tk-btn--danger{ background: var(--danger); color:#fff; border-color: transparent; }
+
+/* Ghost por defecto (tarjeta clara) */
+.tk-btn--ghost{
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+/* Ghost dentro del encabezado oscuro */
+.tk-card-header .tk-btn--ghost{
+  color: #fff;
+  border-color: rgba(255,255,255,.25);
+}
+
+.tk-btn--sm{
+  padding: 5px 10px;
+  font-size: 11px;
+  border-radius: 999px;
+}
+
+/* ===== Resumen ===== */
+.tk-resumen{
+  margin: 2px 4px 12px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:var(--muted);
+  font-size: 13px;
+}
+.tk-resumen .sep{ opacity:.5 }
+
+/* ===== Filtros ===== */
+.tk-filters{ padding: 8px 4px 14px; }
+.tk-filters-row{
+  display: grid;
+  grid-template-columns: repeat(5, minmax(180px,1fr)) 1fr;
+  gap: 12px;
+}
+.tk-field{ display:flex; flex-direction: column; gap:6px; }
+.tk-field label{ font-size: 12px; color: var(--muted); }
+.tk-field input, .tk-field select, .tk-field textarea{
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  background: #fff;
+  font-size: 13px;
+}
+.tk-field input:focus, .tk-field select:focus, .tk-field textarea:focus{
+  border-color: #c4d3ff;
+  box-shadow: 0 0 0 3px rgba(31,111,235,.12);
+}
+.tk-field--actions{
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* ===== RESUMEN POR TIPO (tarjeta debajo de filtros) ===== */
+.tk-totales-card{
+  max-width: 1120px;
+  margin: 0 auto 18px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 18px 16px;
+}
+.tk-totales-title{
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.tk-totales-grid{
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Tarjeta individual de totales */
+.tk-totales-item {
+  background: #f8fafc;
+  padding: 14px 18px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,.04);
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+}
+
+.tk-totales-label{
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.tk-totales-value{
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* Iconos de totales */
+.tk-totales-icon {
+  font-size: 30px;
+  margin-bottom: 6px;
+  opacity: 0.9;
+}
+
+/* Preferencial = azul */
+.tk-totales-pref .tk-totales-icon {
+  color: #0284c7;
+}
+
+/* Normal = verde */
+.tk-totales-norm .tk-totales-icon {
+  color: #16a34a;
+}
+
+/* Cancelado = rojo */
+.tk-totales-canc .tk-totales-icon {
+  color: #dc2626;
+}
+
+/* ===== Tabla ===== */
+.tk-tablewrap{
+  max-width: 1120px;
+  margin: 0 auto 28px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.tk-table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;   /* evita barra horizontal */
+  font-size: 14px;
+}
+.tk-table thead th{
+  background: var(--brand-dark);
+  color: #fff;
+  text-align: left;
+  padding: 12px 14px;
+  border-right: 1px solid rgba(255,255,255,.08);
+}
+.tk-table thead th:last-child{ border-right: none; }
+.tk-table tbody td{
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+/* Anchos */
+.tk-table th:nth-child(1){ width: 80px; }
+.tk-table th:nth-child(2){ width: 150px; }
+.tk-table th:nth-child(3){ width: 130px; }
+.tk-table th:nth-child(8){ width: 110px; }  /* Duración */
+.col--acciones{ width: 185px; }             /* Acciones, ajustado para que no corte */
+
+/* Utilidades de celdas */
+.nowrap{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wrap{ white-space: normal; }
+.tk-mono{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+td.acciones{ white-space: nowrap; }
+td.acciones .tk-btn{ margin-right: 6px; }
+td.acciones .tk-btn:last-child{ margin-right: 0; }
+
+/* ===== Chips por estado ===== */
+.chip{
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.chip--en_cola{ background:#f1f5f9; color:#0f172a; border-color:#e2e8f0; }
+.chip--en_atencion{ background:#fff7ed; color:#9a6700; border-color:#fde68a; }
+.chip--finalizado{ background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
+.chip--cancelado{ background:#fef2f2; color:#991b1b; border-color:#fecaca; }
+
+/* ===== Empty & Loader ===== */
+.tk-empty{ text-align:center; padding: 32px 8px; color: var(--muted); }
+.tk-empty-title{ font-weight: 700; margin-bottom: 6px; }
+.tk-empty-desc{ font-size: 13px; }
+
+.tk-loader{ display:flex; align-items:center; gap:10px; padding: 20px; }
+.tk-spinner{
+  width:16px; height:16px; border-radius:50%;
+  border:3px solid #cbd5e1; border-top-color: var(--primary);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin{ to{ transform: rotate(360deg) } }
+
+/* ===== Modales ===== */
+.tk-overlay{
+  background: rgba(15,23,42,.45);
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  z-index: 60;
+}
+.tk-modal{
+  width: min(720px, 92vw);
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px 18px 14px;
+  box-shadow: var(--shadow);
+  max-height: 86vh; overflow: auto;
+}
+.tk-modal h3{ margin: 4px 6px 12px; font-size: 18px; }
+.tk-grid{ display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+.tk-field--col{ grid-column: 1 / -1; }
+.tk-modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:12px; }
+.tk-danger{ color: var(--danger); }
+
+/* ===== Responsivo ===== */
+@media (max-width: 1100px){
+  .tk-filters-row{
+    grid-template-columns: repeat(2, minmax(160px,1fr));
+  }
+  .tk-totales-item{
+    width: 48%;
+  }
+  .col--acciones{ width: 170px; }
+}
+@media (max-width: 640px){
+  .tk-card-header{ flex-direction: column; align-items: flex-start; }
+  td.acciones .tk-btn{ margin-bottom: 4px; }
+  .tk-totales-item{
+    width: 100%;
+  }
+}
