@@ -15,7 +15,6 @@ import PerfilModal from "./perfilmodal.jsx";
 import Tramites from "./MantTramites.jsx";
 import Proveedores from "./proveedores.jsx";
 import Inventariostatus from "./inventariostatus.jsx";
-import HistorialKardex from "./HistorialKardex.jsx";
 import DetalleCompra from "./DetalleCompra.jsx";
 import Mantenimientocliente from "./mantenimientocliente.jsx";
 import Kardex from "./Kardex.jsx"; // 
@@ -289,20 +288,6 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 <span>
                   <FiClipboard />
                   <span>Kardex</span>
-                </span>
-              </button>
-
-              <button
-                className={`sb__link sb__link--child ${
-                  activeView === "HistorialKardex"
-                    ? "sb__link--active"
-                    : ""
-                }`}
-                onClick={() => onSelect("HistorialKardex")}
-              >
-                <span>
-                  <FiDatabase />
-                  <span>Historial Kardex</span>
                 </span>
               </button>
 
@@ -688,9 +673,6 @@ const MainPage = () => {
 
       case "kardex":
         return <Kardex />;
-
-      case "HistorialKardex":
-        return <HistorialKardex />;
 
       case "Compra":
       return <Compra/>;  

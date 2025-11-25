@@ -15,7 +15,6 @@ import DashboardTickets from "./DashboardTickets.jsx";
 import MonitorTv from "./MonitorTv.jsx";
 import Kiosko from "./kiosko.jsx";
 import Inventariostatus from "./inventariostatus.jsx";
-import HistorialKardex from "./HistorialKardex.jsx";
 import DetalleCompra from "./DetalleCompra.jsx";
 import Compra from "./Compra.jsx";
 import Salidas from "./Salidas.jsx";
@@ -93,14 +92,7 @@ export default function App() {
     </ProtectedRouteRol>
   }
 />
-<Route
-  path="/guarda/HistorialKardex"
-  element={
-    <ProtectedRouteRol allowedRoles={["Guarda Almacén", "Administrador", "Auxiliar de Almacén"]}>
-      <HistorialKardex />
-    </ProtectedRouteRol>
-  }
-/>
+
 
 <Route
   path="/guarda/Compra"
