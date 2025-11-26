@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import api from "./api";
 import "./Compra.css";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { FaFilePdf } from "react-icons/fa";
 
 
 
@@ -209,6 +212,147 @@ export default function Compra() {
   };
 
   // ============================
+  // GENERAR PDF DE COMPRAS
+  // ============================
+  const generarPDFCompras = () => {
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
+
+      // Logo y encabezado
+      doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(14, 42, 59);
+      doc.text("Dirección General de la Marina Mercante", 170, 50);
+
+      doc.setFontSize(14);
+      doc.text("Reporte de Compras", 170, 72);
+
+      doc.setFontSize(10);
+      doc.setTextColor(80);
+      doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+    // Tabla de compras
+    const comprasFiltradas = compras.filter(aplicarFiltro);
+    const columnas = ["ID", "Proveedor", "Usuario", "Fecha", "Total"];
+    
+    const filas = comprasFiltradas.map((c) => [
+      c.id_compra,
+      c.nombre_proveedor || "N/A",
+      c.nombre_usuario || "N/A",
+      new Date(c.fecha).toLocaleDateString("en-CA"),
+      `L ${parseFloat(c.total || 0).toFixed(2)}`
+    ]);
+
+    autoTable(doc, {
+      startY: 125,
+      head: [columnas],
+      body: filas,
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [242, 245, 247] }
+    });
+
+    // Footer
+    const h = doc.internal.pageSize.height;
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(
+      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+      doc.internal.pageSize.width / 2,
+      h - 30,
+      { align: "center" }
+    );
+
+      doc.save("Compras_DGMM.pdf");
+    } catch (error) {
+      console.error("❌ Error generando PDF de compras:", error);
+      alert("Error al generar el PDF: " + error.message);
+    }
+  };
+
+  // ============================
+  // GENERAR PDF DE DETALLE DE COMPRA
+  // ============================
+  const generarPDFDetalleCompra = () => {
+    if (!detalleCompra || detalleCompra.length === 0) {
+      alert("No hay detalle para exportar");
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
+
+      // Logo y encabezado
+      doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(14, 42, 59);
+      doc.text("Dirección General de la Marina Mercante", 170, 50);
+
+      doc.setFontSize(14);
+      doc.text("Detalle de Compra", 170, 72);
+
+      doc.setFontSize(10);
+      doc.setTextColor(80);
+      doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+    // Usar compraSeleccionada que ya está en el estado
+    const compra = compraSeleccionada;
+
+    // Información de la compra
+    doc.setFontSize(11);
+    doc.setTextColor(14, 42, 59);
+    doc.text(`ID Compra: ${compra?.id_compra || "N/A"}`, 40, 130);
+    doc.text(`Proveedor: ${compra?.nombre_proveedor || "N/A"}`, 40, 145);
+    doc.text(`Usuario: ${compra?.nombre_usuario || "N/A"}`, 40, 160);
+    doc.text(`Fecha: ${compra?.fecha ? new Date(compra.fecha).toLocaleDateString("en-CA") : "N/A"}`, 40, 175);
+    doc.text(`Total: L ${parseFloat(compra?.total || 0).toFixed(2)}`, 40, 190);
+
+    const columnas = ["Producto", "Cantidad", "Precio", "Subtotal"];
+    
+    // Tabla de productos
+    const filas = detalleCompra.map((d) => {
+      const precio = parseFloat(d.precio_compra || d.precio_unitario || 0);
+      const cantidad = parseFloat(d.cantidad || 0);
+      const subtotal = precio * cantidad;
+      
+      return [
+        d.producto || d.nombre_producto || "N/A",
+        cantidad,
+        `L ${precio.toFixed(2)}`,
+        `L ${subtotal.toFixed(2)}`
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 210,
+      head: [columnas],
+      body: filas,
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [242, 245, 247] }
+    });
+
+    // Footer
+    const h = doc.internal.pageSize.height;
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(
+      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+      doc.internal.pageSize.width / 2,
+      h - 30,
+      { align: "center" }
+    );
+
+      doc.save(`Detalle_Compra_${compra?.id_compra}_DGMM.pdf`);
+    } catch (error) {
+      console.error("❌ Error generando PDF de detalle compra:", error);
+      alert("Error al generar el PDF: " + error.message);
+    }
+  };
+
+  // ============================
   // CREAR COMPRA (FORMULARIO ANTIGUO - ELIMINAR DESPUÉS)
   // ============================
   const handleCrearCompra = async (e) => {
@@ -249,6 +393,9 @@ export default function Compra() {
         <span className="topbar-title">Lista de Compras</span>
 
         <div className="topbar-actions">
+          <button className="btn btn-topbar-primary" onClick={generarPDFCompras}>
+            <FaFilePdf size={16} /> Generar Reporte PDF
+          </button>
           <button className="btn btn-topbar-outline" onClick={abrirModalNueva}>＋ Nueva Compra</button>
           <button className="btn btn-topbar-outline" onClick={() => navigate("/")}>← Menú</button>
           <button className="btn btn-topbar-outline" onClick={cargarDatos}>⟳ Refrescar</button>
@@ -539,6 +686,12 @@ export default function Compra() {
             </div>
 
             <div className="inv-modal-footer">
+              <button
+                className="btn btn-topbar-primary"
+                onClick={generarPDFDetalleCompra}
+              >
+                <FaFilePdf size={16} /> Exportar Detalle PDF
+              </button>
               <button
                 className="btn btn-topbar-outline"
                 onClick={cerrarModal}

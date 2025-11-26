@@ -7,6 +7,9 @@ import { useNavigate } from "react-router-dom";
 import api from "./api";
 import "./inventario.css";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { FaFilePdf } from "react-icons/fa";
 
 export default function Salidas() {
   const navigate = useNavigate();
@@ -204,6 +207,115 @@ export default function Salidas() {
   };
 
   // ============================
+  // GENERAR PDF SALIDAS
+  // ============================
+  const generarPDFSalidas = () => {
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
+
+    doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(14, 42, 59);
+    doc.text("Dirección General de la Marina Mercante", 170, 50);
+
+    doc.setFontSize(14);
+    doc.text("Reporte de Salidas", 170, 72);
+
+    doc.setFontSize(10);
+    doc.setTextColor(80);
+    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+    const columnas = ["ID", "Usuario", "Fecha", "Motivo"];
+
+    const filas = salidasFiltradas.map((s) => [
+      s.id_salida,
+      s.nombre_usuario,
+      formatearFecha(s.fecha_salida),
+      s.motivo
+    ]);
+
+    autoTable(doc, {
+      startY: 125,
+      head: [columnas],
+      body: filas,
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [242, 245, 247] }
+    });
+
+    const h = doc.internal.pageSize.height;
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(
+      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+      doc.internal.pageSize.width / 2,
+      h - 30,
+      { align: "center" }
+    );
+
+    doc.save("Salidas_DGMM.pdf");
+  };
+
+  // ============================
+  // GENERAR PDF DETALLE SALIDA
+  // ============================
+  const generarPDFDetalleSalida = () => {
+    if (!salidaSeleccionada) return;
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
+
+    doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(14, 42, 59);
+    doc.text("Dirección General de la Marina Mercante", 170, 50);
+
+    doc.setFontSize(14);
+    doc.text("Detalle de Salida", 170, 72);
+
+    doc.setFontSize(10);
+    doc.setTextColor(80);
+    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+    // Información de la salida
+    doc.setFontSize(11);
+    doc.setTextColor(14, 42, 59);
+    doc.text(`ID Salida: ${salidaSeleccionada.id_salida}`, 40, 130);
+    doc.text(`Usuario: ${salidaSeleccionada.nombre_usuario}`, 40, 145);
+    doc.text(`Fecha: ${formatearFecha(salidaSeleccionada.fecha_salida)}`, 40, 160);
+    doc.text(`Motivo: ${salidaSeleccionada.motivo}`, 40, 175);
+
+    const columnas = ["ID Producto", "Producto", "Cantidad"];
+
+    const filas = detalleSalida.map((d) => [
+      d.id_producto,
+      d.nombre_producto,
+      d.cantidad
+    ]);
+
+    autoTable(doc, {
+      startY: 195,
+      head: [columnas],
+      body: filas,
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [242, 245, 247] }
+    });
+
+    const h = doc.internal.pageSize.height;
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(
+      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+      doc.internal.pageSize.width / 2,
+      h - 30,
+      { align: "center" }
+    );
+
+    doc.save(`Detalle_Salida_${salidaSeleccionada.id_salida}_DGMM.pdf`);
+  };
+
+  // ============================
   // UI
   // ============================
   return (
@@ -222,6 +334,9 @@ export default function Salidas() {
           <button className="btn btn-topbar-outline" onClick={abrirModalNueva}>＋ Nueva Salida</button>
           <button className="btn btn-topbar-outline" onClick={() => navigate("/")}>← Menú</button>
           <button className="btn btn-topbar-outline" onClick={cargarDatos}>⟳ Refrescar</button>
+          <button className="btn btn-topbar-primary" onClick={generarPDFSalidas}>
+            <FaFilePdf size={16} /> Generar Reporte PDF
+          </button>
         </div>
       </div>
 
@@ -445,6 +560,9 @@ export default function Salidas() {
             <div className="inv-modal-footer">
               <button className="btn btn-topbar-outline" onClick={cerrarModalDetalle}>
                 Cerrar
+              </button>
+              <button className="btn btn-topbar-primary" onClick={generarPDFDetalleSalida} style={{ marginLeft: 8 }}>
+                <FaFilePdf size={16} /> Exportar Detalle PDF
               </button>
             </div>
 

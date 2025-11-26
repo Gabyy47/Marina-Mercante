@@ -1,0 +1,290 @@
+:root {
+  --dgmm-cyan: #00bce4;
+  --dgmm-cyan-600: #00a5cb;
+  --dgmm-navy: #0e2a3b;
+  --dgmm-gray-100: #f2f5f7;
+  --dgmm-gray-300: #d7dee3;
+  --dgmm-gray-600: #6b7280;
+  --dgmm-danger: #dc3545;
+  --white: #fff;
+}
+
+/* ===== Página general ===== */
+.mant-prod-page {
+  min-height: 100vh;
+  background: var(--dgmm-gray-100);
+  padding: 32px 18px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+/* ===== Logo institucional ===== */
+.mant-prod-logo-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: min(1000px, 100%);
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+.mant-prod-logo-wrap img {
+  height: 100px;
+  width: auto;
+}
+
+/* ===== Barra superior ===== */
+.mant-prod-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--dgmm-navy);
+  color: var(--white);
+  width: min(1000px, 100%);
+  border-radius: 14px;
+  padding: 14px 20px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+.mant-prod-topbar-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--white);
+}
+.mant-prod-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ===== Botones ===== */
+.mant-prod-btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+.mant-prod-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mant-prod-btn-topbar-outline {
+  background: #153447;
+  color: #fff;
+}
+.mant-prod-btn-topbar-outline:hover {
+  background: #1b4157;
+}
+
+.mant-prod-btn-sm {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.mant-prod-btn-outline-primary {
+  background: transparent;
+  color: var(--dgmm-cyan);
+  border: 1px solid var(--dgmm-cyan);
+}
+
+.mant-prod-btn-outline-primary:hover {
+  background: var(--dgmm-cyan);
+  color: var(--white);
+}
+
+.mant-prod-btn-outline-danger {
+  background: transparent;
+  color: var(--dgmm-danger);
+  border: 1px solid var(--dgmm-danger);
+}
+
+.mant-prod-btn-outline-danger:hover {
+  background: var(--dgmm-danger);
+  color: var(--white);
+}
+
+.mant-prod-me-2 {
+  margin-right: 8px;
+}
+
+/* ===== Tarjeta contenedora ===== */
+.mant-prod-card {
+  background: var(--white);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  border: 1px solid #eef2f5;
+  width: min(1000px, 100%);
+  padding: 10px 18px 28px;
+}
+
+/* ===== Tabla ===== */
+.mant-prod-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 14px;
+}
+.mant-prod-table th {
+  background: var(--dgmm-navy);
+  color: var(--white);
+  text-align: left;
+  padding: 10px 12px;
+}
+.mant-prod-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--dgmm-gray-300);
+}
+.mant-prod-table tr:hover {
+  background: #f8fbfd;
+}
+
+/* ===== Modal Overlay ===== */
+.mant-prod-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ===== Modal Card ===== */
+.mant-prod-modal-card {
+  background: var(--white);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: modalSlideIn 0.3s ease;
+  width: 90%;
+}
+
+@keyframes modalSlideIn {
+  from {
+    transform: translateY(-30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ===== Modal Header ===== */
+.mant-prod-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--dgmm-gray-300);
+}
+
+.mant-prod-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--dgmm-navy);
+}
+
+.mant-prod-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--dgmm-gray-600);
+  transition: color 0.2s;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mant-prod-modal-close:hover {
+  color: var(--dgmm-danger);
+}
+
+/* ===== Modal Body ===== */
+.mant-prod-modal-body {
+  padding: 24px;
+}
+
+/* ===== Modal Footer ===== */
+.mant-prod-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--dgmm-gray-300);
+  background: var(--dgmm-gray-100);
+  border-radius: 0 0 14px 14px;
+}
+
+/* ===== Botones de modal ===== */
+.mant-prod-btn-secondary {
+  background: #6c757d;
+  color: var(--white);
+  border: none;
+}
+
+.mant-prod-btn-secondary:hover {
+  background: #5a6268;
+}
+
+.mant-prod-btn-success {
+  background: #28a745;
+  color: var(--white);
+  border: none;
+}
+
+.mant-prod-btn-success:hover {
+  background: #218838;
+}
+
+/* ===== Form control ===== */
+.mant-prod-form-control {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--dgmm-gray-300);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.mant-prod-form-control:focus {
+  border-color: var(--dgmm-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 188, 228, 0.15);
+}
+
+textarea.mant-prod-form-control {
+  resize: vertical;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+/* ===== Loading ===== */
+.mant-prod-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--dgmm-gray-600);
+  font-size: 16px;
+}

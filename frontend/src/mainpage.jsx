@@ -279,7 +279,7 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 </span>
               </button>
 
-              <button
+              {/* <button
                 className={`sb__link sb__link--child ${
                   activeView === "kardex" ? "sb__link--active" : ""
                 }`}
@@ -289,7 +289,7 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                   <FiClipboard />
                   <span>Kardex</span>
                 </span>
-              </button>
+              </button> */}
 
 
                             {/* Compra */}
@@ -306,8 +306,8 @@ function Sidebar({ activeView, onSelect, onLogout }) {
               </button>
 
 
-              {/* Detalle compra */}
-              <button
+              {/* Detalle compra - COMENTADO */}
+              {/* <button
                 className={`sb__link sb__link--child ${
                   activeView === "DetalleCompra"
                     ? "sb__link--active"
@@ -319,7 +319,7 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                   <FiFileText />
                   <span>Detalle compra</span>
                 </span>
-              </button>
+              </button> */}
 
               <button
                 className={`sb__link sb__link--child ${
@@ -349,8 +349,8 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 </span>
               </button>
 
-              {/* Detalle Salidas */}
-              <button
+              {/* Detalle Salidas - COMENTADO */}
+              {/* <button
                 className={`sb__link sb__link--child ${
                   activeView === "DetalleSalidas" ? "sb__link--active" : ""
                 }`}
@@ -360,7 +360,7 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                   <FiFileText />
                   <span>Detalle Salidas</span>
                 </span>
-              </button>
+              </button> */}
 
               
             </div>

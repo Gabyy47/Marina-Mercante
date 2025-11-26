@@ -4422,7 +4422,11 @@ const ID_OBJETO_SALIDAS_SP = 17;
 // =======================
 app.get("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "consultar"), (req, res) => {
   const sql = `
-    SELECT s.id_salida, s.fecha, s.motivo, u.nombre_usuario
+    SELECT 
+      s.id_salida, 
+      s.fecha AS fecha_salida, 
+      s.motivo, 
+      u.nombre_usuario
     FROM tbl_salida s
     JOIN tbl_usuario u ON u.id_usuario = s.id_usuario
     ORDER BY s.fecha DESC
@@ -4461,7 +4465,7 @@ app.post("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso(
 
     // Bitácora
     logBitacora(conexion, {
-      id_objeto: ID_OBJETO_SALIDAS,
+      id_objeto: ID_OBJETO_SALIDAS_SP,
       id_usuario,
       accion: "INSERT",
       descripcion: `Creó salida #${id_salida}`
@@ -4557,7 +4561,7 @@ app.post("/api/salida/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarP
     // El trigger INSERTA en kardex y actualiza inventario
 
     logBitacora(conexion, {
-      id_objeto: ID_OBJETO_SALIDAS,
+      id_objeto: ID_OBJETO_SALIDAS_SP,
       id_usuario: req.user.id_usuario,
       accion: "INSERT",
       descripcion: `Insertó detalle salida #${id_salida}`
