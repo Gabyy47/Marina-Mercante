@@ -6,9 +6,6 @@ import logoDGMM from './imagenes/DGMM-Gobierno.png';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { FaFilePdf } from "react-icons/fa";
-import Modal from 'react-modal';
-
-Modal.setAppElement('#root'); // necesario para accesibilidad
 
 export default function Proveedores() {
   const navigate = useNavigate();
@@ -16,8 +13,7 @@ export default function Proveedores() {
   const [proveedores, setProveedores] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [editing, setEditing] = useState(null); // null = nuevo, objeto = editando
-  const [isModalOpen, setIsModalOpen] = useState(false); // controla el modal
+  const [editing, setEditing] = useState(null);
 
   const [form, setForm] = useState({
     nombre: "",
@@ -44,9 +40,10 @@ export default function Proveedores() {
     doc.setTextColor(80);
     doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
 
-    const columnas = ["Nombre", "Teléfono", "Dirección"];
+    const columnas = ["ID", "Nombre", "Teléfono", "Dirección"];
 
     const filas = proveedores.map((p) => [
+      p.id_proveedor,
       p.nombre,
       p.telefono,
       p.direccion
@@ -91,6 +88,7 @@ export default function Proveedores() {
     setLoading(false);
   };
 
+
   useEffect(() => { fetchAll(); }, []);
   useEffect(() => {
     const h = () => fetchAll();
@@ -113,35 +111,11 @@ export default function Proveedores() {
   };
 
   // Nombre y dirección permiten acentos, comas, puntos, números, letras…
-  const validarTexto = (texto) =>
-    /^[A-Za-z0-9áéíóúÁÉÍÓÚñÑ.,\-\s#()/:°]*$/.test(texto);
+  const validarTexto = (texto) => /^[A-Za-z0-9áéíóúÁÉÍÓÚñÑ.,\-\s#()/:°]*$/.test(texto);
 
   const handleChangeText = (field, value) => {
     if (!validarTexto(value)) return;
     setForm({ ...form, [field]: value });
-  };
-
-  // =======================
-  //  MODAL: NUEVO / EDITAR
-  // =======================
-  const openNew = () => {
-    setEditing(null);
-    setForm({ nombre: "", telefono: "", direccion: "" });
-    setIsModalOpen(true);
-  };
-
-  const startEdit = (p) => {
-    setEditing(p);
-    setForm({
-      nombre: p.nombre,
-      telefono: p.telefono,
-      direccion: p.direccion
-    });
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
   };
 
   // =======================
@@ -163,7 +137,6 @@ export default function Proveedores() {
 
       setEditing(null);
       setForm({ nombre: "", telefono: "", direccion: "" });
-      setIsModalOpen(false); // cerrar modal al guardar
 
     } catch (e) {
       alert("Error: " + (e.response?.data?.mensaje || e.message));
@@ -185,6 +158,18 @@ export default function Proveedores() {
     }
   };
 
+  // =======================
+  //  EDITAR
+  // =======================
+  const startEdit = (p) => {
+    setEditing(p);
+    setForm({
+      nombre: p.nombre,
+      telefono: p.telefono,
+      direccion: p.direccion
+    });
+  };
+
   return (
     <div className="inventario-page">
 
@@ -196,13 +181,13 @@ export default function Proveedores() {
         <span className="topbar-title">Gestión de Proveedores</span>
 
         <div className="topbar-actions">
-         <button className="btn btn-topbar-outline" onClick={() => navigate('/')}>
+          <button className="btn btn-topbar-outline" onClick={() => navigate("/")}>
             ← Menú
           </button>
           <button className="btn btn-topbar-outline" onClick={fetchAll} style={{ marginLeft: 8 }}>
             ⟳ Refrescar
           </button>
-          <button className="btn btn-topbar-outline" onClick={openNew} style={{ marginLeft: 8 }}>
+          <button className="btn btn-topbar-outline" onClick={() => setEditing(null)} style={{ marginLeft: 8 }}>
             ＋ Nuevo
           </button>
           <button className="btn btn-topbar-primary" onClick={generarPDF}>
@@ -218,6 +203,7 @@ export default function Proveedores() {
         <table className="inventario-table">
           <thead>
             <tr>
+              <th>#</th>
               <th>Nombre</th>
               <th>Teléfono</th>
               <th>Dirección</th>
@@ -228,22 +214,17 @@ export default function Proveedores() {
           <tbody>
             {proveedores.map((p) => (
               <tr key={p.id_proveedor}>
+                <td>{p.id_proveedor}</td>
                 <td>{p.nombre}</td>
                 <td>{p.telefono}</td>
                 <td>{p.direccion}</td>
 
                 <td>
-                  <button
-                    className="btn btn-sm btn-outline-primary me-2"
-                    onClick={() => startEdit(p)}
-                  >
+                  <button className="btn btn-sm btn-outline-primary me-2" onClick={() => startEdit(p)}>
                     Editar
                   </button>
 
-                  <button
-                    className="btn btn-sm btn-outline-danger"
-                    onClick={() => remove(p.id_proveedor)}
-                  >
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => remove(p.id_proveedor)}>
                     Eliminar
                   </button>
                 </td>
@@ -259,19 +240,11 @@ export default function Proveedores() {
             )}
           </tbody>
         </table>
-      </div>
 
-      {/* MODAL NUEVO / EDITAR */}
-      <Modal
-        isOpen={isModalOpen}
-        onRequestClose={closeModal}
-        contentLabel="Formulario proveedor"
-        className="mm-modal"
-        overlayClassName="mm-overlay"
-      >
-        <h3>{editing ? "Editar proveedor" : "Nuevo proveedor"}</h3>
+        {/* FORMULARIO */}
+        <div style={{ marginTop: 12 }}>
+          <h5>{editing ? "Editar proveedor" : "Nuevo proveedor"}</h5>
 
-        <div className="mm-form">
           <input
             className="form-control mb-2"
             placeholder="Nombre"
@@ -292,24 +265,21 @@ export default function Proveedores() {
             value={form.direccion}
             onChange={(e) => handleChangeText("direccion", e.target.value)}
           />
+
+          <div>
+            <button className="btn btn-success me-2" onClick={save}>
+              Guardar
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setForm({ nombre: "", telefono: "", direccion: "" })}
+            >
+              Limpiar
+            </button>
+          </div>
         </div>
 
-        <div className="mm-modal__actions" style={{ marginTop: 12 }}>
-          <button className="btn btn-success me-2" onClick={save}>
-            Guardar
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => {
-              setForm({ nombre: "", telefono: "", direccion: "" });
-              closeModal();
-            }}
-          >
-            Cancelar
-          </button>
-        </div>
-      </Modal>
-
+      </div>
     </div>
   );
 }
