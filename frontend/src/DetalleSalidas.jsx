@@ -11,23 +11,27 @@ export default function DetalleSalidas() {
   const [detalle, setDetalle] = useState([]);
   const [error, setError] = useState(null);
 
-  const cargarDetalle = async () => {
-    try {
-      const res = await api.get(`/salida/${id}`);
-      setDetalle(res.data || []);
-    } catch (e) {
-      console.error("Error cargando detalle:", e);
-      setError(e.response?.data || { mensaje: "Error desconocido" });
-    }
-  };
+const cargarDetalle = async () => {
+  try {
+    const res = await api.get(`/api/salida/detalle/${id}`);
+    setDetalle(res.data || []);
+  } catch (e) {
+    console.error("Error cargando detalle:", e);
+    setError(e.response?.data || { mensaje: "Error desconocido" });
+  }
+};
 
-  useEffect(() => {
-    if (!id || isNaN(id)) {
-      setError({ mensaje: "ID inválido" });
-      return;
-    }
-    cargarDetalle();
-  }, [id]);
+
+useEffect(() => {
+  if (!id || isNaN(id)) {
+    setError({ mensaje: "ID inválido" });
+    return;
+  }
+  cargarDetalle();
+}, [id]);
+
+console.log("useParams ID:", id);
+console.log("window URL:", window.location.href);
 
   return (
     <div className="inventario-page">

@@ -226,6 +226,7 @@ app.use(
         "http://localhost:49146",
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:5174"
       ];
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -4506,6 +4507,35 @@ app.get('/api/sp-detalle-salida', verificarToken, SOLO_ALMACEN_O_ADMIN, autoriza
 });
 
 // ===============================
+//   DETALLE SALIDA POR ID (GET)
+// ===============================
+app.get("/api/salida/detalle/:id_salida",
+  verificarToken,
+  SOLO_ALMACEN_O_ADMIN,
+  autorizarPermiso("Detalle de Salida de Productos", "consultar"),
+  (req, res) => {
+
+    const id_salida = parseInt(req.params.id_salida);
+
+    if (isNaN(id_salida)) {
+      return res.status(400).json({ mensaje: "ID inválido" });
+    }
+
+    const query = "CALL SP_MostrarDetalleSalida(?)";
+
+    conexion.query(query, [id_salida], (err, results) => {
+      if (err) {
+        console.error("Error en SP_MostrarDetalleSalida:", err);
+        return res.status(500).json({ error: "Error al obtener detalle de salida" });
+      }
+
+      res.json(results[0]); // <-- resultados del SP
+    });
+  }
+);
+
+
+// ===============================
 //   DETALLE SALIDA (INSERTAR)
 // ===============================
 app.post("/api/salida/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "insertar"), (req, res) => {
@@ -4524,6 +4554,9 @@ app.post("/api/salida/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarP
       console.error("Error al insertar detalle salida:", err);
       return res.status(500).json({ error: err.message });
     }
+
+
+    
 
     // El trigger INSERTA en kardex y actualiza inventario
 

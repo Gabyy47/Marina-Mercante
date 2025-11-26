@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import api from './api';
 import './inventario.css';
 import logoDGMM from './imagenes/DGMM-Gobierno.png';
+<<<<<<< HEAD
+=======
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { FaFilePdf } from "react-icons/fa"; 
 
+>>>>>>> inventario
 
 export default function HistorialKardex(){
   const navigate = useNavigate();
@@ -14,6 +17,8 @@ export default function HistorialKardex(){
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+<<<<<<< HEAD
+=======
 const generarPDF = () => {
   const doc = new jsPDF({
     orientation: "portrait",
@@ -86,6 +91,7 @@ const generarPDF = () => {
 };
 
   
+>>>>>>> inventario
   const fetchAll = async ()=>{
     setLoading(true); setError(null);
     try{
@@ -119,6 +125,11 @@ const generarPDF = () => {
         <div className="topbar-actions">
           <button className="btn btn-topbar-outline" onClick={()=>navigate('/')}>← Menú</button>
           <button className="btn btn-topbar-outline" onClick={fetchAll} style={{marginLeft:8}}>⟳ Refrescar</button>
+<<<<<<< HEAD
+        </div>
+      </div>
+
+=======
           
           <button className="btn btn-topbar-primary" onClick={generarPDF}>
             <FaFilePdf size={16} /> Generar Reporte PDF
@@ -128,6 +139,7 @@ const generarPDF = () => {
       </div>
 
 
+>>>>>>> inventario
       <div className="inventario-card" style={{maxWidth:1000}}>
         {displayError(error) && (
           <div className="inventario-error" style={{marginBottom:12}}>

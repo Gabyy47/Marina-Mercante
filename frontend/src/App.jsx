@@ -122,7 +122,7 @@ export default function App() {
 />
 
 <Route
-  path="/guarda/DetalleSalidas"
+  path="/guarda/DetalleSalidas/:id"
   element={
     <ProtectedRouteRol allowedRoles={["Guarda Almacén", "Administrador", "Auxiliar de Almacén"]}>
       <DetalleSalidas />
