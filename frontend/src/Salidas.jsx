@@ -174,7 +174,8 @@ export default function Salidas() {
                   <td>
                     <button
                       className="btn btn-topbar-outline btn-sm"
-                      onClick={() => navigate(`/detalle-salida/${s.id_salida}`)}
+                      onClick={() => navigate(`/guarda/DetalleSalidas/${s.id_salida}`)}
+
                     >
                       Ver más
                     </button>
