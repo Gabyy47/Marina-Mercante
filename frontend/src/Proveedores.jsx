@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from './api';
-import './inventario.css';
+import './proveedores.css';
 import logoDGMM from './imagenes/DGMM-Gobierno.png';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -25,6 +25,9 @@ export default function Proveedores() {
   // Modal de nuevo proveedor
   const [showModalNuevo, setShowModalNuevo] = useState(false);
   const [proveedoresNuevos, setProveedoresNuevos] = useState([]);
+
+  // Modal de edición
+  const [showModalEditar, setShowModalEditar] = useState(false);
 
   const [form, setForm] = useState({
     nombre: "",
@@ -166,6 +169,7 @@ export default function Proveedores() {
 
       setEditing(null);
       setForm({ nombre: "", telefono: "", direccion: "" });
+      setShowModalEditar(false);
 
     } catch (e) {
       alert("Error: " + (e.response?.data?.mensaje || e.message));
@@ -256,6 +260,13 @@ export default function Proveedores() {
       telefono: p.telefono,
       direccion: p.direccion
     });
+    setShowModalEditar(true);
+  };
+
+  const cerrarModalEditar = () => {
+    setShowModalEditar(false);
+    setEditing(null);
+    setForm({ nombre: "", telefono: "", direccion: "" });
   };
 
   return (
@@ -350,50 +361,75 @@ export default function Proveedores() {
           </tbody>
         </table>
 
-        {/* FORMULARIO DE EDICIÓN */}
-        {editing && (
-          <div style={{ marginTop: 12 }}>
-            <h5>Editar proveedor</h5>
+      </div>
 
-            <input
-              className="form-control mb-2"
-              placeholder="Nombre"
-              value={form.nombre}
-              onChange={(e) => handleChangeText("nombre", e.target.value)}
-            />
+      {/* MODAL EDITAR PROVEEDOR */}
+      {showModalEditar && (
+        <div className="inv-modal-overlay" onClick={cerrarModalEditar}>
+          <div
+            className="inv-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 500 }}
+          >
+            <div className="inv-modal-header">
+              <h3>Editar Proveedor</h3>
+              <button className="inv-modal-close" onClick={cerrarModalEditar}>
+                ✕
+              </button>
+            </div>
 
-            <input
-              className="form-control mb-2"
-              placeholder="Teléfono (8 dígitos)"
-              value={form.telefono}
-              onChange={handleTelefonoChange}
-            />
+            <div className="inv-modal-body">
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Nombre</label>
+                  <input
+                    className="form-control"
+                    placeholder="Nombre del proveedor"
+                    value={form.nombre}
+                    onChange={(e) => handleChangeText("nombre", e.target.value)}
+                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d7dee3" }}
+                  />
+                </div>
 
-            <input
-              className="form-control mb-2"
-              placeholder="Dirección"
-              value={form.direccion}
-              onChange={(e) => handleChangeText("direccion", e.target.value)}
-            />
+                <div>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Teléfono</label>
+                  <input
+                    className="form-control"
+                    placeholder="8 dígitos"
+                    value={form.telefono}
+                    onChange={handleTelefonoChange}
+                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d7dee3" }}
+                  />
+                </div>
 
-            <div>
-              <button className="btn btn-success me-2" onClick={save}>
-                Guardar
+                <div>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Dirección</label>
+                  <input
+                    className="form-control"
+                    placeholder="Dirección"
+                    value={form.direccion}
+                    onChange={(e) => handleChangeText("direccion", e.target.value)}
+                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d7dee3" }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="inv-modal-footer">
+              <button className="btn btn-secondary" onClick={cerrarModalEditar}>
+                Cancelar
               </button>
               <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  setEditing(null);
-                  setForm({ nombre: "", telefono: "", direccion: "" });
-                }}
+                className="btn btn-success"
+                onClick={save}
+                disabled={loading}
               >
-                Cancelar
+                {loading ? "Guardando..." : "Guardar Cambios"}
               </button>
             </div>
           </div>
-        )}
-
-      </div>
+        </div>
+      )}
 
       {/* MODAL NUEVO PROVEEDOR */}
       {showModalNuevo && (
