@@ -138,7 +138,6 @@ export default function DashboardTickets() {
         <div className="sb2__head">
           <div className="sb2__brand">
             <img src={logoDGMM} alt="DGMM" className="sb2__logo" />
-            <span className="brand__text">NAVI-MASTER</span>
           </div>
         </div>
 

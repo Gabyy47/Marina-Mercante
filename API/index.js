@@ -4555,9 +4555,6 @@ app.post("/api/salida/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarP
       return res.status(500).json({ error: err.message });
     }
 
-
-    
-
     // El trigger INSERTA en kardex y actualiza inventario
 
     logBitacora(conexion, {
@@ -4571,7 +4568,10 @@ app.post("/api/salida/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarP
   });
 });
 
-app.post("/api/kardex/entrada", verificarToken, async (req, res) => {
+// =========================================
+//         REGISTRAR ENTRADA (COMPRA)
+// =========================================
+app.post("/api/kardex/entrada", verificarToken, (req, res) => {
   const { id_compra } = req.body;
   const user = req.user;
 
@@ -4579,50 +4579,74 @@ app.post("/api/kardex/entrada", verificarToken, async (req, res) => {
     return res.status(400).json({ error: "El ID de compra es obligatorio" });
   }
 
-  try {
-    await conexion.query(
-      "CALL SP_RegistrarEntradaCompra(?, ?)",
-      [id_compra, user.id_usuario]
-    );
+  const sql = "CALL SP_RegistrarEntradaCompra(?, ?)";
 
-    res.json({ mensaje: "Entrada registrada y inventario actualizado" });
-  } catch (err) {
-    console.error("Error en entrada:", err);
-    res.status(500).json({ error: "Error registrando entrada" });
-  }
-});
-
-app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex","consultar"), (req,res)=>{
-  const sql = `
-    SELECT k.*, u.nombre_usuario
-    FROM tbl_kardex k
-    LEFT JOIN tbl_usuario u ON u.id_usuario = k.id_usuario
-    ORDER BY k.fecha DESC
-  `;
-
-  conexion.query(sql,(err,rows)=>{
-    if(err){
-      console.error("Error al mostrar kardex:", err);
-      return res.status(500).json({ mensaje:"Error al obtener kardex" });
+  conexion.query(sql, [id_compra, user.id_usuario], (err) => {
+    if (err) {
+      console.error("❌ Error en entrada:", err);
+      return res.status(500).json({ error: "Error registrando entrada" });
     }
-    // Bitácora
+
+    // Bitácora de ENTRADA
     logBitacora(conexion, {
       id_objeto: ID_OBJETO_KARDEX,
-      id_usuario,
+      id_usuario: user.id_usuario,
       accion: "INSERT",
-      descripcion: `Consultó la lista del kardex`
+      descripcion: `Registró entrada por compra ID=${id_compra}`
     });
-    res.json(rows);
+
+    res.json({ mensaje: "Entrada registrada y inventario actualizado" });
   });
 });
 
 
+// =========================================
+//            MOSTRAR KARDEX COMPLETO
+// =========================================
+app.get(
+  "/api/kardex",
+  verificarToken,
+  SOLO_ALMACEN_O_ADMIN,
+  autorizarPermiso("Kardex","consultar"),
+  (req,res) => {
+
+    const id_usuario = req.user?.id_usuario;
+
+    const sql = `
+      SELECT
+        k.*,
+        u.nombre_usuario,
+        p.nombre_producto AS producto   
+      FROM tbl_kardex k
+      LEFT JOIN tbl_usuario   u ON u.id_usuario   = k.id_usuario
+      LEFT JOIN tbl_productos p ON p.id_producto = k.id_producto
+      ORDER BY k.fecha DESC
+    `;
+
+    conexion.query(sql,(err,rows)=>{
+      if(err){
+        console.error("❌ Error al mostrar kardex:", err);
+        return res.status(500).json({ mensaje:"Error al obtener kardex" });
+      }
+
+      if (id_usuario) {
+        logBitacora(conexion, {
+          id_objeto: ID_OBJETO_KARDEX,
+          id_usuario,
+          accion: "GET",
+          descripcion: "Consultó la lista del kardex"
+        });
+      }
+
+      res.json(rows);
+    });
+  }
+);
 
 
-
-// =============================================================================================
-// ================================ FIN ENDPOINTS CON SP =======================================
-// =============================================================================================
+// ============================================================================================= 
+// ================================ FIN ENDPOINTS CON SP ======================================= 
+// ============================================================================================= 
 
 
 // ===== 404 =====

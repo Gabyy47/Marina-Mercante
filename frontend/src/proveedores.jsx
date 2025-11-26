@@ -196,7 +196,7 @@ export default function Proveedores() {
         <span className="topbar-title">Gestión de Proveedores</span>
 
         <div className="topbar-actions">
-          <button className="btn btn-topbar-outline" onClick={() => navigate("/")}>
+         <button className="btn btn-topbar-outline" onClick={() => navigate('/')}>
             ← Menú
           </button>
           <button className="btn btn-topbar-outline" onClick={fetchAll} style={{ marginLeft: 8 }}>
