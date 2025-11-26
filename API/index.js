@@ -4168,7 +4168,7 @@ app.get('/api/sp-inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPer
       id_objeto: ID_OBJETO_INVENTARIO,
       id_usuario: user.id_usuario,
       accion: "GET",
-      descripcion: "SP_MostrarInventario: Consulta de inventario",
+      descripcion: "Se consultó la lista de ilnventario",
       usuario: user.nombre_usuario
     });
 
@@ -4187,7 +4187,7 @@ app.get( "/api/compra", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("
       SELECT 
         c.id_compra,
         c.fecha,
-        p.id_proveedor
+        p.id_proveedor,
         c.total,
         u.nombre_usuario
       FROM tbl_compra c
@@ -4209,7 +4209,7 @@ app.get( "/api/compra", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("
         id_objeto: ID_OBJETO_COMPRAS,
         id_usuario: req.user.id_usuario,
         accion: "GET",
-        descripcion: "Consultó la lista de compras",
+        descripcion: "Se consultó la lista de compras",
         usuario: req.user.nombre_usuario,
       });
 
@@ -4265,7 +4265,7 @@ app.post(
 // COMPRAS CON SP
 // =====================
 
-const ID_OBJETO_COMPRAS_SP = 18; // Asignar un ID único para el objeto "Compras con SP"
+const ID_OBJETO_COMPRAS_SP = 20; // Asignar un ID único para el objeto "Compras con SP"
 // GET: Obtener todas las compras
 app.get('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compra de producto", "consultar"), (req, res) => {
   const user = req.user;
@@ -4281,7 +4281,7 @@ app.get('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermis
       id_objeto: ID_OBJETO_COMPRAS_SP,
       id_usuario: user.id_usuario,
       accion: "GET",
-      descripcion: "SP_MostrarCompras: Consulta de compras",
+      descripcion: "Se consultó la lista de compras",
       usuario: user.nombre_usuario
     });
 
@@ -4430,7 +4430,13 @@ app.get("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("
       console.error("Error listando salidas:", err);
       return res.status(500).json({ error: err.message });
     }
-
+// Bitácora
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_SALIDAS_SP,
+      id_usuario,
+      accion: "GET",
+      descripcion: `Creó consultó la lista de salidas de productos`
+    });
     res.json(rows);
   });
 });
@@ -4458,10 +4464,10 @@ app.post("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso(
 
     // Bitácora
     logBitacora(conexion, {
-      id_objeto: ID_OBJETO_SALIDAS,
+      id_objeto: ID_OBJETO_SALIDAS_SP,
       id_usuario,
-      accion: "INSERT",
-      descripcion: `Creó salida #${id_salida}`
+      accion: "POST",
+      descripcion: `Se hizo una nueva salida de producto #${id_salida}`
     });
 
     res.json({ id_salida });
@@ -4491,7 +4497,7 @@ app.get('/api/sp-detalle-salida', verificarToken, SOLO_ALMACEN_O_ADMIN, autoriza
       id_objeto: ID_OBJETO_DETALLE_SALIDA_SP,
       id_usuario: user.id_usuario,
       accion: "GET",
-      descripcion: "SP_MostrarDetalleSalida: Consulta de detalle de salidas",
+      descripcion: "Se consultó la lista de detalle de salidas",
       usuario: user.nombre_usuario
     });
 
@@ -4522,7 +4528,7 @@ app.post("/api/salida/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarP
     // El trigger INSERTA en kardex y actualiza inventario
 
     logBitacora(conexion, {
-      id_objeto: ID_OBJETO_SALIDAS,
+      id_objeto: ID_OBJETO_SALIDAS_SP,
       id_usuario: req.user.id_usuario,
       accion: "INSERT",
       descripcion: `Insertó detalle salida #${id_salida}`
@@ -4531,9 +4537,6 @@ app.post("/api/salida/detalle", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarP
     res.json({ mensaje: "Salida registrada correctamente" });
   });
 });
-
-
-
 
 app.post("/api/kardex/entrada", verificarToken, async (req, res) => {
   const { id_compra } = req.body;
@@ -4569,6 +4572,13 @@ app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("K
       console.error("Error al mostrar kardex:", err);
       return res.status(500).json({ mensaje:"Error al obtener kardex" });
     }
+    // Bitácora
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_KARDEX,
+      id_usuario,
+      accion: "INSERT",
+      descripcion: `Consultó la lista del kardex`
+    });
     res.json(rows);
   });
 });
