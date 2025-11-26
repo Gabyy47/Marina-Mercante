@@ -11,148 +11,256 @@ import logoDGMM from "./imagenes/DGMM-Gobierno.png";
 export default function Salidas() {
   const navigate = useNavigate();
 
-  // ===============================
-  //      Estados principales
-  // ===============================
+  // ============================
+  // ESTADOS PRINCIPALES
+  // ============================
   const [salidas, setSalidas] = useState([]);
   const [productos, setProductos] = useState([]);
-  const [motivo, setMotivo] = useState("");
-  const [productoSel, setProductoSel] = useState("");
-  const [cantidad, setCantidad] = useState(0);
+
+  // Filtros
+  const [filtros, setFiltros] = useState({
+    usuario: "",
+    fecha: "",
+    motivo: ""
+  });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // ===============================
-  //   Cargar salidas
-  // ===============================
-  const cargarSalidas = async () => {
+  // Modal nueva salida
+  const [showModalNueva, setShowModalNueva] = useState(false);
+  const [formSalida, setFormSalida] = useState({
+    motivo: "",
+    detalles: []
+  });
+
+  const [detalleTemp, setDetalleTemp] = useState({
+    id_producto: "",
+    cantidad: ""
+  });
+
+  // Modal detalle
+  const [showModalDetalle, setShowModalDetalle] = useState(false);
+  const [salidaSeleccionada, setSalidaSeleccionada] = useState(null);
+  const [detalleSalida, setDetalleSalida] = useState([]);
+  const [loadingDetalle, setLoadingDetalle] = useState(false);
+
+  // ============================
+  // HELPERS
+  // ============================
+  const formatearFecha = (value) => {
+    if (!value) return "—";
+
+    // Normalizar formatos con espacio → "2025-11-26T10:00:00"
+    let fechaNormalizada = value.replace(" ", "T");
+
+    const fecha = new Date(fechaNormalizada);
+
+    if (isNaN(fecha)) return "Fecha no válida";
+
+    return fecha.toLocaleString("es-HN", {
+      dateStyle: "short",
+      timeStyle: "short"
+    });
+  };
+
+  // ============================
+  // CARGAR DATOS
+  // ============================
+  const cargarDatos = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const res = await api.get("/salida");
-      setSalidas(res.data || []);
+      const [rSalidas, rProd] = await Promise.all([
+        api.get("/salida"),
+        api.get("/productos")
+      ]);
+
+      setSalidas(rSalidas.data || []);
+      setProductos(rProd.data || []);
     } catch (e) {
-      console.error("Error cargando salidas:", e);
       setError({
         message: e.message,
         status: e.response?.status,
-        data: e.response?.data,
-        url: e.config?.url
+        data: e.response?.data
       });
-    } finally {
-      setLoading(false);
     }
+
+    setLoading(false);
   };
 
-  // ===============================
-  //     Cargar productos
-  // ===============================
-  const cargarProductos = async () => {
+  useEffect(() => { cargarDatos(); }, []);
+
+  // ============================
+  // FILTRADO
+  // ============================
+  const aplicarFiltro = (s) => {
+    const { usuario, fecha, motivo } = filtros;
+
+    return (
+      (!usuario || s.nombre_usuario?.toLowerCase().includes(usuario.toLowerCase())) &&
+      (!motivo || s.motivo?.toLowerCase().includes(motivo.toLowerCase())) &&
+      (!fecha || new Date(s.fecha_salida).toLocaleDateString("en-CA") === fecha)
+    );
+  };
+
+  const salidasFiltradas = salidas.filter(aplicarFiltro);
+
+  // ============================
+  // VER DETALLE
+  // ============================
+  const verDetalle = async (salida) => {
+    setSalidaSeleccionada(salida);
+    setShowModalDetalle(true);
+    setLoadingDetalle(true);
+
     try {
-      const res = await api.get("/productos");
-      setProductos(res.data || []);
+      const res = await api.get(`/salida/detalle/${salida.id_salida}`);
+      setDetalleSalida(res.data || []);
     } catch (e) {
-      console.error("Error cargando productos:", e);
+      console.error("Error cargando detalle:", e);
+    } finally {
+      setLoadingDetalle(false);
     }
   };
 
-  useEffect(() => {
-    cargarSalidas();
-    cargarProductos();
-  }, []);
+  const cerrarModalDetalle = () => {
+    setShowModalDetalle(false);
+    setDetalleSalida([]);
+    setSalidaSeleccionada(null);
+  };
 
-  useEffect(() => {
-    const h = () => cargarSalidas();
-    window.addEventListener("dataChanged", h);
-    return () => window.removeEventListener("dataChanged", h);
-  }, []);
+  // ============================
+  // NUEVA SALIDA
+  // ============================
+  const abrirModalNueva = () => {
+    setShowModalNueva(true);
+    setFormSalida({ motivo: "", detalles: [] });
+    setDetalleTemp({ id_producto: "", cantidad: "" });
+  };
 
-  // ===============================
-  //   Crear nueva salida COMPLETA
-  // ===============================
-  const handleCrearSalida = async (e) => {
-    e.preventDefault();
+  const cerrarModalNueva = () => {
+    setShowModalNueva(false);
+  };
 
-    if (!motivo.trim()) return alert("El motivo es obligatorio");
-    if (!productoSel) return alert("Debe seleccionar un producto");
-    if (!cantidad || cantidad <= 0) return alert("Cantidad inválida");
+  const agregarDetalle = () => {
+    if (!detalleTemp.id_producto || !detalleTemp.cantidad) {
+      return alert("Complete los campos del detalle");
+    }
+
+    const prod = productos.find(p => p.id_producto === parseInt(detalleTemp.id_producto));
+
+    const nuevo = {
+      id_producto: parseInt(detalleTemp.id_producto),
+      nombre_producto: prod?.nombre_producto,
+      cantidad: parseInt(detalleTemp.cantidad)
+    };
+
+    setFormSalida({
+      ...formSalida,
+      detalles: [...formSalida.detalles, nuevo]
+    });
+
+    setDetalleTemp({ id_producto: "", cantidad: "" });
+  };
+
+  const eliminarDetalle = (idx) => {
+    setFormSalida({
+      ...formSalida,
+      detalles: formSalida.detalles.filter((_, i) => i !== idx)
+    });
+  };
+
+  const guardarSalida = async () => {
+    if (!formSalida.motivo.trim()) return alert("El motivo es obligatorio");
+    if (formSalida.detalles.length === 0) return alert("Debe agregar al menos un producto");
 
     try {
       setLoading(true);
-      setError(null);
 
-      // 1️⃣ Crear encabezado de salida
-      const r1 = await api.post("/salida", { motivo });
+      // Crear salida
+      const r1 = await api.post("/salida", { motivo: formSalida.motivo });
       const id_salida = r1.data.id_salida;
 
-      // 2️⃣ Insertar detalle salida
-      await api.post("/salida/detalle", {
-        id_salida,
-        id_producto: productoSel,
-        cantidad
-      });
-
-      // 3️⃣ Reset
-      setMotivo("");
-      setProductoSel("");
-      setCantidad(0);
-
-      cargarSalidas();
-      window.dispatchEvent(new Event("dataChanged"));
+      // Insertar detalles
+      for (const d of formSalida.detalles) {
+        await api.post("/salida/detalle", {
+          id_salida,
+          id_producto: d.id_producto,
+          cantidad: d.cantidad
+        });
+      }
 
       alert("Salida registrada correctamente");
+      cerrarModalNueva();
+      cargarDatos();
     } catch (e) {
-      console.error("Error creando salida:", e);
-      setError({
-        message: e.message,
-        status: e.response?.status,
-        data: e.response?.data,
-        url: e.config?.url
-      });
+      alert("Error al guardar: " + e.message);
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  // ===============================
-  //   UI
-  // ===============================
+  // ============================
+  // UI
+  // ============================
   return (
     <div className="inventario-page">
+
+      {/* LOGO */}
       <div className="inventario-logo-wrap">
         <img src={logoDGMM} alt="DGMM" />
       </div>
 
+      {/* TOPBAR */}
       <div className="inventario-topbar">
         <span className="topbar-title">Gestión de Salidas</span>
 
         <div className="topbar-actions">
-          <button className="btn btn-topbar-outline" onClick={() => navigate("/")}>
-            ← Menú
-          </button>
-          <button className="btn btn-topbar-outline" onClick={cargarSalidas}>
-            ⟳ Refrescar
-          </button>
+          <button className="btn btn-topbar-outline" onClick={abrirModalNueva}>＋ Nueva Salida</button>
+          <button className="btn btn-topbar-outline" onClick={() => navigate("/")}>← Menú</button>
+          <button className="btn btn-topbar-outline" onClick={cargarDatos}>⟳ Refrescar</button>
         </div>
       </div>
 
+      {/* CARD PRINCIPAL */}
       <div className="inventario-card">
+
         {/* ERROR */}
         {error && (
           <div className="inventario-error">
-            <strong>Error cargando datos:</strong>
-            <div>Mensaje: {String(error.message)}</div>
-            <div>URL: {error.url || "-"}</div>
-            <div>Estado: {error.status || "-"}</div>
-            <pre>{JSON.stringify(error.data, null, 2)}</pre>
+            <strong>Error:</strong>
+            <pre>{JSON.stringify(error, null, 2)}</pre>
           </div>
         )}
 
+        {loading && <div className="loading-msg">Cargando...</div>}
+
+        {/* FILTROS */}
+        <div className="inventario-filtros">
+          <input
+            placeholder="Filtrar por usuario"
+            value={filtros.usuario}
+            onChange={(e) => setFiltros({ ...filtros, usuario: e.target.value })}
+          />
+
+          <input
+            placeholder="Filtrar por motivo"
+            value={filtros.motivo}
+            onChange={(e) => setFiltros({ ...filtros, motivo: e.target.value })}
+          />
+
+          <input
+            type="date"
+            value={filtros.fecha}
+            onChange={(e) => setFiltros({ ...filtros, fecha: e.target.value })}
+          />
+        </div>
+
         {/* TABLA */}
-        <h3>Salidas registradas</h3>
-        <table className="inventario-table inv-style2">
+        <table className="inventario-table">
           <thead>
             <tr>
               <th>#</th>
@@ -164,70 +272,186 @@ export default function Salidas() {
           </thead>
 
           <tbody>
-            {salidas.length > 0 ? (
-              salidas.map((s) => (
+            {salidasFiltradas.length > 0 ? (
+              salidasFiltradas.map((s) => (
                 <tr key={s.id_salida}>
                   <td>{s.id_salida}</td>
                   <td>{s.nombre_usuario}</td>
-                  <td>{new Date(s.fecha_salida).toLocaleString("es-HN")}</td>
+                  <td>{formatearFecha(s.fecha_salida)}</td>
                   <td>{s.motivo}</td>
                   <td>
-                    <button
-                      className="btn btn-topbar-outline btn-sm"
-                      onClick={() => navigate(`/guarda/DetalleSalidas/${s.id_salida}`)}
-
-                    >
-                      Ver más
+                    <button className="btn-table" onClick={() => verDetalle(s)}>
+                      Ver detalle
                     </button>
                   </td>
                 </tr>
               ))
             ) : (
-              <tr>
-                <td colSpan={5} className="no-data">
-                  No hay salidas registradas
-                </td>
-              </tr>
+              <tr><td colSpan="5" className="no-data">No hay salidas registradas.</td></tr>
             )}
           </tbody>
         </table>
-
-        {/* FORMULARIO */}
-        <h3>Nueva Salida</h3>
-
-        <form onSubmit={handleCrearSalida}>
-          <textarea
-            placeholder="Motivo de la salida"
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-          />
-
-          <select
-            value={productoSel}
-            onChange={(e) => setProductoSel(e.target.value)}
-          >
-            <option value="">Seleccione un producto</option>
-            {productos.map((p) => (
-              <option key={p.id_producto} value={p.id_producto}>
-                {p.nombre_producto}
-              </option>
-            ))}
-          </select>
-
-          <input
-            type="number"
-            min="1"
-            placeholder="Cantidad"
-            value={cantidad}
-            onChange={(e) => setCantidad(Number(e.target.value))}
-          />
-
-          <button className="btn btn-topbar-primary" type="submit">
-            Guardar salida
-          </button>
-        </form>
       </div>
+
+      {/* ============================
+            MODAL NUEVA SALIDA
+      ============================= */}
+      {showModalNueva && (
+        <div className="inv-modal-overlay" onClick={cerrarModalNueva}>
+          <div className="inv-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 850 }}>
+            
+            <div className="inv-modal-header">
+              <h3>Nueva Salida</h3>
+              <button className="inv-modal-close" onClick={cerrarModalNueva}>✕</button>
+            </div>
+
+            <div className="inv-modal-body">
+
+              {/* Motivo */}
+              <div style={{ marginBottom: 20 }}>
+                <label>Motivo:</label>
+                <textarea
+                  className="form-control"
+                  value={formSalida.motivo}
+                  onChange={(e) => setFormSalida({ ...formSalida, motivo: e.target.value })}
+                  style={{ width: "100%", minHeight: 60 }}
+                />
+              </div>
+
+              {/* AGREGAR DETALLE */}
+              <div style={{ marginBottom: 20, background: "#f5f5f5", padding: 15, borderRadius: 6 }}>
+                <h4 style={{ marginBottom: 10 }}>Agregar Producto</h4>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "2fr 1fr auto",
+                    gap: 10
+                  }}
+                >
+                  <select
+                    className="form-control"
+                    value={detalleTemp.id_producto}
+                    onChange={(e) => setDetalleTemp({ ...detalleTemp, id_producto: e.target.value })}
+                  >
+                    <option value="">Seleccione...</option>
+                    {productos.map((p) => (
+                      <option key={p.id_producto} value={p.id_producto}>
+                        {p.nombre_producto}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    type="number"
+                    className="form-control"
+                    placeholder="Cantidad"
+                    value={detalleTemp.cantidad}
+                    onChange={(e) => setDetalleTemp({ ...detalleTemp, cantidad: e.target.value })}
+                  />
+
+                  <button className="btn btn-success" onClick={agregarDetalle}>
+                    ＋ Agregar
+                  </button>
+                </div>
+              </div>
+
+              {/* TABLA DETALLES AGREGADOS */}
+              {formSalida.detalles.length > 0 && (
+                <table className="inventario-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Cantidad</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formSalida.detalles.map((d, i) => (
+                      <tr key={i}>
+                        <td>{d.nombre_producto}</td>
+                        <td>{d.cantidad}</td>
+                        <td>
+                          <button
+                            className="btn btn-sm btn-outline-danger"
+                            onClick={() => eliminarDetalle(i)}
+                          >
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="inv-modal-footer">
+              <button className="btn btn-secondary" onClick={cerrarModalNueva}>Cancelar</button>
+              <button className="btn btn-success" onClick={guardarSalida} disabled={loading}>
+                {loading ? "Guardando..." : "Guardar Salida"}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ============================
+            MODAL DETALLE
+      ============================= */}
+      {showModalDetalle && (
+        <div className="inv-modal-overlay" onClick={cerrarModalDetalle}>
+          <div className="inv-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 850 }}>
+
+            <div className="inv-modal-header">
+              <h3>Detalle de Salida #{salidaSeleccionada?.id_salida}</h3>
+              <button className="inv-modal-close" onClick={cerrarModalDetalle}>✕</button>
+            </div>
+
+            <div className="inv-modal-body">
+              {salidaSeleccionada && (
+                <div style={{ marginBottom: 20 }}>
+                  <p><strong>Motivo:</strong> {salidaSeleccionada.motivo}</p>
+                  <p><strong>Usuario:</strong> {salidaSeleccionada.nombre_usuario}</p>
+                  <p><strong>Fecha:</strong> {formatearFecha(salidaSeleccionada.fecha_salida)}</p>
+                </div>
+              )}
+
+              {loadingDetalle ? (
+                <p>Cargando detalles...</p>
+              ) : detalleSalida.length === 0 ? (
+                <p>No hay detalles registrados.</p>
+              ) : (
+                <table className="inventario-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Cantidad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detalleSalida.map((d, idx) => (
+                      <tr key={idx}>
+                        <td>{d.nombre_producto || d.producto}</td>
+                        <td>{d.cantidad}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="inv-modal-footer">
+              <button className="btn btn-topbar-outline" onClick={cerrarModalDetalle}>
+                Cerrar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
-
