@@ -4188,12 +4188,14 @@ app.get( "/api/compra", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("
       SELECT 
         c.id_compra,
         c.fecha,
-        p.id_proveedor,
-        c.total,
+        p.nombre AS nombre_proveedor,
+        COALESCE(SUM(dc.cantidad * dc.precio_compra), 0) AS total,
         u.nombre_usuario
       FROM tbl_compra c
       JOIN tbl_proveedor p ON p.id_proveedor = c.id_proveedor
       JOIN tbl_usuario   u ON u.id_usuario   = c.id_usuario
+      LEFT JOIN tbl_detalle_compra dc ON dc.id_compra = c.id_compra
+      GROUP BY c.id_compra, c.fecha, p.nombre, u.nombre_usuario
       ORDER BY c.fecha DESC
     `;
 
@@ -4292,15 +4294,15 @@ app.get('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermis
 
 // POST: Crear nueva compra (devuelve id_compra)
 app.post('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Compra de producto", "insertar"), (req, res) => {
-  const { id_proveedor, total, id_usuario } = req.body;
+  const { id_proveedor } = req.body;
   const user = req.user;
 
-  if (!id_proveedor || !total || !id_usuario) {
-    return res.status(400).json({ error: "Campos requeridos: id_proveedor, total, id_usuario" });
+  if (!id_proveedor) {
+    return res.status(400).json({ error: "Campo requerido: id_proveedor" });
   }
 
-  const query = "CALL SP_InsertarCompra(?, ?, ?)";
-  conexion.query(query, [id_proveedor, total, id_usuario], (err, results) => {
+  const query = "CALL SP_InsertarCompra(?, ?)";
+  conexion.query(query, [id_proveedor, user.id_usuario], (err, results) => {
     if (err) {
       console.error("Error en SP_InsertarCompra:", err);
       return res.status(500).json({ error: err.message || "Error al insertar compra" });
@@ -4590,19 +4592,14 @@ app.post("/api/kardex/entrada", verificarToken, async (req, res) => {
 });
 
 app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Kardex","consultar"), (req,res)=>{
-  const sql = `
-    SELECT k.*, u.nombre_usuario
-    FROM tbl_kardex k
-    LEFT JOIN tbl_usuario u ON u.id_usuario = k.id_usuario
-    ORDER BY k.fecha DESC
-  `;
+  const sql = "CALL SP_MostrarKardex()";
 
-  conexion.query(sql,(err,rows)=>{
+  conexion.query(sql,(err,results)=>{
     if(err){
       console.error("Error al mostrar kardex:", err);
       return res.status(500).json({ mensaje:"Error al obtener kardex" });
     }
-    res.json(rows);
+    res.json(results[0]);
   });
 });
 
