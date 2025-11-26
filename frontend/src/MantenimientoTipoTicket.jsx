@@ -1,348 +1,623 @@
 // src/MantenimientoTipoTicket.jsx
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import Modal from "react-modal";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-
+import { useEffect, useMemo, useState } from "react";
 import api from "./api";
-import logo from "./imagenes/DGMM-Gobierno.png";
-import "./mantenimiento.css";
+import "./tramites.css"; // mismo diseño tk- que trámites/tickets
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
-import { FaFilePdf } from "react-icons/fa";
+import { MdCheckCircle, MdBlock, MdListAlt } from "react-icons/md";
+import { FaEdit, FaMinusCircle, FaTrashAlt } from "react-icons/fa";
 
-Modal.setAppElement("#root");
+/* Normaliza estado a ACTIVO / INACTIVO */
+function normalizeEstado(raw) {
+  const v = String(raw ?? "").trim().toUpperCase();
+  if (v === "ACTIVO" || v === "INACTIVO") return v;
+  if (v === "1") return "ACTIVO";
+  if (v === "0") return "INACTIVO";
+  return "ACTIVO";
+}
 
 export default function MantenimientoTipoTicket() {
-  const [items, setItems] = useState([]);
+  const [tipos, setTipos] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // formulario
-  const [nuevoTipo, setNuevoTipo] = useState("");
-  const [nuevoPrefijo, setNuevoPrefijo] = useState("");
-  const [nuevoEstado, setNuevoEstado] = useState("ACTIVO");
+  // modal formulario
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
 
-  const [editItemId, setEditItemId] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [form, setForm] = useState({
+    tipo_ticket: "",
+    prefijo: "",
+    activo: true, // true => ACTIVO
+  });
 
-  // Usuario logueado para bitácora
-const usuarioData = JSON.parse(localStorage.getItem("usuarioData") || "{}");
-const id_usuario = usuarioData?.id_usuario || null;
-const usuarioNombre = usuarioData?.nombre_usuario || null;
+  // filtros
+  const [filtroNombre, setFiltroNombre] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState(""); // "", "ACTIVO", "INACTIVO"
 
-  // PDF
-  const generarPDF = () => {
-    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
+  // dropdown Acciones (igual patrón que en Trámites)
+  const [openMenuId, setOpenMenuId] = useState(null);
 
-    doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(14, 42, 59);
-    doc.text("Dirección General de la Marina Mercante", 170, 50);
-
-    doc.setFontSize(14);
-    doc.text("Reporte de Tipos de Ticket", 170, 72);
-
-    doc.setFontSize(10);
-    doc.setTextColor(80);
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
-
-    const columnas = ["ID", "Tipo", "Prefijo", "Estado"];
-    const filas = items.map((it) => [
-      it.id_tipo_ticket,
-      it.tipo_ticket,
-      it.prefijo,
-      it.estado || "ACTIVO",
-    ]);
-
-    autoTable(doc, {
-      startY: 125,
-      head: [columnas],
-      body: filas,
-      styles: { fontSize: 10, cellPadding: 5 },
-      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
-      alternateRowStyles: { fillColor: [242, 245, 247] },
-    });
-
-    doc.save("TiposTicket_DGMM.pdf");
+  /* =============== CARGAR TIPOS DE TICKET =============== */
+  const cargar = async () => {
+    try {
+      setLoading(true);
+      const { data } = await api.get("/tipo_ticket");
+      const rows = (Array.isArray(data) ? data : []).map((t) => ({
+        ...t,
+        estado: normalizeEstado(t.estado),
+        prefijo: (t.prefijo || "").toUpperCase(),
+      }));
+      setTipos(rows);
+    } catch (e) {
+      console.error(e);
+      alert("No se pudo cargar la lista de tipos de ticket");
+    } finally {
+      setLoading(false);
+    }
   };
-
- // cargar datos
-const fetchItems = async () => {
-  try {
-    setLoading(true);
-    const { data } = await api.get("/tipo_ticket", {
-      params: {
-        id_usuario: id_usuario,
-        usuario: usuarioNombre,
-      },
-    });
-    setItems(Array.isArray(data) ? data : []);
-  } catch (err) {
-    toast.error("Error al cargar datos");
-    console.error(err);
-  } finally {
-    setLoading(false);
-  }
-};
 
   useEffect(() => {
-    fetchItems();
+    cargar();
   }, []);
 
-  // abrir modal crear
-  const openModal = () => {
-    setNuevoTipo("");
-    setNuevoPrefijo("");
-    setNuevoEstado("ACTIVO");
-    setIsModalOpen(true);
+  /* =============== RESUMÉN (tarjetas) =============== */
+  const resumen = useMemo(() => {
+    let activos = 0;
+    let inactivos = 0;
+
+    tipos.forEach((t) => {
+      const est = normalizeEstado(t.estado);
+      if (est === "ACTIVO") activos++;
+      else inactivos++;
+    });
+
+    return {
+      totalTipos: tipos.length,
+      totalActivos: activos,
+      totalInactivos: inactivos,
+    };
+  }, [tipos]);
+
+  /* =============== FILTRO EN MEMORIA =============== */
+  const tiposFiltrados = useMemo(() => {
+    return tipos.filter((t) => {
+      const est = normalizeEstado(t.estado);
+
+      if (filtroEstado && est !== filtroEstado) return false;
+
+      if (filtroNombre.trim()) {
+        const q = filtroNombre.trim().toLowerCase();
+        const nombre = String(t.tipo_ticket || "").toLowerCase();
+        return nombre.includes(q);
+      }
+
+      return true;
+    });
+  }, [tipos, filtroNombre, filtroEstado]);
+
+  /* =============== FORMULARIO (nuevo / editar) =============== */
+  const abrirNuevo = () => {
+    setEditing(null);
+    setForm({
+      tipo_ticket: "",
+      prefijo: "",
+      activo: true,
+    });
+    setShowForm(true);
   };
 
-  const closeModal = () => setIsModalOpen(false);
-
-  // abrir modal editar
-  const openEditModal = (item) => {
-    setEditItemId(item.id_tipo_ticket);
-    setNuevoTipo(item.tipo_ticket);
-    setNuevoPrefijo(item.prefijo);
-    setNuevoEstado(item.estado || "ACTIVO");
-    setIsEditModalOpen(true);
+  const abrirEditar = (t) => {
+    setEditing(t);
+    setForm({
+      tipo_ticket: t.tipo_ticket || "",
+      prefijo: (t.prefijo || "").toUpperCase(),
+      activo: normalizeEstado(t.estado) === "ACTIVO",
+    });
+    setShowForm(true);
   };
 
-  const closeEditModal = () => setIsEditModalOpen(false);
+  const cerrarForm = () => {
+    setShowForm(false);
+    setEditing(null);
+  };
 
-  // crear
-  const handleCreate = async () => {
-  if (!nuevoTipo.trim() || !nuevoPrefijo.trim()) {
-    toast.error("Completa todos los campos");
-    return;
-  }
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]:
+        name === "prefijo"
+          ? value.toUpperCase()
+          : type === "checkbox"
+          ? checked
+          : value,
+    }));
+  };
 
-  try {
-    await api.post("/tipo_ticket", {
-      tipo_ticket: nuevoTipo.trim(),
-      prefijo: nuevoPrefijo.trim(),
-      estado: nuevoEstado,
-      id_usuario   
-    });
+  const guardar = async (e) => {
+    e.preventDefault();
+    if (!form.tipo_ticket.trim()) {
+      alert("El tipo de ticket es obligatorio");
+      return;
+    }
+    if (!form.prefijo.trim()) {
+      alert("El prefijo es obligatorio");
+      return;
+    }
 
-    toast.success("Tipo creado correctamente");
-    fetchItems();
-    closeModal();
-  } catch (err) {
-    toast.error("Error al crear");
-    console.error(err);
-  }
-};
+    const payload = {
+      tipo_ticket: form.tipo_ticket.trim(),
+      prefijo: form.prefijo.trim().toUpperCase(),
+      estado: form.activo ? "ACTIVO" : "INACTIVO",
+    };
 
+    try {
+      setLoading(true);
 
-  // actualizar
-  const handleUpdate = async () => {
-  try {
-    await api.put(`/tipo_ticket/${editItemId}`, {
-      tipo_ticket: nuevoTipo.trim(),
-      prefijo: nuevoPrefijo.trim(),
-      estado: nuevoEstado,
-      id_usuario   
-    });
+      if (editing) {
+        await api.put("/tipo_ticket", {
+          ...payload,
+          id_tipo_ticket: editing.id_tipo_ticket,
+        });
+        alert("Tipo de ticket actualizado correctamente");
+      } else {
+        await api.post("/tipo_ticket", payload);
+        alert("Tipo de ticket creado correctamente");
+      }
 
-    toast.success("Actualizado correctamente");
-    fetchItems();
-    closeEditModal();
-  } catch (err) {
-    toast.error("Error al actualizar");
-    console.error(err);
-  }
-};
+      cerrarForm();
+      await cargar();
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e.response?.data?.mensaje ||
+        e.response?.data?.error ||
+        "No se pudo guardar el tipo de ticket";
+      alert(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // eliminar
-  const handleDelete = async (id) => {
-  if (!window.confirm("¿Eliminar este tipo?")) return;
+  /* =============== ACTIVAR / DESACTIVAR =============== */
+  const toggleActivo = async (t) => {
+    const estActual = normalizeEstado(t.estado);
+    const nuevo = estActual === "ACTIVO" ? "INACTIVO" : "ACTIVO";
+    const accion = estActual === "ACTIVO" ? "desactivar" : "activar";
 
-  try {
-    await api.delete(`/tipo_ticket/${id}`, {
-      data: { id_usuario }   
-    });
+    if (
+      !window.confirm(
+        `¿Deseas ${accion} el tipo de ticket "${t.tipo_ticket}"?`
+      )
+    )
+      return;
 
-    toast.success("Eliminado correctamente");
-    setItems((prev) => prev.filter((i) => i.id_tipo_ticket !== id));
-  } catch (err) {
-    toast.error("Error al eliminar");
-    console.error(err);
-  }
-};
+    try {
+      setLoading(true);
+      await api.patch(`/tipo_ticket/${t.id_tipo_ticket}`, {
+        estado: nuevo,
+      });
+      alert(`Tipo de ticket ${accion}o correctamente`);
+      await cargar();
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e.response?.data?.mensaje ||
+        e.response?.data?.error ||
+        `No se pudo ${accion} el tipo de ticket`;
+      alert(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  /* =============== ELIMINAR =============== */
+  const eliminar = async (t) => {
+    if (
+      !window.confirm(
+        `⚠️ Esto eliminará permanentemente el tipo de ticket.\n\n¿Eliminar "${t.tipo_ticket}"?`
+      )
+    )
+      return;
+
+    try {
+      setLoading(true);
+      await api.delete(`/tipo_ticket/${t.id_tipo_ticket}`);
+      alert("Tipo de ticket eliminado correctamente");
+      await cargar();
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e.response?.data?.mensaje ||
+        e.response?.data?.error ||
+        "No se pudo eliminar el tipo de ticket";
+      alert(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* =============== REPORTE PDF =============== */
+  const generarReporte = () => {
+    if (!tiposFiltrados.length) {
+      alert("No hay datos para generar el reporte");
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "pt",
+        format: "A4",
+      });
+
+      try {
+        doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+      } catch {}
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(14, 42, 59);
+      doc.text(
+        "Dirección General de la Marina Mercante",
+        170,
+        50
+      );
+
+      doc.setFontSize(14);
+      doc.text("Reporte de Tipos de Ticket", 170, 72);
+
+      doc.setFontSize(10);
+      doc.setTextColor(80);
+      doc.text(
+        `Generado el: ${new Date().toLocaleString("es-HN")}`,
+        40,
+        105
+      );
+
+      const columnas = ["Tipo de ticket", "Estado", "Prefijo"];
+      const filas = tiposFiltrados.map((t) => [
+        t.tipo_ticket,
+        normalizeEstado(t.estado),
+        t.prefijo || "—",
+      ]);
+
+      autoTable(doc, {
+        startY: 125,
+        head: [columnas],
+        body: filas,
+        styles: { fontSize: 9, cellPadding: 5 },
+        headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [242, 245, 247] },
+      });
+
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+
+        doc.text(
+          "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+          doc.internal.pageSize.width / 2,
+          doc.internal.pageSize.height - 30,
+          { align: "center" }
+        );
+
+        doc.text(
+          `Página ${i} de ${pageCount}`,
+          40,
+          doc.internal.pageSize.height - 30
+        );
+      }
+
+      const blobUrl = doc.output("bloburl");
+      window.open(blobUrl, "_blank");
+    } catch (e) {
+      console.error(e);
+      alert("No se pudo generar el PDF");
+    }
+  };
+
+  /* =============== RENDER =============== */
   return (
-    <div className="mm-page">
-      <header className="mm-header">
-        <img src={logo} alt="DGMM" className="mm-logo" />
-      </header>
+    <div className="tk-root">
+      {/* Encabezado oscuro */}
+      <div className="tk-card-header">
+        <div className="tk-card-header__title">TIPOS DE TICKET</div>
+        <div className="tk-card-header__actions">
+          <button
+            className="tk-btn tk-btn--ghost"
+            onClick={generarReporte}
+            disabled={loading || !tiposFiltrados.length}
+          >
+            Generar reporte
+          </button>
+          <button className="tk-btn tk-btn--primary" onClick={abrirNuevo}>
+            + Nuevo tipo
+          </button>
+        </div>
+      </div>
 
-      <section className="mm-card">
-        <div className="mm-card__head">
-          <h2>Mantenimiento de Tipos de Ticket</h2>
+      {/* Resumen + filtros */}
+      <div className="tk-card">
+        <div className="tk-resumen">
+          <strong>Total tipos:</strong> {resumen.totalTipos}
+          <span className="sep">|</span>
+          <strong>Activos:</strong> {resumen.totalActivos}
+          <span className="sep">|</span>
+          <strong>Inactivos:</strong> {resumen.totalInactivos}
+        </div>
 
-          <div className="mm-actions">
-            <Link to="/" className="mm-link">
-              ← Volver al Menú Principal
-            </Link>
+        <div className="tk-filters">
+          <div className="tk-filters-row">
+            <div className="tk-field">
+              <label>Estado</label>
+              <select
+                value={filtroEstado}
+                onChange={(e) => setFiltroEstado(e.target.value)}
+              >
+                <option value="">Todos</option>
+                <option value="ACTIVO">Activos</option>
+                <option value="INACTIVO">Inactivos</option>
+              </select>
+            </div>
 
-            <button className="btn btn-primary" onClick={openModal}>
-              + Nuevo tipo
-            </button>
+            <div className="tk-field">
+              <label>Buscar por nombre</label>
+              <input
+                type="text"
+                placeholder="Nombre del tipo de ticket…"
+                value={filtroNombre}
+                onChange={(e) => setFiltroNombre(e.target.value)}
+              />
+            </div>
 
-            <button className="btn btn-topbar-primary" onClick={generarPDF}>
-              <FaFilePdf size={16} /> Generar Reporte
-            </button>
+            <div className="tk-field" />
+            <div className="tk-field" />
+
+            <div className="tk-field tk-field--actions">
+              <button
+                className="tk-btn"
+                type="button"
+                disabled={loading}
+                onClick={() => {}}
+              >
+                Buscar
+              </button>
+              <button
+                className="tk-btn tk-btn--ghost"
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setFiltroEstado("");
+                  setFiltroNombre("");
+                }}
+              >
+                Limpiar
+              </button>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="mm-table__wrap">
-          <table className="mm-table">
-            <thead>
+      {/* Tarjetas resumen */}
+      <div className="tk-totales-card">
+        <div className="tk-totales-title">Resumen de tipos de ticket</div>
+        <div className="tk-totales-grid">
+          <div className="tk-totales-item tk-totales-final">
+            <MdCheckCircle className="tk-totales-icon" />
+            <div className="tk-totales-label">Activos</div>
+            <div className="tk-totales-value">{resumen.totalActivos}</div>
+          </div>
+
+          <div className="tk-totales-item tk-totales-canc">
+            <MdBlock className="tk-totales-icon" />
+            <div className="tk-totales-label">Inactivos</div>
+            <div className="tk-totales-value">{resumen.totalInactivos}</div>
+          </div>
+
+          <div className="tk-totales-item tk-totales-pref">
+            <MdListAlt className="tk-totales-icon" />
+            <div className="tk-totales-label">Total tipos</div>
+            <div className="tk-totales-value">{resumen.totalTipos}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabla */}
+      <div className="tk-tablewrap">
+        <table className="tk-table">
+          <thead>
+            <tr>
+              <th>Nombre del tipo</th>
+              <th>Prefijo</th>
+              <th>Estado</th>
+              <th className="col--acciones">Acciones</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {tiposFiltrados.length === 0 && (
               <tr>
-                <th>ID</th>
-                <th>Tipo de ticket</th>
-                <th>Prefijo</th>
-                <th>Estado</th>
-                <th style={{ width: 160 }}>Acciones</th>
+                <td colSpan={4}>
+                  <div className="tk-empty">
+                    <div className="tk-empty-title">
+                      {loading ? "Cargando…" : "Sin registros"}
+                    </div>
+                    {!loading && (
+                      <div className="tk-empty-desc">
+                        Ajusta filtros o agrega un nuevo tipo de ticket.
+                      </div>
+                    )}
+                  </div>
+                </td>
               </tr>
-            </thead>
+            )}
 
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="text-center">
-                    Cargando…
-                  </td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center">
-                    Sin registros
-                  </td>
-                </tr>
-              ) : (
-                items.map((it) => (
-                  <tr key={it.id_tipo_ticket}>
-                    <td>{it.id_tipo_ticket}</td>
-                    <td>{it.tipo_ticket}</td>
-                    <td>{it.prefijo}</td>
+            {tiposFiltrados.map((t) => (
+              <tr key={t.id_tipo_ticket}>
+                <td className="wrap">{t.tipo_ticket}</td>
+                <td className="wrap tk-mono">{t.prefijo}</td>
 
-                    {/* ESTADO — si viene vacío mostramos ACTIVO */}
-                    <td>{it.estado || "ACTIVO"}</td>
+                <td>
+                  {normalizeEstado(t.estado) === "ACTIVO" ? (
+                    <span className="chip chip--finalizado">ACTIVO</span>
+                  ) : (
+                    <span className="chip chip--cancelado">INACTIVO</span>
+                  )}
+                </td>
 
-                    <td className="mm-actions--row">
-                      <button
-                        className="btn btn-outline"
-                        onClick={() => openEditModal(it)}
-                      >
-                        Editar
-                      </button>
+                <td>
+                  <div className="tk-actions">
+                    <button
+                      type="button"
+                      className="tk-actions-btn"
+                      onClick={() =>
+                        setOpenMenuId(
+                          openMenuId === t.id_tipo_ticket
+                            ? null
+                            : t.id_tipo_ticket
+                        )
+                      }
+                    >
+                      Acciones ▾
+                    </button>
 
-                      <button
-                        className="btn btn-danger"
-                        onClick={() =>
-                          handleDelete(it.id_tipo_ticket)
-                        }
-                      >
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                    {openMenuId === t.id_tipo_ticket && (
+                      <div className="tk-actions-menu tk-actions-menu--inline">
+                        {/* Editar */}
+                        <button
+                          type="button"
+                          className="tk-actions-item"
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            abrirEditar(t);
+                          }}
+                        >
+                          <FaEdit style={{ marginRight: 6 }} />
+                          Editar
+                        </button>
+
+                        {/* Activar / Desactivar */}
+                        <button
+                          type="button"
+                          className="tk-actions-item"
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            toggleActivo(t);
+                          }}
+                        >
+                          <FaMinusCircle
+                            style={{
+                              marginRight: 6,
+                              color:
+                                normalizeEstado(t.estado) === "ACTIVO"
+                                  ? "#e11d48"
+                                  : "#10b981",
+                            }}
+                          />
+                          {normalizeEstado(t.estado) === "ACTIVO"
+                            ? "Desactivar"
+                            : "Activar"}
+                        </button>
+
+                        {/* Eliminar */}
+                        <button
+                          type="button"
+                          className="tk-actions-item danger"
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            eliminar(t);
+                          }}
+                        >
+                          <FaTrashAlt style={{ marginRight: 6 }} />
+                          Eliminar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal nuevo / editar */}
+      {showForm && (
+        <div className="tk-overlay">
+          <div className="tk-modal">
+            <h3>
+              {editing ? "Editar tipo de ticket" : "Nuevo tipo de ticket"}
+            </h3>
+
+            <form onSubmit={guardar}>
+              <div className="tk-grid">
+                <div className="tk-field tk-field--col">
+                  <label>Tipo de ticket *</label>
+                  <input
+                    type="text"
+                    name="tipo_ticket"
+                    value={form.tipo_ticket}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="tk-field tk-field--col">
+                  <label>Prefijo *</label>
+                  <input
+                    type="text"
+                    name="prefijo"
+                    maxLength={5}
+                    value={form.prefijo}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                {editing && (
+                  <div className="tk-field tk-field--col">
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="activo"
+                        checked={form.activo}
+                        onChange={handleChange}
+                      />{" "}
+                      Activo
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div className="tk-modal-actions">
+                <button
+                  type="submit"
+                  className="tk-btn tk-btn--primary"
+                  disabled={loading}
+                >
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  className="tk-btn tk-btn--ghost"
+                  onClick={cerrarForm}
+                  disabled={loading}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </section>
+      )}
 
-      {/* MODAL CREAR */}
-      <Modal
-        isOpen={isModalOpen}
-        onRequestClose={closeModal}
-        className="mm-modal"
-        overlayClassName="mm-overlay"
-      >
-        <h3>Crear Tipo de Ticket</h3>
-
-        <div className="mm-form">
-          <input
-            value={nuevoTipo}
-            onChange={(e) => setNuevoTipo(e.target.value)}
-            placeholder="Tipo de ticket"
-          />
-
-          <input
-            value={nuevoPrefijo}
-            onChange={(e) => setNuevoPrefijo(e.target.value)}
-            placeholder="Prefijo"
-          />
-
-          <select
-            value={nuevoEstado}
-            onChange={(e) => setNuevoEstado(e.target.value)}
-          >
-            <option value="ACTIVO">ACTIVO</option>
-            <option value="INACTIVO">INACTIVO</option>
-          </select>
-        </div>
-
-        <div className="mm-modal__actions">
-          <button className="btn btn-primary" onClick={handleCreate}>
-            Guardar
-          </button>
-          <button className="btn btn-outline" onClick={closeModal}>
-            Cerrar
-          </button>
-        </div>
-      </Modal>
-
-      {/* MODAL EDITAR */}
-      <Modal
-        isOpen={isEditModalOpen}
-        onRequestClose={closeEditModal}
-        className="mm-modal"
-        overlayClassName="mm-overlay"
-      >
-        <h3>Editar Tipo de Ticket</h3>
-
-        <div className="mm-form">
-          <input
-            value={nuevoTipo}
-            onChange={(e) => setNuevoTipo(e.target.value)}
-            placeholder="Tipo de ticket"
-          />
-
-          <input
-            value={nuevoPrefijo}
-            onChange={(e) => setNuevoPrefijo(e.target.value)}
-            placeholder="Prefijo"
-          />
-
-          <select
-            value={nuevoEstado}
-            onChange={(e) => setNuevoEstado(e.target.value)}
-          >
-            <option value="ACTIVO">ACTIVO</option>
-            <option value="INACTIVO">INACTIVO</option>
-          </select>
-        </div>
-
-        <div className="mm-modal__actions">
-          <button className="btn btn-primary" onClick={handleUpdate}>
-            Guardar
-          </button>
-          <button className="btn btn-outline" onClick={closeEditModal}>
-            Cerrar
-          </button>
-        </div>
-      </Modal>
-
-      <ToastContainer autoClose={3000} hideProgressBar={false} />
+      {loading && (
+        <div style={{ textAlign: "center", marginTop: 8 }}>Procesando…</div>
+      )}
     </div>
   );
 }

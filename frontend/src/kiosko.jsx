@@ -8,12 +8,25 @@ import { FaUser, FaWheelchair } from "react-icons/fa";
 /** Helpers fecha/hora */
 function yyyymmdd(d = new Date()) {
   const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function hhmmss(d = new Date()) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// Opcional: detectar si el registro está ACTIVO (según cómo lo guardes)
+function isActivo(row) {
+  if (!row) return false;
+
+  if (row.activo === 1 || row.activo === true) return true;
+
+  const est = String(row.estado ?? row.estado_tipo ?? row.activo ?? "")
+    .trim()
+    .toUpperCase();
+
+  return est === "ACTIVO" || est === "1" || est === "SI";
 }
 
 export default function Kiosko() {
@@ -25,7 +38,7 @@ export default function Kiosko() {
   const [enviando, setEnviando] = useState(false);
   const [ticket, setTicket] = useState(null);
 
-  /** Cargar trámites y tipos de ticket */
+  /** Cargar trámites y tipos de ticket desde la BD */
   useEffect(() => {
     const cargar = async () => {
       try {
@@ -34,12 +47,18 @@ export default function Kiosko() {
           api.get("/tipo_ticket"),
         ]);
 
-        setTramites(Array.isArray(rTram.data) ? rTram.data : []);
-
-        // 👉 SIN FILTRAR POR ESTADO, para no perder nada por espacios, etc.
+        const listaTram = Array.isArray(rTram.data) ? rTram.data : [];
         const listaTipos = Array.isArray(rTipos.data) ? rTipos.data : [];
-        console.log("TIPOS DESDE API /tipo_ticket:", listaTipos);
-        setTipos(listaTipos);
+
+        // Si quieres solo activos, descomenta el filtro:
+        const tramActivos = listaTram.filter(isActivo);
+        const tiposActivos = listaTipos.filter(isActivo);
+
+        setTramites(tramActivos);
+        setTipos(tiposActivos);
+
+        console.log("TRÁMITES ACTIVOS:", tramActivos);
+        console.log("TIPOS TICKET ACTIVOS:", tiposActivos);
       } catch (err) {
         console.error("Error cargando datos en kiosko:", err);
         setTramites([]);
@@ -50,23 +69,9 @@ export default function Kiosko() {
     cargar();
   }, []);
 
-  /** Buscar los dos tipos importantes (NORMAL / PREFERENCIAL) */
-  const tipoNormal = tipos.find((t) => {
-    const nombre = (t.tipo_ticket || "").trim().toUpperCase();
-    return nombre === "NORMAL";
-  });
-
-  const tipoPreferencial = tipos.find((t) => {
-    const nombre = (t.tipo_ticket || "").trim().toUpperCase();
-    return nombre === "PREFERENCIAL";
-  });
-
   /** Elegir tipo (paso 1 → paso 2) */
   const elegirTipo = (tipo) => {
-    if (!tipo) {
-      alert("Este tipo no existe en BD. Revise tbl_tipo_ticket.");
-      return;
-    }
+    if (!tipo) return;
     setTipoSel(tipo);
     setPaso(2);
   };
@@ -107,7 +112,7 @@ export default function Kiosko() {
     setTicket(null);
   };
 
-  /** Imprimir y volver */
+  /** Imprimir y volver automáticamente al paso 1 */
   useEffect(() => {
     if (paso === 3 && ticket) {
       const after = () => {
@@ -123,7 +128,7 @@ export default function Kiosko() {
     }
   }, [paso, ticket]);
 
-  /** Pasos */
+  /** Pasos visuales */
   const Steps = () => (
     <div className="k-steps">
       <div className={`k-step ${paso >= 1 ? "is-done" : ""}`}>1</div>
@@ -135,61 +140,64 @@ export default function Kiosko() {
   return (
     <div className="kiosk-wrap">
       <header className="k-header">
-        <img src={logoGobierno} className="k-logo-header" />
+        <img src={logoGobierno} className="k-logo-header" alt="DGMM" />
       </header>
 
       <div className="k-topbar">
         <Steps />
       </div>
 
-      {/* ===== PASO 1 (diseño fijo) ===== */}
+      {/* ===== PASO 1: Elegir tipo de ticket (DINÁMICO DESDE BD) ===== */}
       {paso === 1 && (
         <main className="k-main">
           <p className="k-instruction"></p>
 
-          <div className="k-grid-2">
-            {/* NORMAL */}
-            <button
-              className="k-card big k-prio normal"
-              onClick={() => elegirTipo(tipoNormal)}
-            >
-              <div className="k-card-icon">
-                <FaUser className="k-icon-react" />
-              </div>
-              <div className="k-card-title">
-                {(tipoNormal && (tipoNormal.tipo_ticket || "").trim()) ||
-                  "NORMAL"}
-              </div>
-              <div className="k-card-sub">
-                Prefijo: {(tipoNormal && (tipoNormal.prefijo || "").trim()) || "N"}
-              </div>
-            </button>
+          <div className="k-grid-2 k-grid-tipos">
+            {tipos.map((t) => {
+              const nombre = (t.tipo_ticket || "").trim();
+              const prefijo = (t.prefijo || "").trim();
+              const isPref = nombre.toUpperCase().includes("PREF");
 
-            {/* PREFERENCIAL */}
-            <button
-              className="k-card big k-prio pref"
-              onClick={() => elegirTipo(tipoPreferencial)}
-            >
-              <div className="k-card-icon">
-                <FaWheelchair className="k-icon-react" />
-              </div>
-              <div className="k-card-title">
-                {(tipoPreferencial &&
-                  (tipoPreferencial.tipo_ticket || "").trim()) ||
-                  "PREFERENCIAL"}
-              </div>
-              <div className="k-card-sub">
-                Prefijo:
-                {(tipoPreferencial &&
-                  (tipoPreferencial.prefijo || "").trim()) ||
-                  "P"}
-              </div>
-            </button>
+              return (
+                <button
+                  key={t.id_tipo_ticket}
+                  className={`k-card big k-prio ${isPref ? "pref" : "normal"}`}
+                  onClick={() => elegirTipo(t)}
+                >
+                  <div className="k-card-icon">
+                    {isPref ? (
+                      <FaWheelchair className="k-icon-react" />
+                    ) : (
+                      <FaUser className="k-icon-react" />
+                    )}
+                  </div>
+                  <div className="k-card-title">
+                    {nombre || "SIN NOMBRE"}
+                  </div>
+                  <div className="k-card-sub">
+                    Prefijo: {prefijo || "-"}
+                  </div>
+                </button>
+              );
+            })}
+
+            {tipos.length === 0 && (
+              <p
+                style={{
+                  marginTop: 24,
+                  textAlign: "center",
+                  color: "#b91c1c",
+                  width: "100%",
+                }}
+              >
+                No hay tipos de ticket activos configurados en el sistema.
+              </p>
+            )}
           </div>
         </main>
       )}
 
-      {/* ===== PASO 2 ===== */}
+      {/* ===== PASO 2: Elegir trámite ===== */}
       {paso === 2 && (
         <>
           <div className="k-section-head">
@@ -213,18 +221,26 @@ export default function Kiosko() {
                 </button>
               ))}
 
-              {tramites.length === 0 && <p>No hay trámites disponibles.</p>}
+              {tramites.length === 0 && (
+                <p style={{ gridColumn: "1 / -1", textAlign: "center" }}>
+                  No hay trámites activos disponibles.
+                </p>
+              )}
             </div>
           </main>
         </>
       )}
 
-      {/* ===== PASO 3 ===== */}
+      {/* ===== PASO 3: Ticket generado (para imprimir) ===== */}
       {paso === 3 && ticket && (
         <main className="k-main">
           <div className="k-ticket">
             <div className="k-ticket-head">
-              <img src={logoGobierno} className="k-ticket-logo" />
+              <img
+                src={logoGobierno}
+                className="k-ticket-logo"
+                alt="DGMM ticket"
+              />
               <div className="k-ticket-brand">
                 Dirección General de la Marina Mercante
               </div>

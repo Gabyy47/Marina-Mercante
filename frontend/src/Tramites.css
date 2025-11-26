@@ -1,367 +1,508 @@
-/* ============================
-   Tokens y reset (igual que panel de tickets)
-============================ */
-:root{
-  --bg: #eef3f6;
-  --card: #ffffff;
-  --ink: #0f172a;
-  --muted: #6b7280;
-  --brand-dark: #0d2935;
-  --line: #e5e7eb;
-
-  --primary: #1f6feb;
-  --danger: #e11d48;
-  --ok: #10b981;
-
-  --radius: 14px;
-  --shadow: 0 10px 22px rgba(2,15,24,.08);
-}
-
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; background: var(--bg); color: var(--ink); }
-a { text-decoration: none; }
-
-/* ============================
-   Página general
-============================ */
-.mt-page {
-  padding: 25px 16px 32px;
+/* ============ ROOT / FONDO ============ */
+.mt-root {
+  padding: 24px;
+  background: #e3edf3;
+  min-height: 100vh;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: var(--ink);
+  color: #123047;
 }
 
-/* ============================
-   Header tipo tarjeta oscura
-============================ */
-.mt-header {
-  max-width: 1120px;
-  margin: 0 auto 18px;
-  background: var(--brand-dark);
-  color: #fff;
-  padding: 18px 22px;
-  border-radius: var(--radius);
+/* ============ TOAST DE ÉXITO ============ */
+.mt-toast {
+  position: fixed;
+  top: 84px;
+  right: 24px;
+  z-index: 2000;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  box-shadow: var(--shadow);
-}
-
-.mt-header-left h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.mt-subtitle {
-  margin-top: 4px;
-  font-size: 13px;
-  color: rgba(255,255,255,.7);
-}
-
-.mt-header-right {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-/* ============================
-   Botones (estilo similar al panel tickets)
-============================ */
-.btn {
-  border: 1px solid var(--line);
-  background: #fff;
-  color: var(--ink);
-  padding: 9px 13px;
+  gap: 12px;
+  padding: 10px 16px;
   border-radius: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 14px;
-  transition: transform .05s ease, background .2s ease, border-color .2s;
-  white-space: nowrap;
+  box-shadow: 0 12px 30px rgba(15, 118, 110, 0.25);
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  max-width: 320px;
 }
 
-.btn:hover {
-  transform: translateY(-1px);
-  background: #f9fafb;
+.mt-toast--success {
+  border-left: 5px solid #059669;
 }
 
-.btn-primary {
-  background: var(--primary);
-  color: #fff;
-  border-color: transparent;
-}
-
-.btn-success {
-  background: var(--ok);
-  color: #fff;
-  border-color: transparent;
-}
-
-.btn-warning {
-  background: #fbbf24;
-  color: #111827;
-  border-color: transparent;
-}
-
-.btn-danger {
-  background: var(--danger);
-  color: #fff;
-  border-color: transparent;
-}
-
-.btn-secondary {
-  background: #6b7280;
-  color: #fff;
-  border-color: transparent;
-}
-
-.btn-sm {
-  padding: 5px 9px;
-  font-size: 12px;
-  border-radius: 10px;
-}
-
-/* ============================
-   Botones pequeños SOLO en Acciones
-============================ */
-.mt-actions-cell .btn {
-  padding: 4px 8px !important;
-  font-size: 11px !important;
-  border-radius: 8px !important;
-  min-width: 68px;
-}
-
-.mt-actions-cell .btn:not(:last-child) {
-  margin-bottom: 4px;
-}
-
-/* ============================
-   Filtros (debajo del header)
-============================ */
-.mt-filters {
-  max-width: 1120px;
-  margin: 0 auto 16px;
-  background: var(--card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 12px 18px 16px;
-}
-
-.mt-date-filters {
+.mt-toast-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 10px 16px;
+  align-items: center;
+  justify-content: center;
+  background: #059669;
+  color: #fff;
+  font-size: 16px;
+  flex-shrink: 0;
 }
 
-.mt-date-field {
+.mt-toast-body {
   display: flex;
   flex-direction: column;
   font-size: 13px;
+  color: #047857;
 }
 
-.mt-date-field label {
-  margin-bottom: 3px;
-  color: var(--muted);
+.mt-toast-body strong {
+  font-size: 14px;
+}
+
+/* ============ LOGO ============ */
+.mt-brand {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 16px;
+}
+
+.mt-brand img {
+  height: 56px;
+}
+
+/* ============ HEADER OSCURO ============ */
+.mt-card-header {
+  background: #0f2c3f;
+  color: #fff;
+  border-radius: 18px 18px 0 0;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mt-card-header__title {
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+
+.mt-card-header__actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ============ BOTONES ============ */
+.mt-btn {
+  border-radius: 999px;
+  border: none;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+.mt-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.mt-btn--primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.mt-btn--primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.mt-btn--ghost {
+  background: #ffffff;
+  color: #0f2c3f;
+}
+
+.mt-btn--ghost:hover:not(:disabled) {
+  background: #e5edf5;
+}
+
+.mt-btn--danger {
+  background: #dc2626;
+  color: #fff;
+}
+
+.mt-btn--danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.mt-btn--sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* ============ CARD FILTROS ============ */
+.mt-card {
+  background: #ffffff;
+  padding: 16px 20px 20px;
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+  margin-bottom: 18px;
+}
+
+.mt-resumen {
+  font-size: 14px;
+  color: #1f2937;
+  margin-bottom: 10px;
+}
+
+.mt-filters {
+  margin-top: 4px;
+}
+
+.mt-filters-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1.6fr 0.5fr auto;
+  gap: 16px;
+}
+
+.mt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.mt-field label {
   font-weight: 600;
+  color: #374151;
 }
 
-.mt-date-field input[type="date"] {
-  padding: 7px 9px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: #fff;
+.mt-field input,
+.mt-field select,
+.mt-field textarea {
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  padding: 6px 12px;
   font-size: 13px;
   outline: none;
 }
 
-.mt-date-field input[type="date"]:focus {
-  border-color: #c4d3ff;
-  box-shadow: 0 0 0 3px rgba(31,111,235,.12);
+.mt-field textarea {
+  border-radius: 12px;
+  resize: vertical;
 }
 
-/* ============================
-   Tabla
-============================ */
-.mt-table-wrap {
-  max-width: 1120px;
-  margin: 0 auto 24px;
-  background: var(--card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+.mt-field input:focus,
+.mt-field select:focus,
+.mt-field textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+}
+
+.mt-field--actions {
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+/* ============ TARJETAS RESUMEN ============ */
+.mt-totales-card {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 16px 20px 20px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+  margin-bottom: 18px;
+}
+
+.mt-totales-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 12px;
+  color: #111827;
+}
+
+.mt-totales-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.mt-totales-item {
+  border-radius: 16px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.mt-totales-pref {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.mt-totales-final {
+  background: #ecfdf3;
+  border-color: #bbf7d0;
+}
+
+.mt-totales-canc {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.mt-totales-dia {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.mt-totales-icon {
+  font-size: 20px;
+}
+
+.mt-totales-label {
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.mt-totales-value {
+  font-size: 18px;
+  font-weight: 700;
+  margin-left: auto;
+  color: #111827;
+}
+
+/* ============ TABLA ============ */
+.mt-tablewrap {
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
   overflow: hidden;
 }
 
 .mt-table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
   table-layout: fixed;
-  font-size: 14px;
 }
 
-.mt-table thead th {
-  background: var(--brand-dark);
-  color: #fff;
+/* Cabecera */
+.mt-table thead {
+  background: #082636;
+  color: #ffffff;
+}
+
+.mt-table th {
+  padding: 10px 12px;
+  font-size: 13px;
   text-align: left;
-  padding: 11px 14px;
-  border-right: 1px solid rgba(255,255,255,.08);
+  font-weight: 700;
 }
 
-.mt-table thead th:last-child {
-  border-right: none;
+/* Anchos de columnas (para que Nombre sea grande y Acciones no se monten) */
+.mt-table th:nth-child(1),
+.mt-table td:nth-child(1) {
+  width: 27%;      /* Nombre */
 }
 
-.mt-table tbody td {
-  padding: 10px 14px;
-  border-top: 1px solid var(--line);
+.mt-table th:nth-child(2),
+.mt-table td:nth-child(2) {
+  width: 12%;      /* Código */
 }
 
-/* Tamaños de columnas */
-.mt-table th:nth-child(1) { width: 70px; }
-.mt-table th:nth-child(2) { width: 230px; }
-.mt-table th:nth-child(4) { width: 110px; }
-.mt-table th:nth-child(5) { width: 160px; }
-.mt-table th:nth-child(6) { width: 70px; }
-.col--acciones { width: 150px; }
+.mt-table th:nth-child(3),
+.mt-table td:nth-child(3) {
+  width: 21%;      /* Ubicación */
+}
 
-/* Fila vacía */
+.mt-table th:nth-child(4),
+.mt-table td:nth-child(4) {
+  width: 20%;      /* Usuario asignado */
+}
+
+.mt-table th:nth-child(5),
+.mt-table td:nth-child(5) {
+  width: 10%;      /* Estado */
+  text-align: center;
+  white-space: nowrap;
+}
+
+.mt-table th:nth-child(6),
+.mt-table td:nth-child(6) {
+  width: 10%;      /* Acciones */
+  text-align: center;
+}
+
+/* Celdas */
+.mt-table td {
+  padding: 9px 12px;
+  font-size: 13px;
+  border-top: 1px solid #e5e7eb;
+  color: #111827;
+}
+
+.mt-table tbody tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+.mt-table tbody tr:hover {
+  background: #edf2ff;
+}
+
+/* Estado */
+.mt-col-estado {
+  text-align: center;
+}
+
+/* Acciones: botones en línea sin encimarse */
+.acciones {
+  white-space: nowrap;
+}
+
+.acciones .mt-btn {
+  margin-left: 4px;
+}
+
+/* Mensaje vacío */
 .mt-empty {
   text-align: center;
-  padding: 22px 8px;
-  font-style: italic;
-  color: var(--muted);
+  padding: 16px 0;
+  color: #6b7280;
 }
 
-/* ============================
-   Estado (chip-style)
-============================ */
-.badge {
+/* ============ CHIPS ESTADO ============ */
+.chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 9px;
+  padding: 3px 10px;
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
-.badge-ok {
-  background: #ecfdf5;
-  color: #047857;
-  border-color: #6ee7b7;
+.chip--finalizado {
+  background: #ecfdf3;
+  color: #166534;
+  border: 1px solid #6ee7b7;
 }
 
-.badge-off {
+.chip--cancelado {
   background: #fef2f2;
   color: #b91c1c;
-  border-color: #fecaca;
+  border: 1px solid #fecaca;
 }
 
-/* ============================
-   Modal
-============================ */
-.mt-modal-backdrop {
+/* ============ MODALES ============ */
+.mt-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15,23,42,.45);
+  background: rgba(15, 23, 42, 0.45);
   display: flex;
-  justify-content: center;
   align-items: center;
-  z-index: 1000;
+  justify-content: center;
+  z-index: 1500;
 }
 
 .mt-modal {
-  background: #fff;
-  width: min(520px, 92vw);
-  padding: 20px 20px 16px;
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  max-height: 85vh;
-  overflow: auto;
-  animation: mt-fade-in .2s ease-out;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 18px 20px 20px;
+  width: 620px;
+  max-width: 95vw;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.45);
 }
 
-@keyframes mt-fade-in{
-  from { opacity: 0; transform: scale(.96); }
-  to   { opacity: 1; transform: scale(1); }
+.mt-modal h3 {
+  margin-bottom: 10px;
+  font-size: 18px;
+  color: #111827;
 }
 
-.mt-field {
-  margin-bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.mt-modal--confirm h3 {
+  color: #b91c1c;
 }
 
-.mt-field label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
+.mt-form {
+  margin-top: 4px;
 }
 
-.mt-field input,
-.mt-field textarea {
-  padding: 9px 11px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  font-size: 14px;
-  outline: none;
-  resize: vertical;
+.mt-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 0.7fr 0.8fr 1fr;
+  gap: 12px 14px;
 }
 
-.mt-field input:focus,
-.mt-field textarea:focus {
-  border-color: #c4d3ff;
-  box-shadow: 0 0 0 3px rgba(31,111,235,.12);
+.mt-field--col {
+  grid-column: 1 / -1;
 }
 
-.mt-inline {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
-
-.mt-actions {
+.mt-modal-actions {
+  margin-top: 18px;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
 }
 
-/* ============================
-   Loading bar
-============================ */
+/* ============ BARRA “PROCESANDO…” ============ */
 .mt-loading-bar {
-  text-align: center;
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  padding: 6px 16px;
   font-size: 13px;
-  color: var(--primary);
-  font-weight: 600;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  z-index: 1600;
 }
 
-/* ============================
-   Responsivo
-============================ */
-@media (max-width: 900px) {
-  .mt-header {
-    flex-direction: column;
-    align-items: flex-start;
+/* ============ RESPONSIVE ============ */
+@media (max-width: 980px) {
+  .mt-filters-row {
+    grid-template-columns: 1fr 1fr;
   }
 
-  .mt-actions-cell .btn {
-    margin-bottom: 4px;
+  .mt-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mt-totales-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 640px) {
-  .mt-date-filters {
-    flex-direction: column;
-    align-items: stretch;
+  .mt-filters-row {
+    grid-template-columns: 1fr;
   }
 
-  .mt-header {
-    padding: 16px 14px;
+  .mt-grid {
+    grid-template-columns: 1fr;
   }
+
+  .mt-totales-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mt-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .mt-card-header__actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+/* SELECT ACCIONES */
+.mt-select-acciones {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.mt-select-acciones:hover {
+  border-color: #2563eb;
 }

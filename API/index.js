@@ -2720,86 +2720,185 @@ app.get('/api/detalle_compra', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPe
 
 const ID_OBJETO_ESTADO_TICKET = 12;
 
-app.get('/api/estado_ticket', (req, res) => { 
-  const query = "SELECT * FROM tbl_estado_ticket";
-  conexion.query(query, (err, rows) => {
-    if (err) return res.status(500).json({ error: "ERROR EN LISTADO DE ESTADOS DE TICKET" });
-    
-    // BITÁCORA
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_ESTADO_TICKET,
-      id_usuario: user.id_usuario,
-      accion: "GETT",
-      descripcion: `Se listó el contenido de estado ticket`,
-      usuario: user.nombre_usuario
-    });
-    res.json(rows);
-  });
-});
+// Listar todos los estados
+app.get(
+  "/api/estado_ticket",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const user = req.user;
 
-app.get('/api/estado_ticket/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
-  conexion.query(query, [Number(req.params.id)], (err, rows) => {
-    if (err) return res.status(500).json({ error: "ERROR EN LISTADO DE ESTADO DE TICKET" });
-    // BITÁCORA
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_ESTADO_TICKET,
-      id_usuario: user.id_usuario,
-      accion: "GET",
-      descripcion: `Se consultó el estado_ticket id=${estado}`,
-      usuario: user.nombre_usuario
-    });
-    res.json(rows[0] || null);
-  });
-});
+    const query = "SELECT * FROM tbl_estado_ticket";
+    conexion.query(query, (err, rows) => {
+      if (err) {
+        console.error("ERROR EN LISTADO DE ESTADOS DE TICKET:", err);
+        return res
+          .status(500)
+          .json({ error: "ERROR EN LISTADO DE ESTADOS DE TICKET" });
+      }
 
-app.post('/api/estado_ticket', (req, res) => {
-  const query = "INSERT INTO tbl_estado_ticket (estado) VALUES (?)";
-  conexion.query(query, [req.body.estado], (err, r) => {
-    if (err) return res.status(500).json({ error: err.message });
-        // BITÁCORA
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_ESTADO_TICKET,
-      id_usuario: user.id_usuario,
-      accion: "POST",
-      descripcion: `Se agregó un nuevo estado de ticket = ${estado}`,
-      usuario: user.nombre_usuario
-    });
-    res.json({ message: "INSERT EXITOSO!", id: r.insertId });
-  });
-});
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_ESTADO_TICKET,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: "Se listó el contenido de estado_ticket",
+        usuario: user.nombre_usuario,
+      });
 
-app.put('/api/estado_ticket/:id', (req, res) => {
-  const query = "UPDATE tbl_estado_ticket SET estado = ? WHERE id_estado_ticket = ?";
-  conexion.query(query, [req.body.estado, Number(req.params.id)], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    // BITÁCORA
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_ESTADO_TICKET,
-      id_usuario: user.id_usuario,
-      accion: "PUT",
-      descripcion: `Se actualizó el estado de ticket = ${estado}`,
-      usuario: user.nombre_usuario
+      res.json(rows);
     });
-    res.json({ message: "UPDATE EXITOSO!" });
-  });
-});
+  }
+);
 
-app.delete('/api/estado_ticket/:id', (req, res) => {
-  const query = "DELETE FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
-  conexion.query(query, [Number(req.params.id)], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-        // BITÁCORA
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_ESTADO_TICKET,
-      id_usuario: user.id_usuario,
-      accion: "DELETE",
-      descripcion: `Se eliminó el estado de ticket = ${estado}`,
-      usuario: user.nombre_usuario
+
+// Obtener estado por ID
+app.get(
+  "/api/estado_ticket/:id",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const user = req.user;
+    const id = Number(req.params.id);
+
+    const query =
+      "SELECT * FROM tbl_estado_ticket WHERE id_estado_ticket = ? LIMIT 1";
+
+    conexion.query(query, [id], (err, rows) => {
+      if (err) {
+        console.error("ERROR EN LISTADO DE ESTADO DE TICKET:", err);
+        return res
+          .status(500)
+          .json({ error: "ERROR EN LISTADO DE ESTADO DE TICKET" });
+      }
+
+      if (!rows.length) {
+        return res.status(404).json({ error: "Estado de ticket no encontrado" });
+      }
+
+      const estadoRow = rows[0];
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_ESTADO_TICKET,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: `Se consultó el estado_ticket id=${id} (${estadoRow.estado})`,
+        usuario: user.nombre_usuario,
+      });
+
+      res.json(estadoRow);
     });
-    res.json({ message: "DELETE EXITOSO!" });
-  });
-});
+  }
+);
+
+// Crear estado
+app.post(
+  "/api/estado_ticket",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const user = req.user;
+    const { estado } = req.body;
+
+    if (!estado || !estado.trim()) {
+      return res
+        .status(400)
+        .json({ error: "El campo 'estado' es obligatorio" });
+    }
+
+    const query = "INSERT INTO tbl_estado_ticket (estado) VALUES (?)";
+    conexion.query(query, [estado.trim()], (err, r) => {
+      if (err) {
+        console.error("Error al insertar estado_ticket:", err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_ESTADO_TICKET,
+        id_usuario: user.id_usuario,
+        accion: "POST",
+        descripcion: `Se agregó un nuevo estado de ticket = ${estado.trim()}`,
+        usuario: user.nombre_usuario,
+      });
+
+      res.json({ message: "INSERT EXITOSO!", id: r.insertId });
+    });
+  }
+);
+
+// Actualizar estado
+app.put(
+  "/api/estado_ticket/:id",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const user = req.user;
+    const id = Number(req.params.id);
+    const { estado } = req.body;
+
+    if (!estado || !estado.trim()) {
+      return res
+        .status(400)
+        .json({ error: "El campo 'estado' es obligatorio" });
+    }
+
+    const query =
+      "UPDATE tbl_estado_ticket SET estado = ? WHERE id_estado_ticket = ?";
+    conexion.query(query, [estado.trim(), id], (err, result) => {
+      if (err) {
+        console.error("Error al actualizar estado_ticket:", err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Estado de ticket no encontrado" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_ESTADO_TICKET,
+        id_usuario: user.id_usuario,
+        accion: "PUT",
+        descripcion: `Se actualizó el estado de ticket id=${id} a "${estado.trim()}"`,
+        usuario: user.nombre_usuario,
+      });
+
+      res.json({ message: "UPDATE EXITOSO!" });
+    });
+  }
+);
+
+// Eliminar estado
+app.delete(
+  "/api/estado_ticket/:id",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const user = req.user;
+    const id = Number(req.params.id);
+
+    const query =
+      "DELETE FROM tbl_estado_ticket WHERE id_estado_ticket = ?";
+    conexion.query(query, [id], (err, result) => {
+      if (err) {
+        console.error("Error al eliminar estado_ticket:", err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Estado de ticket no encontrado" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_ESTADO_TICKET,
+        id_usuario: user.id_usuario,
+        accion: "DELETE",
+        descripcion: `Se eliminó el estado de ticket id=${id}`,
+        usuario: user.nombre_usuario,
+      });
+
+      res.json({ message: "DELETE EXITOSO!" });
+    });
+  }
+);
 
 // =======================================================
 // ============== Tipo Ticket (CRUD) =====================
@@ -2807,111 +2906,301 @@ app.delete('/api/estado_ticket/:id', (req, res) => {
 
 const ID_OBJETO_TIPO_TICKET = 11;
 
-app.get("/api/tipo_ticket", (req, res) => {
-  const sql = "SELECT id_tipo_ticket, tipo_ticket, prefijo FROM tbl_tipo_ticket WHERE estado='ACTIVO'";
-  conexion.query(sql, (err, rows) => {
-    if (err) return res.status(500).json({ mensaje: "Error al obtener tipos de ticket" });
-    // BITÁCORA
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_TIPO_TICKET,
-      id_usuario: user.id_usuario,
-      accion: "GET",
-      descripcion: `Se consultó la lista de tipo ticket`,
-      usuario: user.nombre_usuario
-    });
-    res.json(rows);
-  });
-});
+// Listar tipos de ticket (TODOS: ACTIVO e INACTIVO)
+app.get(
+  "/api/tipo_ticket",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const user = req.user;
 
-app.get('/api/tipo_ticket/:id', (request, response) => {
-  const query = "SELECT * FROM tbl_tipo_ticket WHERE id_tipo_ticket= ?";
-  const values = [parseInt(request.params.id)];
-  conexion.query(query, values, (err, rows) => {
-    if (err) return handleDatabaseError(err, response, "Error en listado de tipo ticket:");
-    // BITÁCORA
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_TIPO_TICKET,
-      id_usuario: user.id_usuario,
-      accion: "GET",
-      descripcion: `Se consultó el tipo de ticket = ${tipo_ticket}`,
-      usuario: user.nombre_usuario
-    });
-    response.json(rows);
-  });
-});
-
-app.post('/api/tipo_ticket', (request, response) => {
-  try {
-    const { tipo_ticket , estado, prefijo } = request.body;
-    const query = `
-      INSERT INTO tbl_tipo_ticket (tipo_ticket , estado, prefijo) 
-      VALUES (?, ?, ?)
+    const sql = `
+      SELECT id_tipo_ticket, tipo_ticket, prefijo, estado
+      FROM tbl_tipo_ticket
+      ORDER BY id_tipo_ticket
     `;
-    const values = [tipo_ticket , estado, prefijo];
-    conexion.query(query, values, (err) => {
-      if (err) return handleDatabaseError(err, response, "Error en inserción de tipo ticket:");
-      // BITÁCORA
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_TIPO_TICKET,
-      id_usuario: user.id_usuario,
-      accion: "POST",
-      descripcion: `Se agregó un nuevo tipo de ticket = ${tipo_ticket}`,
-      usuario: user.nombre_usuario
-    });
-      response.json("INSERT EXITOSO!");
-    });
-  } catch (error) {
-    console.error(error);
-    response.status(400).json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
-  }
-});
 
-app.put('/api/tipo_ticket', (request, response) => {
-  try {
-    const { id_tipo_ticket, tipo_ticket, estado, prefijo } = request.body;
-    if (!id_tipo_ticket) {
-      return response.status(400).json({ error: "id_tipo_ticket es requerido" });
+    conexion.query(sql, (err, rows) => {
+      if (err) {
+        console.error("Error al obtener tipos de ticket:", err);
+        return res
+          .status(500)
+          .json({ mensaje: "Error al obtener tipos de ticket" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_TIPO_TICKET,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: "Se consultó la lista de tipo_ticket",
+        usuario: user.nombre_usuario,
+      });
+
+      res.json(rows);
+    });
+  }
+);
+
+// Obtener tipo ticket por ID
+app.get(
+  "/api/tipo_ticket/:id",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const user = req.user;
+    const id = parseInt(req.params.id, 10);
+
+    const query =
+      "SELECT * FROM tbl_tipo_ticket WHERE id_tipo_ticket = ? LIMIT 1";
+
+    conexion.query(query, [id], (err, rows) => {
+      if (err) {
+        return handleDatabaseError(err, res, "Error en listado de tipo ticket:");
+      }
+
+      if (!rows.length) {
+        return res.status(404).json({ mensaje: "Tipo de ticket no encontrado" });
+      }
+
+      const row = rows[0];
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_TIPO_TICKET,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: `Se consultó el tipo de ticket id=${id} (${row.tipo_ticket})`,
+        usuario: user.nombre_usuario,
+      });
+
+      res.json(row);
+    });
+  }
+);
+
+// Crear tipo de ticket
+app.post(
+  "/api/tipo_ticket",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    try {
+      const user = req.user;
+      let { tipo_ticket, estado, prefijo } = req.body;
+
+      if (!tipo_ticket || !tipo_ticket.trim()) {
+        return res
+          .status(400)
+          .json({ error: "El campo 'tipo_ticket' es obligatorio" });
+      }
+
+      tipo_ticket = tipo_ticket.trim().toUpperCase();
+      prefijo = (prefijo || "").toString().trim().toUpperCase();
+      estado = (estado || "ACTIVO").toString().trim().toUpperCase();
+
+      const query = `
+        INSERT INTO tbl_tipo_ticket (tipo_ticket, estado, prefijo) 
+        VALUES (?, ?, ?)
+      `;
+      const values = [tipo_ticket, estado, prefijo];
+
+      conexion.query(query, values, (err) => {
+        if (err) {
+          return handleDatabaseError(
+            err,
+            res,
+            "Error en inserción de tipo ticket:"
+          );
+        }
+
+        logBitacora(conexion, {
+          id_objeto: ID_OBJETO_TIPO_TICKET,
+          id_usuario: user.id_usuario,
+          accion: "POST",
+          descripcion: `Se agregó un nuevo tipo de ticket = ${tipo_ticket}`,
+          usuario: user.nombre_usuario,
+        });
+
+        res.json({ mensaje: "INSERT EXITOSO!" });
+      });
+    } catch (error) {
+      console.error(error);
+      res
+        .status(400)
+        .json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
     }
+  }
+);
+
+// Actualizar tipo de ticket (usa id_tipo_ticket en el body → coincide con tu guardar())
+app.put(
+  "/api/tipo_ticket",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    try {
+      const user = req.user;
+      let { id_tipo_ticket, tipo_ticket, estado, prefijo } = req.body;
+
+      if (!id_tipo_ticket) {
+        return res
+          .status(400)
+          .json({ error: "id_tipo_ticket es requerido" });
+      }
+
+      tipo_ticket = (tipo_ticket || "").toString().trim().toUpperCase();
+      estado = (estado || "ACTIVO").toString().trim().toUpperCase();
+      prefijo = (prefijo || "").toString().trim().toUpperCase();
+
+      const query = `
+        UPDATE tbl_tipo_ticket 
+        SET tipo_ticket = ?, estado = ?, prefijo = ?
+        WHERE id_tipo_ticket = ?
+      `;
+      const values = [tipo_ticket, estado, prefijo, id_tipo_ticket];
+
+      conexion.query(query, values, (err, result) => {
+        if (err) {
+          return handleDatabaseError(
+            err,
+            res,
+            "Error en actualización de tipo ticket:"
+          );
+        }
+
+        if (result.affectedRows === 0) {
+          return res
+            .status(404)
+            .json({ error: "Tipo de ticket no encontrado" });
+        }
+
+        logBitacora(conexion, {
+          id_objeto: ID_OBJETO_TIPO_TICKET,
+          id_usuario: user.id_usuario,
+          accion: "PUT",
+          descripcion: `Se actualizó el tipo de ticket id=${id_tipo_ticket} a ${tipo_ticket}`,
+          usuario: user.nombre_usuario,
+        });
+
+        res.json({ mensaje: "UPDATE EXITOSO!" });
+      });
+    } catch (error) {
+      console.error(error);
+      res
+        .status(400)
+        .json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
+    }
+  }
+);
+
+// Cambiar solo el estado (ACTIVO / INACTIVO) → para toggleActivo()
+app.patch(
+  "/api/tipo_ticket/:id",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const user = req.user;
+    const id = parseInt(req.params.id, 10);
+    let { estado } = req.body;
+
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+
+    estado = (estado || "ACTIVO").toString().trim().toUpperCase();
+    if (!["ACTIVO", "INACTIVO"].includes(estado)) {
+      return res
+        .status(400)
+        .json({ error: "Estado inválido. Use ACTIVO o INACTIVO." });
+    }
+
     const query = `
-      UPDATE tbl_tipo_ticket 
-      SET tipo_ticket = ?, estado = ?, prefijo = ?
+      UPDATE tbl_tipo_ticket
+      SET estado = ?
       WHERE id_tipo_ticket = ?
     `;
-    const values = [tipo_ticket, estado, prefijo, id_tipo_ticket];
-    conexion.query(query, values, (err) => {
-      if (err) return handleDatabaseError(err, response, "Error en actualización de tipo ticket:");
-      // BITÁCORA
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_TIPO_TICKET,
-      id_usuario: user.id_usuario,
-      accion: "PUT",
-      descripcion: `Se actualizó el tipo de ticket = ${tipo_ticket}`,
-      usuario: user.nombre_usuario
-    });
-      response.json("UPDATE EXITOSO!");
-    });
-  } catch (error) {
-    console.error(error);
-    response.status(400).json({ error: "Error al analizar el cuerpo de la solicitud JSON" });
-  }
-});
+    const values = [estado, id];
 
-app.delete('/api/tipo_ticket/:id', (request, response) => {
-  const query = "DELETE FROM tbl_tipo_ticket WHERE id_tipo_ticket = ?";
-  const values = [parseInt(request.params.id)];
-  conexion.query(query, values, (err) => {
-    if (err) return handleDatabaseError(err, response, "Error en eliminación de tipo ticket:");
-    // BITÁCORA
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_TIPO_TICKET,
-      id_usuario: user.id_usuario,
-      accion: "DELETE",
-      descripcion: `Se eliminó el tipo de ticket = ${tipo_ticket}`,
-      usuario: user.nombre_usuario
+    conexion.query(query, values, (err, result) => {
+      if (err) {
+        return handleDatabaseError(
+          err,
+          res,
+          "Error al actualizar estado de tipo_ticket:"
+        );
+      }
+
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ error: "Tipo de ticket no encontrado" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_TIPO_TICKET,
+        id_usuario: user.id_usuario,
+        accion: "PATCH",
+        descripcion: `Se cambió el estado del tipo_ticket id=${id} a ${estado}`,
+        usuario: user.nombre_usuario,
+      });
+
+      res.json({ mensaje: "Estado actualizado correctamente" });
     });
-    response.json("DELETE EXITOSO!");
-  });
-});
+  }
+);
+
+// Eliminar tipo de ticket
+app.delete(
+  "/api/tipo_ticket/:id",
+  verificarToken,
+  autorizarRoles("Administrador"),
+  (req, res) => {
+    const user = req.user;
+    const id = parseInt(req.params.id, 10);
+
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+
+    const sql = "DELETE FROM tbl_tipo_ticket WHERE id_tipo_ticket = ?";
+
+    conexion.query(sql, [id], (err, result) => {
+      if (err) {
+        // Si el tipo_ticket está referenciado en otra tabla (FK)
+        if (
+          err.code === "ER_ROW_IS_REFERENCED_2" ||
+          err.code === "ER_ROW_IS_REFERENCED"
+        ) {
+          return res.status(409).json({
+            error:
+              "No se puede eliminar este tipo de ticket porque está siendo utilizado en otros registros.",
+          });
+        }
+
+        return handleDatabaseError(
+          err,
+          res,
+          "Error al eliminar tipo_ticket:"
+        );
+      }
+
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ error: "Tipo de ticket no encontrado" });
+      }
+
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_TIPO_TICKET,
+        id_usuario: user.id_usuario,
+        accion: "DELETE",
+        descripcion: `Se eliminó el tipo_ticket id=${id}`,
+        usuario: user.nombre_usuario,
+      });
+
+      res.json({ mensaje: "Tipo de ticket eliminado correctamente" });
+    });
+  }
+);
 
 // =======================================================
 // ===== Helpers de Tickets: estados y secuencias ========
@@ -3588,7 +3877,7 @@ app.patch("/api/tickets/:id/finalizar", requireIdParam, verificarToken, (req, re
   const id = req.id;
   const sql = `
     UPDATE tbl_ticket
-    SET id_estado_ticket = (SELECT id_estado_ticket FROM tbl_estado_ticket WHERE estado='ATENDIDO' LIMIT 1),
+    SET id_estado_ticket = (SELECT id_estado_ticket FROM tbl_estado_ticket WHERE estado='FINALIZADO' LIMIT 1),
         finalizado_en    = IFNULL(finalizado_en, NOW()),
         iniciado_en      = IFNULL(iniciado_en, llamado_en)
     WHERE id_ticket = ?
@@ -3944,6 +4233,270 @@ app.post("/api/kiosko/tomar", (req, res) => {
         });
       });
     });
+  });
+});
+
+
+// =======================================================
+// ================ VENTANILLAS (CRUD) ===================
+// =======================================================
+
+/**
+ * Normaliza strings (trim) y mayúsculas cuando se necesite
+ */
+function normStr(v) {
+  return String(v ?? "").trim();
+}
+
+function normUpper(v) {
+  return normStr(v).toUpperCase();
+}
+
+/**
+ * LISTAR TODAS LAS VENTANILLAS
+ * Opcional: ?estado=ACTIVA / INACTIVA
+ */
+app.get("/api/ventanilla", (req, res) => {
+  const { estado } = req.query;
+
+  let sql = `
+    SELECT v.id_ventanilla,
+           v.nombre_ventanilla,
+           v.codigo,
+           v.descripcion,
+           v.id_usuario,
+           v.estado,
+           v.ubicacion,
+           v.fecha_creacion,
+           v.fecha_actualizacion
+    FROM tbl_ventanilla v
+  `;
+  const params = [];
+
+  if (estado) {
+    sql += " WHERE v.estado = ?";           // ACTIVA / INACTIVA
+    params.push(estado.toUpperCase().trim());
+  }
+
+  sql += " ORDER BY v.id_ventanilla ASC";
+
+  conexion.query(sql, params, (err, rows) => {
+    if (err) {
+      console.error("ERROR EN LISTADO DE VENTANILLAS:", err);
+      return res
+        .status(500)
+        .json({ error: "ERROR EN LISTADO DE VENTANILLAS" });
+    }
+    res.json(rows);
+  });
+});
+
+/**
+ * OBTENER UNA VENTANILLA POR ID
+ */
+app.get("/api/ventanilla/:id", (req, res) => {
+  const id = Number(req.params.id) || 0;
+
+  const sql = `
+    SELECT v.id_ventanilla,
+           v.nombre_ventanilla,
+           v.codigo,
+           v.descripcion,
+           v.id_usuario,
+           v.estado,
+           v.ubicacion,
+           v.fecha_creacion,
+           v.fecha_actualizacion
+    FROM tbl_ventanilla v
+    WHERE v.id_ventanilla = ?
+    LIMIT 1
+  `;
+
+  conexion.query(sql, [id], (err, rows) => {
+    if (err) {
+      console.error("ERROR EN DETALLE DE VENTANILLA:", err);
+      return res
+        .status(500)
+        .json({ error: "ERROR EN DETALLE DE VENTANILLA" });
+    }
+    res.json(rows[0] || null);
+  });
+});
+
+/**
+ * CREAR VENTANILLA
+ */
+app.post("/api/ventanilla", (req, res) => {
+  let { nombre_ventanilla, codigo, descripcion, id_usuario, estado, ubicacion } =
+    req.body || {};
+
+  nombre_ventanilla = normStr(nombre_ventanilla);
+  codigo = normUpper(codigo);
+  descripcion = normStr(descripcion);
+  ubicacion = normStr(ubicacion);
+  estado = normUpper(estado || "ACTIVA");
+
+  id_usuario = id_usuario ? Number(id_usuario) : null;
+
+  // VALIDACIONES BÁSICAS
+  if (!nombre_ventanilla) {
+    return res
+      .status(400)
+      .json({ mensaje: "El nombre de la ventanilla es obligatorio." });
+  }
+  if (!codigo) {
+    return res
+      .status(400)
+      .json({ mensaje: "El código de la ventanilla es obligatorio." });
+  }
+  if (!["ACTIVA", "INACTIVA"].includes(estado)) {
+    return res
+      .status(400)
+      .json({ mensaje: "El estado debe ser ACTIVA o INACTIVA." });
+  }
+
+  const sql = `
+    INSERT INTO tbl_ventanilla
+      (nombre_ventanilla, codigo, descripcion, id_usuario, estado, ubicacion)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
+
+  conexion.query(
+    sql,
+    [nombre_ventanilla, codigo, descripcion || null, id_usuario, estado, ubicacion || null],
+    (err, result) => {
+      if (err) {
+        console.error("ERROR AL INSERTAR VENTANILLA:", err);
+
+        // Si es por duplicado de código
+        if (err.code === "ER_DUP_ENTRY") {
+          return res.status(400).json({
+            mensaje:
+              "Ya existe una ventanilla con ese código. Usa otro código.",
+          });
+        }
+
+        return res
+          .status(500)
+          .json({ error: "ERROR AL INSERTAR VENTANILLA", detalle: err.message });
+      }
+
+      res.json({
+        mensaje: "¡Ventanilla creada exitosamente!",
+        id_ventanilla: result.insertId,
+      });
+    }
+  );
+});
+
+/**
+ * ACTUALIZAR VENTANILLA
+ */
+app.put("/api/ventanilla/:id", (req, res) => {
+  const id = Number(req.params.id) || 0;
+  let { nombre_ventanilla, codigo, descripcion, id_usuario, estado, ubicacion } =
+    req.body || {};
+
+  nombre_ventanilla = normStr(nombre_ventanilla);
+  codigo = normUpper(codigo);
+  descripcion = normStr(descripcion);
+  ubicacion = normStr(ubicacion);
+  estado = normUpper(estado || "ACTIVA");
+
+  id_usuario = id_usuario ? Number(id_usuario) : null;
+
+  if (!nombre_ventanilla) {
+    return res
+      .status(400)
+      .json({ mensaje: "El nombre de la ventanilla es obligatorio." });
+  }
+  if (!codigo) {
+    return res
+      .status(400)
+      .json({ mensaje: "El código de la ventanilla es obligatorio." });
+  }
+  if (!["ACTIVA", "INACTIVA"].includes(estado)) {
+    return res
+      .status(400)
+      .json({ mensaje: "El estado debe ser ACTIVA o INACTIVA." });
+  }
+
+  const sql = `
+    UPDATE tbl_ventanilla
+    SET nombre_ventanilla = ?,
+        codigo = ?,
+        descripcion = ?,
+        id_usuario = ?,
+        estado = ?,
+        ubicacion = ?
+    WHERE id_ventanilla = ?
+  `;
+
+  conexion.query(
+    sql,
+    [nombre_ventanilla, codigo, descripcion || null, id_usuario, estado, ubicacion || null, id],
+    (err, result) => {
+      if (err) {
+        console.error("ERROR AL ACTUALIZAR VENTANILLA:", err);
+
+        if (err.code === "ER_DUP_ENTRY") {
+          return res.status(400).json({
+            mensaje:
+              "Ya existe una ventanilla con ese código. Usa otro código.",
+          });
+        }
+
+        return res.status(500).json({
+          error: "ERROR AL ACTUALIZAR VENTANILLA",
+          detalle: err.message,
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ mensaje: "Ventanilla no encontrada para actualizar." });
+      }
+
+      res.json({ mensaje: "¡Ventanilla actualizada correctamente!" });
+    }
+  );
+});
+
+/**
+ * ELIMINAR VENTANILLA
+ * (protegemos error por FOREIGN KEY en tickets, por si luego enlazas)
+ */
+app.delete("/api/ventanilla/:id", (req, res) => {
+  const id = Number(req.params.id) || 0;
+
+  const sql = `DELETE FROM tbl_ventanilla WHERE id_ventanilla = ?`;
+
+  conexion.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error("ERROR AL ELIMINAR VENTANILLA:", err);
+
+      // Si está referenciada en otra tabla (por ej. tbl_ticket.id_ventanilla)
+      if (err.code === "ER_ROW_IS_REFERENCED_2") {
+        return res.status(400).json({
+          mensaje:
+            "No se puede eliminar la ventanilla porque está siendo usada en otros registros (tickets u otros).",
+        });
+      }
+
+      return res.status(500).json({
+        error: "ERROR AL ELIMINAR VENTANILLA",
+        detalle: err.message,
+      });
+    }
+
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ mensaje: "Ventanilla no encontrada para eliminar." });
+    }
+
+    res.json({ mensaje: "¡Ventanilla eliminada correctamente!" });
   });
 });
 

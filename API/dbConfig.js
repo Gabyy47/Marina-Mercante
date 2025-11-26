@@ -2,7 +2,7 @@
 const DB_CONFIG = {
   host: "localhost",
   user: "root",
-  password: "",
+  password: "1984",
   database: "marina_mercante_v2",
 };
 

@@ -25,7 +25,9 @@ import MantenimientoSeguridad from "./MantenimientoSeguridad.jsx";
 import Compra from "./Compra.jsx";
 import Salidas from "./Salidas.jsx";
 import DetalleSalidas from "./DetalleSalidas.jsx";
-
+import MantVentanilla from "./MantVentanilla.jsx";
+import PanelLlamado from "./PanelLlamado.jsx";
+import MantEstadosTicket from "./MantEstadosTicket";
 
 
 
@@ -228,6 +230,42 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                 <span>
                   <FiFileText />
                   <span>Tipo Ticket</span>
+                </span>
+              </button>
+
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "MantVentanilla" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("MantVentanilla")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Ventanilla</span>
+                </span>
+              </button>
+
+              <button
+                className={`sb__link sb__link--child ${
+                  activeView === "PanelLlamado" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("PanelLlamado")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Panel de llamado</span>
+                </span>
+              </button>
+
+               <button
+                className={`sb__link sb__link--child ${
+                  activeView === "MantEstadosTicket" ? "sb__link--active" : ""
+                }`}
+                onClick={() => onSelect("MantEstadosTicket")}
+              >
+                <span>
+                  <FiFileText />
+                  <span>Estados</span>
                 </span>
               </button>
             </div>
@@ -660,6 +698,15 @@ const MainPage = () => {
 
       case "MantTramites":
         return <Tramites />;
+
+        case "MantVentanilla":
+        return <MantVentanilla />;
+
+        case "PanelLlamado":
+        return <PanelLlamado />;
+
+        case "MantEstadosTicket":
+        return <MantEstadosTicket />;
 
       case "MantenimientoTipoTicket":
         return <Tipo />;
