@@ -78,7 +78,6 @@ export default function DashboardGuarda() {
       <aside className="mm-sidebar">
         <div className="mm-logo">
           <img src={logoDGMM} alt="DGMM" />
-          <span>NAVI-MASTER</span>
         </div>
 
         <nav className="mm-menu">

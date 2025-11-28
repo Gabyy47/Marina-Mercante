@@ -160,20 +160,6 @@ function Sidebar({ activeView, onSelect, onLogout }) {
                   <span>Roles</span>
                 </span>
               </button>
-
-              <button
-                className={`sb__link sb__link--child ${
-                  activeView === "mantenimientocliente"
-                    ? "sb__link--active"
-                    : ""
-                }`}
-                onClick={() => onSelect("mantenimientocliente")}
-              >
-                <span>
-                  <FiUsers />
-                  <span>Clientes</span>
-                </span>
-              </button>
             </div>
           )}
         </div>

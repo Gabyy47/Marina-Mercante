@@ -4995,6 +4995,9 @@ app.get("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("
 // =======================
 //   CREAR SALIDA
 // =======================
+
+const ID_OBJETO_SALIDAS = 19;
+
 app.post("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Salidas", "insertar"), (req, res) => {
   const id_usuario = req.user.id_usuario;
   const { motivo } = req.body;
