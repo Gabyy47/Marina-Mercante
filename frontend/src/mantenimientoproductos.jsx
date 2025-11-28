@@ -6,7 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 
 import api from "./api";   // instancia Axios con baseURL http://localhost:49146/api
 import logo from "./imagenes/DGMM-Gobierno.png";
-import "./mantenimiento.css";
+import "./mantenimientoproductos.css";
 import "./Dashboardguarda";
 import "./bitacora.jsx";
 
@@ -22,6 +22,13 @@ export default function MantenimientoProducto() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // ====== filtros de búsqueda ======
+  const [filtros, setFiltros] = useState({
+    nombre: "",
+    cantidad_minima: "",
+    cantidad_maxima: ""
+  });
 
   // ====== estado de formulario (compartido para crear/editar) ======
   const [newNombre_producto, setNewNombre_producto] = useState("");
@@ -77,6 +84,32 @@ export default function MantenimientoProducto() {
       ),
     [newNombre_producto, newCantidad_minima, newCantidad_maxima]
   );
+
+  // ====== función de filtrado ======
+  const aplicarFiltro = (producto) => {
+    const nombreLower = producto.nombre_producto?.toLowerCase() || "";
+    const filtroNombreLower = filtros.nombre.toLowerCase();
+    
+    if (filtros.nombre && !nombreLower.includes(filtroNombreLower)) {
+      return false;
+    }
+    
+    if (filtros.cantidad_minima) {
+      const min = Number(filtros.cantidad_minima);
+      if (producto.cantidad_minima < min) {
+        return false;
+      }
+    }
+    
+    if (filtros.cantidad_maxima) {
+      const max = Number(filtros.cantidad_maxima);
+      if (producto.cantidad_maxima > max) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
 
   const validarNumeros = () => {
     const min = Number(newCantidad_minima);
@@ -279,35 +312,95 @@ export default function MantenimientoProducto() {
 
   // ====== UI ======
   return (
-    <div className="mm-page">
+    <div className="mant-prod-page">
       {/* Encabezado institucional */}
-      <header className="mm-header">
-        <img src={logo} alt="DGMM" className="mm-logo" />
-      </header>
+      <div className="mant-prod-logo-wrap">
+        <img src={logo} alt="DGMM" />
+      </div>
 
-      <section className="mm-card">
-        <div className="mm-card__head">
-          <h2>Mantenimiento de Productos</h2>
-          <div className="mm-actions">
-            <button className="link-volver" onClick={handleVolver}>
-              ← Volver al Menú Principal
-            </button>
+      <div className="mant-prod-topbar" style={{ maxWidth: 1000 }}>
+        <span className="mant-prod-topbar-title">Mantenimiento de Productos</span>
 
-            <button className="btn btn-primary" onClick={openModal}>
-              + Nuevo producto
-            </button>
+        <div className="mant-prod-topbar-actions">
+          <button className="mant-prod-btn mant-prod-btn-topbar-outline" onClick={handleVolver}>
+            ← Volver al Menú Principal
+          </button>
 
+          <button className="mant-prod-btn mant-prod-btn-topbar-outline" onClick={openModal} style={{ marginLeft: 8 }}>
+            + Nuevo producto
+          </button>
+
+          <button
+            className="mant-prod-btn mant-prod-btn-topbar-outline"
+            onClick={generarPDFProductos}
+            style={{ marginLeft: 8 }}
+          >
+            <FaFilePdf size={16} /> Generar Reporte
+          </button>
+        </div>
+      </div>
+
+      <div className="mant-prod-card" style={{ maxWidth: 1000 }}>
+        
+        {/* Filtros de búsqueda */}
+        <div className="mant-prod-filters" style={{ marginBottom: 20, display: "flex", gap: 15, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 250px" }}>
+            <label htmlFor="filtroNombre" style={{ display: "block", marginBottom: 5, fontWeight: "bold" }}>
+              Nombre del producto:
+            </label>
+            <input
+              id="filtroNombre"
+              type="text"
+              placeholder="Buscar por nombre..."
+              value={filtros.nombre}
+              onChange={(e) => setFiltros({ ...filtros, nombre: e.target.value })}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 4, border: "1px solid #ccc" }}
+            />
+          </div>
+
+          <div style={{ flex: "1 1 150px" }}>
+            <label htmlFor="filtroCantMin" style={{ display: "block", marginBottom: 5, fontWeight: "bold" }}>
+              Cantidad mínima ≥:
+            </label>
+            <input
+              id="filtroCantMin"
+              type="number"
+              placeholder="Ej: 10"
+              value={filtros.cantidad_minima}
+              onChange={(e) => setFiltros({ ...filtros, cantidad_minima: e.target.value })}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 4, border: "1px solid #ccc" }}
+            />
+          </div>
+
+          <div style={{ flex: "1 1 150px" }}>
+            <label htmlFor="filtroCantMax" style={{ display: "block", marginBottom: 5, fontWeight: "bold" }}>
+              Cantidad máxima ≤:
+            </label>
+            <input
+              id="filtroCantMax"
+              type="number"
+              placeholder="Ej: 100"
+              value={filtros.cantidad_maxima}
+              onChange={(e) => setFiltros({ ...filtros, cantidad_maxima: e.target.value })}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 4, border: "1px solid #ccc" }}
+            />
+          </div>
+
+          <div style={{ flex: "0 0 auto", display: "flex", alignItems: "flex-end" }}>
             <button
-              className="btn btn-topbar-primary"
-              onClick={generarPDFProductos}
+              className="mant-prod-btn mant-prod-btn-topbar-outline"
+              onClick={() => setFiltros({ nombre: "", cantidad_minima: "", cantidad_maxima: "" })}
+              style={{ padding: "8px 16px" }}
             >
-              <FaFilePdf size={16} /> Generar Reporte
+              Limpiar Filtros
             </button>
           </div>
         </div>
 
-        <div className="mm-table__wrap">
-          <table className="mm-table">
+        {loading ? (
+          <div className="mant-prod-loading">Cargando...</div>
+        ) : (
+          <table className="mant-prod-table">
             <thead>
               <tr>
                 <th>ID</th>
@@ -318,39 +411,33 @@ export default function MantenimientoProducto() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="text-center">
-                    Cargando…
-                  </td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center">
-                    Sin registros
-                  </td>
-                </tr>
-              ) : (
-                items.map((it) => (
+              {(() => {
+                const productosFiltrados = items.filter(aplicarFiltro);
+                return productosFiltrados.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center">
+                      Sin registros
+                    </td>
+                  </tr>
+                ) : (
+                  productosFiltrados.map((it) => (
                   <tr key={it.id_producto}>
                     <td>{it.id_producto}</td>
                     <td>{it.nombre_producto}</td>
                     <td>{it.cantidad_minima}</td>
                     <td>{it.cantidad_maxima}</td>
-                    <td className="mm-actions--row">
+                    <td>
                       {canEdit && (
                         <>
                           <button
-                            className="btn btn-outline"
+                            className="mant-prod-btn mant-prod-btn-sm mant-prod-btn-outline-primary mant-prod-me-2"
                             onClick={() => openEditModal(it)}
                           >
                             Editar
                           </button>
                           <button
-                            className="btn btn-danger"
-                            onClick={() =>
-                              handleDelete(it.id_producto)
-                            }
+                            className="mant-prod-btn mant-prod-btn-sm mant-prod-btn-outline-danger"
+                            onClick={() => handleDelete(it.id_producto)}
                           >
                             Eliminar
                           </button>
@@ -358,90 +445,147 @@ export default function MantenimientoProducto() {
                       )}
                     </td>
                   </tr>
-                ))
-              )}
+                  ))
+                );
+              })()}
             </tbody>
           </table>
-        </div>
-      </section>
+        )}
+      </div>
 
       {/* Modal Crear */}
-      <Modal
-        isOpen={isModalOpen}
-        onRequestClose={closeModal}
-        className="mm-modal"
-        overlayClassName="mm-overlay"
-      >
-        <h3>Crear Producto</h3>
-        <div className="mm-form">
-          <input
-            value={newNombre_producto}
-            onChange={(e) => setNewNombre_producto(e.target.value)}
-            placeholder="Nombre del producto"
-          />
-          <input
-            type="number"
-            min="0"
-            value={newCantidad_minima}
-            onChange={(e) => setNewCantidad_minima(e.target.value)}
-            placeholder="Cantidad mínima"
-          />
-          <input
-            type="number"
-            min="0"
-            value={newCantidad_maxima}
-            onChange={(e) => setNewCantidad_maxima(e.target.value)}
-            placeholder="Cantidad máxima"
-          />
+      {isModalOpen && (
+        <div className="mant-prod-modal-overlay" onClick={closeModal}>
+          <div
+            className="mant-prod-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 550 }}
+          >
+            <div className="mant-prod-modal-header">
+              <h3>Crear Producto</h3>
+              <button className="mant-prod-modal-close" onClick={closeModal}>
+                ✕
+              </button>
+            </div>
+
+            <div className="mant-prod-modal-body">
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Nombre del Producto</label>
+                  <input
+                    className="mant-prod-form-control"
+                    placeholder="Nombre del producto"
+                    value={newNombre_producto}
+                    onChange={(e) => setNewNombre_producto(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Cantidad Mínima</label>
+                    <input
+                      className="mant-prod-form-control"
+                      type="number"
+                      min="0"
+                      placeholder="Mínima"
+                      value={newCantidad_minima}
+                      onChange={(e) => setNewCantidad_minima(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Cantidad Máxima</label>
+                    <input
+                      className="mant-prod-form-control"
+                      type="number"
+                      min="0"
+                      placeholder="Máxima"
+                      value={newCantidad_maxima}
+                      onChange={(e) => setNewCantidad_maxima(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mant-prod-modal-footer">
+              <button className="mant-prod-btn mant-prod-btn-secondary" onClick={closeModal}>
+                Cerrar
+              </button>
+              <button className="mant-prod-btn mant-prod-btn-success" onClick={handleCreate}>
+                Guardar
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="mm-modal__actions">
-          <button className="btn btn-primary" onClick={handleCreate}>
-            Guardar
-          </button>
-          <button className="btn btn-outline" onClick={closeModal}>
-            Cerrar
-          </button>
-        </div>
-      </Modal>
+      )}
 
       {/* Modal Editar */}
-      <Modal
-        isOpen={isEditModalOpen}
-        onRequestClose={closeEditModal}
-        className="mm-modal"
-        overlayClassName="mm-overlay"
-      >
-        <h3>Editar Producto</h3>
-        <div className="mm-form">
-          <input
-            value={newNombre_producto}
-            onChange={(e) => setNewNombre_producto(e.target.value)}
-            placeholder="Nombre del producto"
-          />
-          <input
-            type="number"
-            min="0"
-            value={newCantidad_minima}
-            onChange={(e) => setNewCantidad_minima(e.target.value)}
-            placeholder="Cantidad mínima"
-          />
-          <input
-            type="number"
-            min="0"
-            value={newCantidad_maxima}
-            onChange={(e) => setNewCantidad_maxima(e.target.value)}
-            placeholder="Cantidad máxima"
-          />
+      {isEditModalOpen && (
+        <div className="mant-prod-modal-overlay" onClick={closeEditModal}>
+          <div
+            className="mant-prod-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 550 }}
+          >
+            <div className="mant-prod-modal-header">
+              <h3>Editar Producto</h3>
+              <button className="mant-prod-modal-close" onClick={closeEditModal}>
+                ✕
+              </button>
+            </div>
+
+            <div className="mant-prod-modal-body">
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Nombre del Producto</label>
+                  <input
+                    className="mant-prod-form-control"
+                    placeholder="Nombre del producto"
+                    value={newNombre_producto}
+                    onChange={(e) => setNewNombre_producto(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Cantidad Mínima</label>
+                    <input
+                      className="mant-prod-form-control"
+                      type="number"
+                      min="0"
+                      placeholder="Mínima"
+                      value={newCantidad_minima}
+                      onChange={(e) => setNewCantidad_minima(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Cantidad Máxima</label>
+                    <input
+                      className="mant-prod-form-control"
+                      type="number"
+                      min="0"
+                      placeholder="Máxima"
+                      value={newCantidad_maxima}
+                      onChange={(e) => setNewCantidad_maxima(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mant-prod-modal-footer">
+              <button className="mant-prod-btn mant-prod-btn-secondary" onClick={closeEditModal}>
+                Cerrar
+              </button>
+              <button className="mant-prod-btn mant-prod-btn-success" onClick={handleUpdate}>
+                Guardar
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="mm-modal__actions">
-          <button className="btn btn-primary" onClick={handleUpdate}>
-            Guardar
-          </button>
-          <button className="btn btn-outline" onClick={closeEditModal}>
-            Cerrar
-          </button>
-        </div>
-      </Modal>
+      )}
 
       <ToastContainer autoClose={3000} hideProgressBar={false} />
     </div>
