@@ -42,6 +42,28 @@ export default function Inventario() {
 
   const usuarioData = JSON.parse(localStorage.getItem("usuarioData") || "{}");
 
+  const rol = (usuarioData.rol_nombre || "").toLowerCase();
+
+const handleVolver = () => {
+    const rawUser = localStorage.getItem("mm_user");
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    const rol = (user?.rol_nombre || "").toLowerCase();
+
+    if (
+      (rol.includes("guarda") && rol.includes("almacen")) ||
+      (rol.includes("auxiliar") &&
+        rol.includes("de") &&
+        rol.includes("almacen"))
+    ) {
+      navigate("/guarda/dashboard");
+    } else if (rol.includes("admin")) {
+      navigate("/dashboard");
+    } else {
+      navigate("/"); // por si acaso
+    }
+  };
+
+
   // ==========================
   //   CARGAR INVENTARIO
   // ==========================
@@ -340,12 +362,10 @@ export default function Inventario() {
           >
             📊 Movimientos
           </button>
-          <button
-            className="btn btn-topbar-outline"
-            onClick={() => navigate("/dashboard")}
-          >
-            ← Menú
+          <button className="mant-prod-btn mant-prod-btn-topbar-outline" onClick={handleVolver}>
+            ← Volver al Menú Principal
           </button>
+
           <button
             className="btn btn-topbar-outline"
             onClick={cargarInventario}

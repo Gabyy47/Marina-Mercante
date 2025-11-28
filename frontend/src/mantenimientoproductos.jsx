@@ -123,8 +123,8 @@ export default function MantenimientoProducto() {
       toast.error("Las cantidades no pueden ser negativas.");
       return null;
     }
-    if (min > max) {
-      toast.error("La cantidad mínima no puede ser mayor que la máxima.");
+    if (min >= max) {
+      toast.error("La cantidad mínima no puede ser mayor o igual que la máxima.");
       return null;
     }
     return { min, max };

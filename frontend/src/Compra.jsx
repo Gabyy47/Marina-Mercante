@@ -50,6 +50,25 @@ export default function Compra() {
     precio_compra: ""
   });
 
+  const handleVolver = () => {
+    const rawUser = localStorage.getItem("mm_user");
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    const rol = (user?.rol_nombre || "").toLowerCase();
+
+    if (
+      (rol.includes("guarda") && rol.includes("almacen")) ||
+      (rol.includes("auxiliar") &&
+        rol.includes("de") &&
+        rol.includes("almacen"))
+    ) {
+      navigate("/guarda/dashboard");
+    } else if (rol.includes("admin")) {
+      navigate("/dashboard");
+    } else {
+      navigate("/"); // por si acaso
+    }
+  };
+
   // ============================
   // CARGAR COMPRAS + PROVEEDORES
   // ============================
@@ -397,7 +416,9 @@ export default function Compra() {
             <FaFilePdf size={16} /> Generar Reporte PDF
           </button>
           <button className="btn btn-topbar-outline" onClick={abrirModalNueva}>＋ Nueva Compra</button>
-          <button className="btn btn-topbar-outline" onClick={() => navigate("/")}>← Menú</button>
+          <button className="mant-prod-btn mant-prod-btn-topbar-outline" onClick={handleVolver}>
+            ← Volver al Menú Principal
+          </button>
           <button className="btn btn-topbar-outline" onClick={cargarDatos}>⟳ Refrescar</button>
         </div>
       </div>
@@ -440,7 +461,6 @@ export default function Compra() {
         <table className="inventario-table">
           <thead>
             <tr>
-              <th>#</th>
               <th>Proveedor</th>
               <th>Usuario</th>
               <th>Fecha</th>
@@ -453,7 +473,6 @@ export default function Compra() {
             {comprasFiltradas.length > 0 ? (
               comprasFiltradas.map((c) => (
                 <tr key={c.id_compra}>
-                  <td>{c.id_compra}</td>
                   <td>{c.nombre_proveedor}</td>
                   <td>{c.nombre_usuario}</td>
                   <td>{new Date(c.fecha).toLocaleString()}</td>

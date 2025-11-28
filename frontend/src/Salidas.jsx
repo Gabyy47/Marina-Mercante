@@ -67,6 +67,25 @@ export default function Salidas() {
     });
   };
 
+  const handleVolver = () => {
+    const rawUser = localStorage.getItem("mm_user");
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    const rol = (user?.rol_nombre || "").toLowerCase();
+
+    if (
+      (rol.includes("guarda") && rol.includes("almacen")) ||
+      (rol.includes("auxiliar") &&
+        rol.includes("de") &&
+        rol.includes("almacen"))
+    ) {
+      navigate("/guarda/dashboard");
+    } else if (rol.includes("admin")) {
+      navigate("/dashboard");
+    } else {
+      navigate("/"); // por si acaso
+    }
+  };
+
   // ============================
   // CARGAR DATOS
   // ============================
@@ -332,7 +351,9 @@ export default function Salidas() {
 
         <div className="topbar-actions">
           <button className="btn btn-topbar-outline" onClick={abrirModalNueva}>＋ Nueva Salida</button>
-          <button className="btn btn-topbar-outline" onClick={() => navigate("/")}>← Menú</button>
+          <button className="mant-prod-btn mant-prod-btn-topbar-outline" onClick={handleVolver}>
+            ← Volver al Menú Principal
+          </button>
           <button className="btn btn-topbar-outline" onClick={cargarDatos}>⟳ Refrescar</button>
           <button className="btn btn-topbar-primary" onClick={generarPDFSalidas}>
             <FaFilePdf size={16} /> Generar Reporte PDF
