@@ -121,14 +121,6 @@ export default function DashboardGuarda() {
             <MdInventory2 />
             <span>Inventario</span>
           </button>
-
-          <button
-            className="mm-menu-item"
-            onClick={() => navigate("/guarda/Kardex")}
-          >
-            <MdInventory2 />
-            <span>Kardex</span>
-          </button>
           
           
           <button
