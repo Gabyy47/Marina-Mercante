@@ -58,13 +58,13 @@ const transporter = nodemailer.createTransport({
 });
 
 // Verificar conexión SMTP al iniciar
-transporter.verify((err, ok) => {
-  if (err) {
-    console.error('❌ SMTP VERIFY ERROR:', err);
-  } else {
-    console.log('✅ SMTP READY:', ok);
-  }
-});
+//transporter.verify((err, ok) => {
+ // if (err) {
+  //  console.error('❌ SMTP VERIFY ERROR:', err);
+ // } else {
+ //   console.log('✅ SMTP READY:', ok);
+ // }
+//});
 
 // ===== Funciones auxiliares =====
 
