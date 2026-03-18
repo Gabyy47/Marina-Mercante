@@ -253,6 +253,15 @@ const SECRET_KEY = process.env.JWT_SECRET || "1984";
 // === usar las rutas de backup 
 app.use("/api", backupRoutes); 
 
+const path = require("path");
+
+// Servir frontend
+app.use(express.static(path.join(__dirname, "../frontend/dist")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
+});
+
 app.listen(PORT, () => {
   conexion.query("SELECT 1", (err, results) => {
     if (err) {
