@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:49146/api",
+  baseURL: "https://marina-mercante-production.up.railway.app/api",
   withCredentials: true,
 });
 

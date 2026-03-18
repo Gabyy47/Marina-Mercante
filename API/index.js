@@ -247,7 +247,7 @@ app.use(cookieParser());
 
 // ===== Verificar conexión a la BD y levantar servidor =====
 app.use("/api", meRoutes(conexion, { verificarToken, bloquearCambioRolSiNoAdmin }));
-const PORT = 49146;
+const PORT = process.env.PORT || 3000;
 const SECRET_KEY = process.env.JWT_SECRET || "1984";
 
 // === usar las rutas de backup 
@@ -260,7 +260,7 @@ app.listen(PORT, () => {
       process.exit(1);
     } else {
       console.log(" Conexión a la BD con éxito.");
-      console.log(` API corriendo en http://localhost:${PORT}`);
+      console.log(`API corriendo en puerto ${PORT}`);
     }
   });
 });

@@ -1,9 +1,10 @@
 // API/dbConfig.js
 const DB_CONFIG = {
-  host: "localhost",
-  user: "root",
-  password: "1984",
-  database: "marina_mercante_v2",
+  host: process.env.MYSQLHOST,
+  user: process.env.MYSQLUSER,
+  password: process.env.MYSQLPASSWORD,
+  database: process.env.MYSQLDATABASE,
+  port: process.env.MYSQLPORT
 };
 
 module.exports = DB_CONFIG;
