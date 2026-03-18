@@ -286,9 +286,7 @@ app.get("/api/json", (req, res) => {
   res.json({ text: "HOLA ESTE ES UN JSON" });
 });
 
-app.get("/", (req, res) => {
-  res.send("¡Hola Mundo!");
-});
+
 
 // Ruta protegida de ejemplo
 app.get("/api/seguro", verificarToken, (req, res) => {
