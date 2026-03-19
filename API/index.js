@@ -58,13 +58,13 @@ const transporter = nodemailer.createTransport({
 });
 
 // Verificar conexión SMTP al iniciar
-transporter.verify((err, ok) => {
-  if (err) {
-    console.error('❌ SMTP VERIFY ERROR:', err);
-  } else {
-    console.log('✅ SMTP READY:', ok);
-  }
-});
+//transporter.verify((err, ok) => {
+ // if (err) {
+  //  console.error('❌ SMTP VERIFY ERROR:', err);
+ // } else {
+ //   console.log('✅ SMTP READY:', ok);
+ // }
+//});
 
 // ===== Funciones auxiliares =====
 
@@ -247,11 +247,23 @@ app.use(cookieParser());
 
 // ===== Verificar conexión a la BD y levantar servidor =====
 app.use("/api", meRoutes(conexion, { verificarToken, bloquearCambioRolSiNoAdmin }));
-const PORT = 49146;
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor corriendo en puerto ${PORT}`);
+});
 const SECRET_KEY = process.env.JWT_SECRET || "1984";
 
 // === usar las rutas de backup 
 app.use("/api", backupRoutes); 
+
+const path = require("path");
+
+
+
+
+
+
 
 app.listen(PORT, () => {
   conexion.query("SELECT 1", (err, results) => {
@@ -260,7 +272,7 @@ app.listen(PORT, () => {
       process.exit(1);
     } else {
       console.log(" Conexión a la BD con éxito.");
-      console.log(` API corriendo en http://localhost:${PORT}`);
+      console.log(`API corriendo en puerto ${PORT}`);
     }
   });
 });
@@ -277,9 +289,7 @@ app.get("/api/json", (req, res) => {
   res.json({ text: "HOLA ESTE ES UN JSON" });
 });
 
-app.get("/", (req, res) => {
-  res.send("¡Hola Mundo!");
-});
+
 
 // Ruta protegida de ejemplo
 app.get("/api/seguro", verificarToken, (req, res) => {
@@ -5174,3 +5184,9 @@ app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("K
 
 // ===== 404 =====
 app.use((req, res) => res.status(404).json({ mensaje: "Ruta no encontrada" }));
+// Servir frontend
+app.use(Express.static(path.join(__dirname, "../frontend/dist")));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
+});
