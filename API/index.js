@@ -666,7 +666,7 @@ app.post("/api/login", (req, res) => {
       r.nombre AS rol_nombre
     FROM tbl_usuario u
     LEFT JOIN tbl_rol r ON u.id_rol = r.id_rol
-    WHERE u.nombre_usuario = ? AND u.contraseña = ?
+    WHERE u.nombre_usuario = ? AND u.contraseña = SHA2(?, 256)
     LIMIT 1
   `;
 
@@ -1052,7 +1052,7 @@ app.post("/api/usuario", async (req, res) => {
 
   const query = `
     INSERT INTO tbl_usuario (id_rol, nombre, apellido, correo, nombre_usuario, contraseña)
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, SHA2(?, 256))
   `;
   const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, contraseña];
 
@@ -1080,20 +1080,21 @@ app.post("/api/usuario", async (req, res) => {
 
 // Actualizar usuario
 app.put("/api/usuario", async (req, res) => {
-  const { id_usuario, id_rol, nombre, apellido, correo, nombre_usuario, id_admin } = req.body;
+  const { id_usuario, id_rol, nombre, apellido, correo, nombre_usuario, contraseña, id_admin } = req.body;
 
   if (!id_usuario)
     return res.status(400).json({ error: "id_usuario es requerido" });
 
   const query = `
-    UPDATE tbl_usuario
-    SET id_rol = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?
+    UPDATE tbl_usuario 
+    SET id_rol = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?, contraseña = SHA2(?, 256) 
     WHERE id_usuario = ?
-  `;
-  const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, id_usuario];
+`;
 
-  try {
-    const [result] = await conexion.promise().query(query, values);
+const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, contraseña, id_usuario]; 
+
+  try { 
+    const [result] = await conexion.promise().query(query, values); 
 
     if (result.affectedRows === 0)
       return res.status(404).json({ mensaje: "Usuario no encontrado" });
