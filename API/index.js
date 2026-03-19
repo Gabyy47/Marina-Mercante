@@ -259,12 +259,11 @@ app.use("/api", backupRoutes);
 
 const path = require("path");
 
-// Servir frontend
-app.use(Express.static(path.join(__dirname, "../frontend/dist")));
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
-});
+
+
+
+
 
 app.listen(PORT, () => {
   conexion.query("SELECT 1", (err, results) => {
@@ -5185,3 +5184,9 @@ app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("K
 
 // ===== 404 =====
 app.use((req, res) => res.status(404).json({ mensaje: "Ruta no encontrada" }));
+// Servir frontend
+app.use(Express.static(path.join(__dirname, "../frontend/dist")));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
+});
