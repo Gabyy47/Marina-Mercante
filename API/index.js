@@ -248,6 +248,10 @@ app.use(cookieParser());
 // ===== Verificar conexión a la BD y levantar servidor =====
 app.use("/api", meRoutes(conexion, { verificarToken, bloquearCambioRolSiNoAdmin }));
 const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor corriendo en puerto ${PORT}`);
+});
 const SECRET_KEY = process.env.JWT_SECRET || "1984";
 
 // === usar las rutas de backup 
