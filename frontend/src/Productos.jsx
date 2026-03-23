@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from './api';
-import './inventario.css';
+import './Productos.css';
 import logoDGMM from './imagenes/DGMM-Gobierno.png';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -21,6 +21,9 @@ export default function Productos() {
   });
 
   const [editing, setEditing] = useState(null);
+
+  // Modal de edición
+  const [showModalEditar, setShowModalEditar] = useState(false);
 
 
   
@@ -63,6 +66,7 @@ export default function Productos() {
         cantidad_maxima: 0,
         descripcion: ''
       });
+      setShowModalEditar(false);
 
     } catch (e) {
       alert("Error: " + (e.response?.data?.error || e.message));
@@ -90,6 +94,18 @@ export default function Productos() {
       cantidad_minima: p.cantidad_minima,
       cantidad_maxima: p.cantidad_maxima,
       descripcion: p.descripcion
+    });
+    setShowModalEditar(true);
+  };
+
+  const cerrarModalEditar = () => {
+    setShowModalEditar(false);
+    setEditing(null);
+    setForm({
+      nombre_producto: '',
+      cantidad_minima: 0,
+      cantidad_maxima: 0,
+      descripcion: ''
     });
   };
 
@@ -160,38 +176,27 @@ const generarPDF = () => {
 
 
   return (
-    <div className="inventario-page">
+    <div className="prod-page">
       
-      <div className="inventario-logo-wrap">
+      <div className="prod-logo-wrap">
         <img src={logoDGMM} alt="DGMM" />
       </div>
 
-      <div className="inventario-topbar" style={{ maxWidth: 1000 }}>
-        <span className="topbar-title">Gestión de Productos</span>
+      <div className="prod-topbar" style={{ maxWidth: 1000 }}>
+        <span className="prod-topbar-title">Gestión de Productos</span>
 
-        <div className="topbar-actions">
+        <div className="prod-topbar-actions">
           
-          <button className="btn btn-topbar-outline" onClick={() => navigate('/')}>
+          <button className="prod-btn prod-btn-topbar-outline" onClick={() => navigate('/')}>
             ← Menú
           </button>
 
-          <button className="btn btn-topbar-outline" onClick={fetchAll} style={{ marginLeft: 8 }}>
+          <button className="prod-btn prod-btn-topbar-outline" onClick={fetchAll} style={{ marginLeft: 8 }}>
             ⟳ Refrescar
           </button>
 
           <button
-            className="btn btn-topbar-outline"
-            onClick={() => {
-              setEditing(null);
-              setForm({ nombre_producto: '', cantidad_minima: 0, cantidad_maxima: 0, descripcion: '' });
-            }}
-            style={{ marginLeft: 8 }}
-          >
-            ＋ Nuevo
-          </button>
-
-          <button
-            className="btn btn-topbar-outline"
+            className="prod-btn prod-btn-topbar-outline"
             onClick={generarPDF}
             style={{ marginLeft: 8 }}
 >           📄 Exportar PDF
@@ -200,11 +205,11 @@ const generarPDF = () => {
         </div>
       </div>
 
-      <div className="inventario-card" style={{ maxWidth: 1000 }}>
+      <div className="prod-card" style={{ maxWidth: 1000 }}>
         {loading ? (
-          <div className="loading">Cargando...</div>
+          <div className="prod-loading">Cargando...</div>
         ) : (
-          <table className="inventario-table">
+          <table className="prod-table">
             <thead>
               <tr>
                 <th>#</th>
@@ -225,11 +230,11 @@ const generarPDF = () => {
                   <td>{it.cantidad_maxima}</td>
                   <td>{it.descripcion}</td>
                   <td>
-                    <button className="btn btn-sm btn-outline-primary me-2" onClick={() => startEdit(it)}>
+                    <button className="prod-btn prod-btn-sm prod-btn-outline-primary prod-me-2" onClick={() => startEdit(it)}>
                       Editar
                     </button>
 
-                    <button className="btn btn-sm btn-outline-danger" onClick={() => remove(it.id_producto)}>
+                    <button className="prod-btn prod-btn-sm prod-btn-outline-danger" onClick={() => remove(it.id_producto)}>
                       Eliminar
                     </button>
                   </td>
@@ -239,63 +244,90 @@ const generarPDF = () => {
           </table>
         )}
 
-        <div style={{ marginTop: 12 }}>
-          <h5 style={{ marginBottom: 8 }}>{editing ? "Editar" : "Nuevo"} producto</h5>
+      </div>
 
-          <input
-            className="form-control mb-2"
-            placeholder="Nombre"
-            value={form.nombre_producto}
-            onChange={(e) => setForm({ ...form, nombre_producto: e.target.value })}
-          />
+      {/* MODAL EDITAR PRODUCTO */}
+      {showModalEditar && (
+        <div className="prod-modal-overlay" onClick={cerrarModalEditar}>
+          <div
+            className="prod-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 550 }}
+          >
+            <div className="prod-modal-header">
+              <h3>{editing ? "Editar" : "Nuevo"} Producto</h3>
+              <button className="prod-modal-close" onClick={cerrarModalEditar}>
+                ✕
+              </button>
+            </div>
 
-          <div className="d-flex gap-2 mb-2">
-            <input
-              className="form-control"
-              type="number"
-              placeholder="Cantidad mínima"
-              value={form.cantidad_minima}
-              onChange={(e) => setForm({ ...form, cantidad_minima: e.target.value })}
-            />
+            <div className="prod-modal-body">
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Nombre del Producto</label>
+                  <input
+                    className="prod-form-control"
+                    placeholder="Nombre del producto"
+                    value={form.nombre_producto}
+                    onChange={(e) => setForm({ ...form, nombre_producto: e.target.value })}
+                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d7dee3" }}
+                  />
+                </div>
 
-            <input
-              className="form-control"
-              type="number"
-              placeholder="Cantidad máxima"
-              value={form.cantidad_maxima}
-              onChange={(e) => setForm({ ...form, cantidad_maxima: e.target.value })}
-            />
-          </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Cantidad Mínima</label>
+                    <input
+                      className="prod-form-control"
+                      type="number"
+                      placeholder="Mínima"
+                      value={form.cantidad_minima}
+                      onChange={(e) => setForm({ ...form, cantidad_minima: e.target.value })}
+                      style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d7dee3" }}
+                    />
+                  </div>
 
-          <textarea
-            className="form-control mb-2"
-            placeholder="Descripción"
-            value={form.descripcion}
-            onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
-          />
+                  <div>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Cantidad Máxima</label>
+                    <input
+                      className="prod-form-control"
+                      type="number"
+                      placeholder="Máxima"
+                      value={form.cantidad_maxima}
+                      onChange={(e) => setForm({ ...form, cantidad_maxima: e.target.value })}
+                      style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d7dee3" }}
+                    />
+                  </div>
+                </div>
 
-          <div>
-            <button className="btn btn-success me-2" onClick={save}>
-              Guardar
-            </button>
+                <div>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Descripción</label>
+                  <textarea
+                    className="prod-form-control"
+                    placeholder="Descripción del producto"
+                    value={form.descripcion}
+                    onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d7dee3", minHeight: "80px", resize: "vertical" }}
+                  />
+                </div>
+              </div>
+            </div>
 
-            <button
-              className="btn btn-secondary"
-              onClick={() =>
-                setForm({
-                  nombre_producto: '',
-                  cantidad_minima: 0,
-                  cantidad_maxima: 0,
-                  descripcion: ''
-                })
-              }
-            >
-              Limpiar
-            </button>
+            <div className="prod-modal-footer">
+              <button className="prod-btn prod-btn-secondary" onClick={cerrarModalEditar}>
+                Cancelar
+              </button>
+              <button
+                className="prod-btn prod-btn-success"
+                onClick={save}
+                disabled={loading}
+              >
+                {loading ? "Guardando..." : "Guardar Cambios"}
+              </button>
+            </div>
           </div>
         </div>
-
-      </div>
+      )}
     </div>
   );
 }

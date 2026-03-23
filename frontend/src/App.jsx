@@ -20,7 +20,8 @@ import Compra from "./Compra.jsx";
 import Salidas from "./Salidas.jsx";
 import DetalleSalidas from "./DetalleSalidas.jsx";
 import Inventario from "./inventario.jsx";
-
+import MantVentanilla from "./MantVentanilla";
+import PanelLlamado from "./PanelLlamado";
 
 
 

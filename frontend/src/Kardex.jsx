@@ -74,9 +74,9 @@ export default function Kardex() {
       (!producto ||
         item.producto?.toLowerCase().includes(producto.toLowerCase())) &&
       (!tipo || item.tipo_movimiento === tipo) &&
-      (!usuario || String(item.id_usuario).includes(usuario)) &&
+      (!usuario || item.usuario?.toLowerCase().includes(usuario.toLowerCase())) &&
       (!fecha ||
-        new Date(item.fecha).toDateString() === new Date(fecha).toDateString())
+        new Date(item.fecha).toLocaleDateString('en-CA') === fecha)
     );
   };
 
@@ -108,7 +108,7 @@ export default function Kardex() {
       k.producto,
       k.tipo_movimiento,
       k.cantidad,
-      k.id_usuario,
+      k.usuario,
       k.motivo || "",
     ]);
 
@@ -180,7 +180,7 @@ export default function Kardex() {
           </select>
 
           <input
-            placeholder="ID Usuario"
+            placeholder="Filtrar por usuario"
             value={filtros.usuario}
             onChange={(e) => setFiltros({ ...filtros, usuario: e.target.value })}
           />
@@ -213,7 +213,7 @@ export default function Kardex() {
                   <td>{k.producto}</td>
                   <td className={`mov-${k.tipo_movimiento}`}>{k.tipo_movimiento}</td>
                   <td>{k.cantidad}</td>
-                  <td>{k.id_usuario}</td>
+                  <td>{k.usuario}</td>
                   <td>{k.motivo || "-"}</td>
                 </tr>
               ))

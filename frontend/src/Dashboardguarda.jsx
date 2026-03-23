@@ -102,7 +102,7 @@ export default function DashboardGuarda() {
             onClick={() => navigate("/guarda/Proveedores")}
           >
             <MdInventory2 />
-            <span>Proveedores de mantenimiento</span>
+            <span>Mantenimiento de proveedores</span>
           </button>
 
           <button
@@ -110,40 +110,23 @@ export default function DashboardGuarda() {
             onClick={() => navigate("/guarda/inventario")}
           >
             <MdInventory2 />
-            <span>Mantenimiento inventario</span>
+            <span>Inventario</span>
           </button>
-
-          <button
-            className="mm-menu-item"
-            onClick={() => navigate("/guarda/inventariostatus")}
-          >
-            <MdInventory2 />
-            <span>Mantenimiento Inventariostatus</span>
-          </button>
-
-          <button
-            className="mm-menu-item"
-            onClick={() => navigate("/guarda/HistorialKardex")}
-          >
-            <MdInventory2 />
-            <span>Mantenimiento HistorialKardex</span>
-          </button>
-          
-          
+                    
           <button
             className="mm-menu-item"
             onClick={() => navigate("/guarda/Compra")}
           >
             <MdInventory2 />
-            <span>Mantenimiento Compra</span>
+            <span>Compras</span>
           </button>
 
           <button
             className="mm-menu-item"
-            onClick={() => navigate("/guarda/DetalleCompra")}
+            onClick={() => navigate("/guarda/Salidas")}
           >
             <MdInventory2 />
-            <span>Mantenimiento DetalleCompra</span>
+            <span>Salidas</span>
           </button>
 
         </nav>

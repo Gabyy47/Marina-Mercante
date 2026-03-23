@@ -6,7 +6,7 @@ import "./inventario.css";
 import { FaSyncAlt } from "react-icons/fa";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 const U = (s = "") => String(s).trim().toUpperCase();
 
@@ -29,7 +29,40 @@ export default function Inventario() {
   const [movimientos, setMovimientos] = useState([]);
   const [loadingMovs, setLoadingMovs] = useState(false);
 
+  // Modal Movimientos (Kardex completo)
+  const [showModalMovimientos, setShowModalMovimientos] = useState(false);
+  const [kardexCompleto, setKardexCompleto] = useState([]);
+  const [loadingKardex, setLoadingKardex] = useState(false);
+  const [filtrosKardex, setFiltrosKardex] = useState({
+    producto: "",
+    tipo: "",
+    usuario: "",
+    fecha: "",
+  });
+
   const usuarioData = JSON.parse(localStorage.getItem("usuarioData") || "{}");
+
+  const rol = (usuarioData.rol_nombre || "").toLowerCase();
+
+const handleVolver = () => {
+    const rawUser = localStorage.getItem("mm_user");
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    const rol = (user?.rol_nombre || "").toLowerCase();
+
+    if (
+      (rol.includes("guarda") && rol.includes("almacen")) ||
+      (rol.includes("auxiliar") &&
+        rol.includes("de") &&
+        rol.includes("almacen"))
+    ) {
+      navigate("/guarda/dashboard");
+    } else if (rol.includes("admin")) {
+      navigate("/dashboard");
+    } else {
+      navigate("/"); // por si acaso
+    }
+  };
+
 
   // ==========================
   //   CARGAR INVENTARIO
@@ -102,6 +135,94 @@ export default function Inventario() {
   };
 
   // ==========================
+  //   MODAL MOVIMIENTOS (KARDEX COMPLETO)
+  // ==========================
+  const abrirMovimientos = async () => {
+    setShowModalMovimientos(true);
+    setLoadingKardex(true);
+    setKardexCompleto([]);
+
+    try {
+      const res = await api.get("/kardex");
+      setKardexCompleto(res.data || []);
+    } catch (e) {
+      console.error("Error cargando kardex completo:", e);
+    } finally {
+      setLoadingKardex(false);
+    }
+  };
+
+  const cerrarMovimientos = () => {
+    setShowModalMovimientos(false);
+    setKardexCompleto([]);
+    setFiltrosKardex({ producto: "", tipo: "", usuario: "", fecha: "" });
+  };
+
+  const aplicarFiltroKardex = (item) => {
+    const { producto, tipo, usuario, fecha } = filtrosKardex;
+
+    return (
+      (!producto ||
+        item.producto?.toLowerCase().includes(producto.toLowerCase())) &&
+      (!tipo || item.tipo_movimiento === tipo) &&
+      (!usuario || item.usuario?.toLowerCase().includes(usuario.toLowerCase())) &&
+      (!fecha ||
+        new Date(item.fecha).toLocaleDateString('en-CA') === fecha)
+    );
+  };
+
+  const kardexFiltrado = kardexCompleto.filter(aplicarFiltroKardex);
+
+  const generarPDFMovimientos = () => {
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
+
+    doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(14, 42, 59);
+    doc.text("Dirección General de la Marina Mercante", 170, 50);
+
+    doc.setFontSize(14);
+    doc.text("Reporte de Movimientos (Kardex)", 170, 72);
+
+    doc.setFontSize(10);
+    doc.setTextColor(80);
+    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+    const columnas = ["Fecha", "Producto", "Tipo", "Cantidad", "Usuario", "Motivo"];
+
+    const filas = kardexFiltrado.map((k) => [
+      new Date(k.fecha).toLocaleDateString('en-CA'),
+      k.producto,
+      k.tipo_movimiento,
+      k.cantidad,
+      k.usuario,
+      k.motivo || "",
+    ]);
+
+    autoTable(doc, {
+      startY: 125,
+      head: [columnas],
+      body: filas,
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [242, 245, 247] }
+    });
+
+    const h = doc.internal.pageSize.height;
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(
+      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+      doc.internal.pageSize.width / 2,
+      h - 30,
+      { align: "center" }
+    );
+
+    doc.save("Movimientos_Kardex_DGMM.pdf");
+  };
+
+  // ==========================
   //   MENSAJE + PROGRESO
   // ==========================
   function buildRowWithInfo(row) {
@@ -170,24 +291,23 @@ export default function Inventario() {
   // ==========================
   const generatePDF = () => {
     try {
-      const pdf = new jsPDF("landscape", "pt", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 40;
-      let y = 40;
+      const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "A4" });
 
-      pdf.setFontSize(18);
-      pdf.text("Reporte de Inventario", pageWidth / 2, y, {
-        align: "center",
-      });
-      pdf.setFontSize(10);
-      pdf.text(
-        `Generado: ${new Date().toLocaleString()}`,
-        pageWidth - margin,
-        y,
-        { align: "right" }
-      );
-      y += 25;
+      // Logo y encabezado
+      doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(14, 42, 59);
+      doc.text("Dirección General de la Marina Mercante", 250, 50);
+
+      doc.setFontSize(14);
+      doc.text("Reporte de Inventario", 250, 72);
+
+      doc.setFontSize(10);
+      doc.setTextColor(80);
+      doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+
+      const columnas = ["Producto", "Cantidad", "Mínimo", "Máximo", "Estado", "Mensaje"];
 
       const body = filas.map((r) => [
         String(r.nombre_producto ?? ""),
@@ -198,52 +318,26 @@ export default function Inventario() {
         String(r.mensaje ?? ""),
       ]);
 
-      const head = [
-        ["Producto", "Cantidad", "Mínimo", "Máximo", "Estado", "Mensaje"],
-      ];
+      autoTable(doc, {
+        startY: 125,
+        head: [columnas],
+        body: body,
+        styles: { fontSize: 9, cellPadding: 5 },
+        headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [242, 245, 247] }
+      });
 
-      if (body.length > 0) {
-        pdf.autoTable({
-          startY: y,
-          head,
-          body,
-          theme: "striped",
-          headStyles: {
-            fillColor: [27, 144, 184],
-            textColor: 255,
-            fontStyle: "bold",
-          },
-          styles: {
-            fontSize: 9,
-            cellPadding: 4,
-            lineColor: [200, 200, 200],
-            lineWidth: 0.1,
-          },
-          showHead: "everyPage",
-          margin: { left: margin, right: margin },
-        });
-      } else {
-        pdf.setFontSize(11);
-        pdf.text(
-          "No hay registros para los filtros actuales.",
-          margin,
-          y + 12
-        );
-      }
+      const h = doc.internal.pageSize.height;
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      doc.text(
+        "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+        doc.internal.pageSize.width / 2,
+        h - 30,
+        { align: "center" }
+      );
 
-      const pageCount = pdf.internal.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        pdf.setPage(i);
-        pdf.setFontSize(8);
-        pdf.text(
-          `Página ${i} de ${pageCount}`,
-          pageWidth - margin,
-          pageHeight - 10,
-          { align: "right" }
-        );
-      }
-
-      pdf.save("inventario.pdf");
+      doc.save("Inventario_DGMM.pdf");
     } catch (e) {
       console.error("Error generando PDF:", e);
       alert("Error al generar PDF. Revisa la consola.");
@@ -264,10 +358,14 @@ export default function Inventario() {
         <div className="topbar-actions">
           <button
             className="btn btn-topbar-outline"
-            onClick={() => navigate("/dashboard")}
+            onClick={abrirMovimientos}
           >
-            ← Menú
+            📊 Movimientos
           </button>
+          <button className="mant-prod-btn mant-prod-btn-topbar-outline" onClick={handleVolver}>
+            ← Volver al Menú Principal
+          </button>
+
           <button
             className="btn btn-topbar-outline"
             onClick={cargarInventario}
@@ -452,6 +550,113 @@ export default function Inventario() {
               <button
                 className="btn btn-topbar-outline"
                 onClick={cerrarModal}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL MOVIMIENTOS (KARDEX COMPLETO) */}
+      {showModalMovimientos && (
+        <div
+          className="inv-modal-overlay"
+          onClick={cerrarMovimientos}
+        >
+          <div
+            className="inv-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 1200 }}
+          >
+            <div className="inv-modal-header">
+              <h3>Movimientos de Inventario (Kardex)</h3>
+              <button className="inv-modal-close" onClick={cerrarMovimientos}>
+                ✕
+              </button>
+            </div>
+
+            <div className="inv-modal-body">
+              {/* Filtros */}
+              <div className="inventario-filtros" style={{ marginBottom: 20 }}>
+                <input
+                  placeholder="Filtrar por producto"
+                  value={filtrosKardex.producto}
+                  onChange={(e) => setFiltrosKardex({ ...filtrosKardex, producto: e.target.value })}
+                />
+
+                <select
+                  value={filtrosKardex.tipo}
+                  onChange={(e) => setFiltrosKardex({ ...filtrosKardex, tipo: e.target.value })}
+                >
+                  <option value="">Tipo (Todos)</option>
+                  <option value="entrada">Entrada</option>
+                  <option value="salida">Salida</option>
+                </select>
+
+                <input
+                  placeholder="Filtrar por usuario"
+                  value={filtrosKardex.usuario}
+                  onChange={(e) => setFiltrosKardex({ ...filtrosKardex, usuario: e.target.value })}
+                />
+
+                <input
+                  type="date"
+                  value={filtrosKardex.fecha}
+                  onChange={(e) => setFiltrosKardex({ ...filtrosKardex, fecha: e.target.value })}
+                />
+
+                <button
+                  className="btn btn-topbar-outline"
+                  onClick={() => setFiltrosKardex({ producto: "", tipo: "", usuario: "", fecha: "" })}
+                >
+                  Limpiar
+                </button>
+              </div>
+
+              {/* Tabla de Kardex */}
+              {loadingKardex ? (
+                <p>Cargando movimientos...</p>
+              ) : kardexFiltrado.length === 0 ? (
+                <p>No hay movimientos registrados.</p>
+              ) : (
+                <table className="inventario-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Producto</th>
+                      <th>Tipo</th>
+                      <th>Cantidad</th>
+                      <th>Usuario</th>
+                      <th>Motivo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kardexFiltrado.map((k, idx) => (
+                      <tr key={idx}>
+                        <td>{new Date(k.fecha).toLocaleString("es-HN")}</td>
+                        <td>{k.producto}</td>
+                        <td>{U(k.tipo_movimiento)}</td>
+                        <td>{k.cantidad}</td>
+                        <td>{k.usuario}</td>
+                        <td>{k.motivo || ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="inv-modal-footer">
+              <button
+                className="btn btn-topbar-primary"
+                onClick={generarPDFMovimientos}
+              >
+                📄 Generar PDF
+              </button>
+              <button
+                className="btn btn-topbar-outline"
+                onClick={cerrarMovimientos}
               >
                 Cerrar
               </button>
