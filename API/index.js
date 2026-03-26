@@ -645,108 +645,134 @@ app.delete("/api/roles/:id", verificarToken, autorizarRoles("Administrador"), as
   }
 });
 
-// ===== LOGIN =====
+// ===== LOGIN PASO 1: VALIDAR Y ENVIAR CÓDIGO =====
 app.post("/api/login", (req, res) => {
-  console.log("Ruta /api/login llamada");
-
   const { nombre_usuario, contraseña } = req.body;
 
-  // Validar campos
   if (!nombre_usuario || !contraseña) {
-    return res.status(400).json({ mensaje: "Faltan campos obligatorios." }); 
+    return res.status(400).json({ mensaje: "Faltan campos obligatorios." });
   }
 
   const q = `
-    SELECT 
-      u.id_usuario, 
-      u.nombre_usuario, 
-      u.contraseña, 
-      u.is_verified, 
-      u.id_rol, 
-      r.nombre AS rol_nombre
+    SELECT u.id_usuario, u.nombre_usuario, u.correo, u.is_verified, u.id_rol, r.nombre AS rol_nombre
     FROM tbl_usuario u
     LEFT JOIN tbl_rol r ON u.id_rol = r.id_rol
     WHERE u.nombre_usuario = ? AND u.contraseña = SHA2(?, 256)
     LIMIT 1
   `;
 
-  // SOLO UNA CONSULTA (la otra la eliminamos)
   conexion.query(q, [nombre_usuario, contraseña], (err, rows) => {
-    if (err) {
-      console.error("Error en consulta de login:", err);
-      return res.status(500).json({ mensaje: "Error interno en la base de datos." });
+    if (err) return res.status(500).json({ mensaje: "Error en la base de datos." });
+    if (!rows || rows.length === 0) return res.status(401).json({ mensaje: "Credenciales inválidas." });
+
+    const usuario = rows[0];
+
+    if (Number(usuario.is_verified) !== 1) {
+      return res.status(403).json({ mensaje: "Debes verificar tu correo primero." });
     }
 
+    // Generar código 2FA
+    const loginCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60000);
+
+    const qUpdate = "UPDATE tbl_usuario SET reset_code = ?, reset_expires = ? WHERE id_usuario = ?";
+    
+    conexion.query(qUpdate, [loginCode, expiresAt, usuario.id_usuario], (errUpd) => {
+      if (errUpd) return res.status(500).json({ mensaje: "Error al generar código." });
+
+      const mailOptions = {
+        from: process.env.MAIL_FROM || `"Soporte Marina Mercante" <${process.env.SMTP_USER}>`,
+        to: usuario.correo,
+        subject: "Código de seguridad",
+        html: `<p>Tu código de acceso es: <b>${loginCode}</b></p>`
+      };
+
+      transporter.sendMail(mailOptions, (mailErr) => {
+        if (mailErr) {
+          console.error("DETALLE DEL ERROR SMTP:", mailErr);
+          return res.status(500).json({ mensaje: "Error al enviar correo." });
+        }
+
+        return res.json({ 
+          requiereCodigo: true, 
+          id_usuario: usuario.id_usuario, 
+          mensaje: "Código enviado al correo." 
+        });
+      });
+    });
+  });
+});
+
+
+// ===== LOGIN PASO 2: VERIFICAR CÓDIGO Y DAR ACCESO =====
+app.post("/api/verificar-codigo-login", (req, res) => { 
+  const { id_usuario, codigo } = req.body;
+
+  if (!id_usuario || !codigo) {
+    return res.status(400).json({ mensaje: "Faltan datos." });
+  }
+
+  const q = `
+    SELECT u.id_usuario, u.nombre_usuario, u.id_rol, r.nombre AS rol_nombre 
+    FROM tbl_usuario u
+    LEFT JOIN tbl_rol r ON u.id_rol = r.id_rol
+    WHERE u.id_usuario = ? AND u.reset_code = ? AND u.reset_expires > NOW()
+    LIMIT 1
+  `;
+
+  conexion.query(q, [id_usuario, codigo], (err, rows) => {
+    if (err) return res.status(500).json({ mensaje: "Error en la base de datos." });
     if (!rows || rows.length === 0) {
-      return res.status(401).json({ mensaje: "Credenciales inválidas." });
+      return res.status(401).json({ mensaje: "Código inválido o expirado." });
     }
 
     const usuario = rows[0];
-    const rolNombre = (usuario.rol_nombre || "").trim().toUpperCase();
 
-    // Verificar rol
-    if (!usuario.id_rol || !usuario.rol_nombre || rolNombre === "SIN ROL") {
-      return res.status(403).json({
-        mensaje: "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
-      });
-    }
-
-    // Verificar email
-    if (Number(usuario.is_verified) !== 1) {
-      return res.status(403).json({
-        mensaje: "Debes verificar tu correo antes de iniciar sesión.",
-      });
-    }
-
-    // Generar token
+    // TOKEN Y BITÁCORA 
     const token = jwt.sign(
-      {
-        id_usuario: usuario.id_usuario,
-        nombre_usuario: usuario.nombre_usuario,
-        id_rol: usuario.id_rol,
-        rol_nombre: usuario.rol_nombre,
+      { 
+        id_usuario: usuario.id_usuario, 
+        nombre_usuario: usuario.nombre_usuario, 
+        id_rol: usuario.id_rol, 
+        rol_nombre: usuario.rol_nombre 
       },
-      process.env.JWT_SECRET || "1984",
+      process.env.JWT_SECRET || "1984", 
       { expiresIn: "1h" }
     );
 
-    // Guardar cookie
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      maxAge: 3600000,
+    res.cookie("token", token, { 
+      httpOnly: true, 
+      secure: false, 
+      sameSite: "lax", 
+      maxAge: 3600000 
     });
 
-    // Registrar en bitácora
-    const ID_OBJETO_LOGIN = 1;
+    // Registrar en bitácora 
+    logBitacora(conexion, {
+      id_objeto: 1,
+      id_usuario: usuario.id_usuario,
+      accion: "LOGIN",
+      descripcion: `Sesión iniciada por ${usuario.nombre_usuario}`,
+      usuario: usuario.nombre_usuario,
+    }, (bitErr) => {
 
-    logBitacora(
-      conexion,
-      {
-        id_objeto: ID_OBJETO_LOGIN,
-        id_usuario: usuario.id_usuario,
-        accion: "LOGIN",
-        descripcion: `El usuario ${usuario.nombre_usuario} inició sesión.`,
-        usuario: usuario.nombre_usuario,
-      },
-      (bitErr) => {
-        if (bitErr) {
-          console.error("No se pudo registrar LOGIN en bitácora:", bitErr.message);
+      // Limpiar código después de usarlo
+      conexion.query(
+        "UPDATE tbl_usuario SET reset_code = NULL, reset_expires = NULL WHERE id_usuario = ?", 
+        [usuario.id_usuario]
+      );
+
+      return res.json({
+        mensaje: "Inicio de sesión exitoso",
+        token,
+        usuario: { 
+          id_usuario: usuario.id_usuario, 
+          nombre_usuario: usuario.nombre_usuario, 
+          id_rol: usuario.id_rol, 
+          rol_nombre: usuario.rol_nombre 
         }
-
-        return res.json({
-          mensaje: "Inicio de sesión exitoso",
-          token,
-          usuario: {
-            id_usuario: usuario.id_usuario,
-            nombre_usuario: usuario.nombre_usuario,
-            id_rol: usuario.id_rol,
-            rol_nombre: usuario.rol_nombre,
-          },
-        });
-      }
-    );
+      });
+    });
   });
 });
 
@@ -956,7 +982,7 @@ app.post("/api/recuperar-restablecer", (req, res) => {
 
     const qUpd = `
       UPDATE tbl_usuario
-      SET contraseña = ?, reset_code = NULL, reset_expires = NULL, reset_used = 0
+      SET contraseña = SHA2(?, 256), reset_code = NULL, reset_expires = NULL, reset_used = 0
       WHERE id_usuario = ?
     `;
 
@@ -1080,18 +1106,18 @@ app.post("/api/usuario", async (req, res) => {
 
 // Actualizar usuario
 app.put("/api/usuario", async (req, res) => {
-  const { id_usuario, id_rol, nombre, apellido, correo, nombre_usuario, contraseña, id_admin } = req.body;
+  const { id_usuario, id_rol, nombre, apellido, correo, nombre_usuario, id_admin } = req.body;
 
   if (!id_usuario)
     return res.status(400).json({ error: "id_usuario es requerido" });
 
   const query = `
     UPDATE tbl_usuario 
-    SET id_rol = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?, contraseña = SHA2(?, 256) 
+    SET id_rol = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?) 
     WHERE id_usuario = ?
 `;
 
-const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, contraseña, id_usuario]; 
+const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, id_usuario]; 
 
   try { 
     const [result] = await conexion.promise().query(query, values); 

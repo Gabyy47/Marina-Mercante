@@ -130,7 +130,6 @@ export default function MantenimientoUsuarios() {
     setNewApellido(item.apellido ?? "");
     setNewCorreo(item.correo ?? "");
     setNewNombre_usuario(item.nombre_usuario ?? "");
-    setNewContraseña(item.contraseña ?? "");
     setIsEditModalOpen(true);
   };
   const closeEditModal = () => {
@@ -473,12 +472,6 @@ export default function MantenimientoUsuarios() {
             value={newNombre_usuario}
             onChange={(e) => setNewNombre_usuario(e.target.value)}
             placeholder="Usuario"
-          />
-          <input
-            type="password"
-            value={newContraseña}
-            onChange={(e) => setNewContraseña(e.target.value)}
-            placeholder="Contraseña"
           />
         </div>
         <div className="mm-modal__actions">

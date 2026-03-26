@@ -14,6 +14,12 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("login");
   const [showPass, setShowPass] = useState(false);
+  // ====== 2FA LOGIN ======
+const [login2FA, setLogin2FA] = useState({
+  step: 0, // 0 = oculto, 1 = pedir código
+  id_usuario: null,
+  codigo: ""
+});
 
   // ====== TOAST Y MODALES ======
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
@@ -59,6 +65,18 @@ const Login = () => {
     try {
       const { data } = await api.post("/login", formData);
 
+// 🔐 SI REQUIERE CÓDIGO 2FA
+if (data?.requiereCodigo) {
+  showToast(data.mensaje || "Código enviado al correo", "success");
+
+  setLogin2FA({
+    step: 1,
+    id_usuario: data.id_usuario,
+    codigo: ""
+  });
+
+  return; 
+}
       // Asegurarse que viene el token
       if (data?.token) {
         localStorage.setItem("token", data.token);
@@ -183,6 +201,68 @@ if (
     }
   };
 
+  const verifyLoginCode = async (e) => {
+  e.preventDefault();
+
+  if (!login2FA.codigo || login2FA.codigo.length !== 6) {
+    return showToast("Código inválido.", "error");
+  }
+
+  setLoading(true);
+
+  try {
+    const { data } = await api.post("/verificar-codigo-login", {
+      id_usuario: login2FA.id_usuario,
+      codigo: login2FA.codigo
+    });
+
+    // Guardar token
+    if (data?.token) {
+      localStorage.setItem("token", data.token);
+    }
+
+    if (data?.usuario) {
+      localStorage.setItem("mm_user", JSON.stringify(data.usuario));
+      localStorage.setItem("usuarioData", JSON.stringify(data.usuario));
+    }
+
+    showToast("¡Inicio de sesión exitoso!", "success");
+
+    setLogin2FA({ step: 0, id_usuario: null, codigo: "" });
+
+    const rol = data?.usuario?.rol_nombre || "";
+    const rolNorm = rol.toLowerCase();
+
+    if (
+      (rolNorm.includes("guarda") && rolNorm.includes("almacen")) ||
+      (rolNorm.includes("auxiliar") && rolNorm.includes("almacen"))
+    ) {
+      navigate("/guarda/dashboard", { replace: true });
+
+    } else if (rolNorm.includes("tickets")) {
+      navigate("/tickets/dashboard", { replace: true });
+
+    } else if (rolNorm.includes("admin")) {
+      navigate("/dashboard", { replace: true });
+
+    } else {
+      navigate(from === "/login" ? "/" : from, { replace: true });
+    }
+
+  } catch (err) {
+    showToast(err.response?.data?.mensaje || "Código incorrecto.", "error");
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handle2FAChange = (e) => {
+  const { value } = e.target;
+  if (/^\d*$/.test(value)) { // solo números
+    setLogin2FA((prev) => ({ ...prev, codigo: value }));
+  }
+};
+
   return (
     <div
       className="login-page"
@@ -274,6 +354,47 @@ if (
           {toast.message}
         </div>
       )}
+
+      {/* 🔐 MODAL 2FA LOGIN */}
+{login2FA.step === 1 && (
+  <div className="modal-overlay">
+    <div className="modal-box">
+      <h3>Verificación de seguridad</h3>
+      <p>Ingresa el código que enviamos a tu correo</p>
+
+      <form onSubmit={verifyLoginCode}>
+        <input
+          type="text"
+          placeholder="Código de 6 dígitos"
+          value={login2FA.codigo}
+          onChange={handle2FAChange}
+          maxLength={6}
+          required
+          className="input-field"
+        />
+
+        <div className="actions">
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setLogin2FA({ step: 0, id_usuario: null, codigo: "" })}
+            disabled={loading}
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="submit"
+            className="primary"
+            disabled={loading}
+          >
+            {loading ? "Verificando..." : "Verificar código"}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
 
       {/* Modal de acceso denegado */}
       {modal.show && (
