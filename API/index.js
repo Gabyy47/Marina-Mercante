@@ -259,12 +259,6 @@ app.use("/api", backupRoutes);
 
 const path = require("path");
 
-
-
-
-
-
-
 app.listen(PORT, () => {
   conexion.query("SELECT 1", (err, results) => {
     if (err) {
@@ -657,7 +651,7 @@ app.post("/api/login", (req, res) => {
     SELECT u.id_usuario, u.nombre_usuario, u.correo, u.is_verified, u.id_rol, r.nombre AS rol_nombre
     FROM tbl_usuario u
     LEFT JOIN tbl_rol r ON u.id_rol = r.id_rol
-    WHERE u.nombre_usuario = ? AND u.contraseña = SHA2(?, 256)
+    WHERE u.nombre_usuario = ? AND u.contraseña = ?
     LIMIT 1
   `;
 
@@ -982,7 +976,7 @@ app.post("/api/recuperar-restablecer", (req, res) => {
 
     const qUpd = `
       UPDATE tbl_usuario
-      SET contraseña = SHA2(?, 256), reset_code = NULL, reset_expires = NULL, reset_used = 0
+      SET contraseña = ?, reset_code = NULL, reset_expires = NULL, reset_used = 0
       WHERE id_usuario = ?
     `;
 
@@ -1078,7 +1072,7 @@ app.post("/api/usuario", async (req, res) => {
 
   const query = `
     INSERT INTO tbl_usuario (id_rol, nombre, apellido, correo, nombre_usuario, contraseña)
-    VALUES (?, ?, ?, ?, ?, SHA2(?, 256))
+    VALUES (?, ?, ?, ?, ?, ?)
   `;
   const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, contraseña];
 

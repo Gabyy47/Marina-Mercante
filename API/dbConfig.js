@@ -2,9 +2,9 @@
 
 const DB_CONFIG = {
   host: "localhost",
-  user: "user_marina",
-  password: "UsuarioMarina47!",
-  database: "marina_mercante_pruebas" 
+  user: "root",
+  password: "MysqlRoot47!",
+  database: "marina_mercante_pruebas2" 
 };
 
 module.exports = DB_CONFIG;
