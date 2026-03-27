@@ -1,5 +1,5 @@
 // src/Login.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react"; // Añade useEffect aquí
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
 import miImagen from "./imagenes/DGMM-Gobierno.png";
@@ -14,19 +14,27 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("login");
   const [showPass, setShowPass] = useState(false);
+  
+  // ====== ESTADOS PARA BLOQUEO POR INTENTOS FALLIDOS ======
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockoutTime, setLockoutTime] = useState(0);
+  const MAX_ATTEMPTS = 3;
+  const LOCKOUT_DURATION = 5 * 60 * 1000; // 5 minutos
+
   // ====== 2FA LOGIN ======
-const [login2FA, setLogin2FA] = useState({
-  step: 0, // 0 = oculto, 1 = pedir código
-  id_usuario: null,
-  codigo: ""
-});
+  const [login2FA, setLogin2FA] = useState({
+    step: 0,
+    id_usuario: null,
+    codigo: ""
+  });
 
   // ====== TOAST Y MODALES ======
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const [modal, setModal] = useState({ show: false, message: "" });
 
   // ====== RECUPERACIÓN DE CONTRASEÑA ======
-  const [forgotStep, setForgotStep] = useState(0); // 0=oculto, 1=correo, 2=código, 3=nueva contraseña
+  const [forgotStep, setForgotStep] = useState(0);
   const [recoveryData, setRecoveryData] = useState({
     correo: "",
     codigo: "",
@@ -38,6 +46,61 @@ const [login2FA, setLogin2FA] = useState({
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || "/";
+
+  // ====== EFECTO PARA CARGAR ESTADO DE BLOQUEO DESDE LOCALSTORAGE ======
+  useEffect(() => {
+    const savedLockEndTime = localStorage.getItem('lockEndTime');
+    const savedFailedAttempts = localStorage.getItem('failedAttempts');
+    
+    if (savedLockEndTime && savedFailedAttempts) {
+      const lockEndTime = parseInt(savedLockEndTime);
+      const now = Date.now();
+      
+      if (now < lockEndTime) {
+        // Todavía está bloqueado
+        setIsLocked(true);
+        setFailedAttempts(parseInt(savedFailedAttempts));
+        setLockoutTime(lockEndTime - now);
+        
+        // Configurar desbloqueo automático
+        const timer = setTimeout(() => {
+          unlockForm();
+        }, lockEndTime - now);
+        
+        return () => clearTimeout(timer);
+      } else {
+        // El bloqueo ya expiró
+        localStorage.removeItem('lockEndTime');
+        localStorage.removeItem('failedAttempts');
+      }
+    }
+  }, []);
+
+  // ====== FUNCIÓN PARA DESBLOQUEAR ======
+  const unlockForm = () => {
+    setIsLocked(false);
+    setFailedAttempts(0);
+    setLockoutTime(0);
+    localStorage.removeItem('lockEndTime');
+    localStorage.removeItem('failedAttempts');
+    showToast('Cuenta desbloqueada. Puedes intentar nuevamente.', 'success');
+  };
+
+  // ====== FUNCIÓN PARA BLOQUEAR ======
+  const lockForm = () => {
+    setIsLocked(true);
+    const lockEndTime = Date.now() + LOCKOUT_DURATION;
+    localStorage.setItem('lockEndTime', lockEndTime);
+    localStorage.setItem('failedAttempts', MAX_ATTEMPTS);
+    setLockoutTime(LOCKOUT_DURATION);
+    
+    showToast(`Demasiados intentos fallidos. Cuenta bloqueada por 5 minutos.`, 'error');
+    
+    // Configurar desbloqueo automático
+    setTimeout(() => {
+      unlockForm();
+    }, LOCKOUT_DURATION);
+  };
 
   // ====== TOAST ======
   const showToast = (message, type = "success", duration = 3000) => {
@@ -55,6 +118,14 @@ const [login2FA, setLogin2FA] = useState({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // VERIFICAR SI ESTÁ BLOQUEADO
+    if (isLocked) {
+      const remainingMinutes = Math.ceil(lockoutTime / 60000);
+      showToast(`Cuenta bloqueada. Espera ${remainingMinutes} minutos.`, "error");
+      return;
+    }
+    
     if (!formData.nombre_usuario || !formData.contraseña) {
       showToast("Completa usuario y contraseña.", "error");
       return;
@@ -65,18 +136,21 @@ const [login2FA, setLogin2FA] = useState({
     try {
       const { data } = await api.post("/login", formData);
 
-// 🔐 SI REQUIERE CÓDIGO 2FA
-if (data?.requiereCodigo) {
-  showToast(data.mensaje || "Código enviado al correo", "success");
-
-  setLogin2FA({
-    step: 1,
-    id_usuario: data.id_usuario,
-    codigo: ""
-  });
-
-  return; 
-}
+      // SI EL LOGIN ES EXITOSO, RESETEAR INTENTOS FALLIDOS
+      if (data?.requiereCodigo) {
+        // Resetear intentos fallidos en caso de éxito parcial
+        setFailedAttempts(0);
+        localStorage.removeItem('failedAttempts');
+        
+        showToast(data.mensaje || "Código enviado al correo", "success");
+        setLogin2FA({
+          step: 1,
+          id_usuario: data.id_usuario,
+          codigo: ""
+        });
+        return;
+      }
+      
       // Asegurarse que viene el token
       if (data?.token) {
         localStorage.setItem("token", data.token);
@@ -85,58 +159,68 @@ if (data?.requiereCodigo) {
       // Guardar datos del usuario que inició sesión
       if (data?.usuario) {
         localStorage.setItem("mm_user", JSON.stringify(data.usuario));
-        localStorage.setItem("usuarioData", JSON.stringify(data.usuario)); 
+        localStorage.setItem("usuarioData", JSON.stringify(data.usuario));
       }
+
+      // RESETEAR INTENTOS FALLIDOS AL INICIAR SESIÓN EXITOSAMENTE
+      setFailedAttempts(0);
+      localStorage.removeItem('failedAttempts');
+      localStorage.removeItem('lockEndTime');
 
       showToast("¡Inicio de sesión exitoso!", "success");
 
       const rol = data?.usuario?.rol_nombre || "";
-const rolNorm = rol.toLowerCase();
+      const rolNorm = rol.toLowerCase();
 
-if (
-  (rolNorm.includes("guarda") && rolNorm.includes("almacen")) ||
-  (rolNorm.includes("auxiliar") && rolNorm.includes("almacen"))
-) {
-  navigate("/guarda/dashboard", { replace: true });
-
-} else if (rolNorm.includes("tickets")) {
-  navigate("/tickets/dashboard", { replace: true });
-
-} else if (rolNorm.includes("admin")) {
-  navigate("/dashboard", { replace: true });
-
-} else {
-  navigate(from === "/login" ? "/" : from, { replace: true });
-}
-
+      if (
+        (rolNorm.includes("guarda") && rolNorm.includes("almacen")) ||
+        (rolNorm.includes("auxiliar") && rolNorm.includes("almacen"))
+      ) {
+        navigate("/guarda/dashboard", { replace: true });
+      } else if (rolNorm.includes("tickets")) {
+        navigate("/tickets/dashboard", { replace: true });
+      } else if (rolNorm.includes("admin")) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        navigate(from === "/login" ? "/" : from, { replace: true });
+      }
 
     } catch (error) {
       const status = error.response?.status;
       const msg = error.response?.data?.mensaje || "Error al iniciar sesión.";
 
+      // INCREMENTAR CONTADOR DE INTENTOS FALLIDOS
+      const newFailedAttempts = failedAttempts + 1;
+      setFailedAttempts(newFailedAttempts);
+      localStorage.setItem('failedAttempts', newFailedAttempts);
+      
+      // VERIFICAR SI ALCANZÓ EL MÁXIMO DE INTENTOS
+      if (newFailedAttempts >= MAX_ATTEMPTS) {
+        lockForm();
+        showToast(`Has alcanzado el máximo de ${MAX_ATTEMPTS} intentos fallidos. Cuenta bloqueada por 5 minutos.`, "error");
+      } else {
+        const remainingAttempts = MAX_ATTEMPTS - newFailedAttempts;
+        showToast(`Credenciales incorrectas. Te quedan ${remainingAttempts} intento(s).`, "error");
+      }
+
       if (status === 403 && msg.includes("No tiene un rol")) {
         setModal({
           show: true,
-          message:
-            "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
+          message: "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
         });
-      } else if (status === 401) {
-        showToast("Credenciales inválidas. Verifica usuario y contraseña.", "error");
-      } else {
-        showToast(msg, "error");
       }
     } finally {
       setLoading(false);
     }
   };
 
+  // ... (el resto de tus funciones: handleRecoveryChange, sendRecoveryCode, etc. se mantienen igual)
   // ====== RECUPERACIÓN DE CONTRASEÑA ======
   const handleRecoveryChange = (e) => {
     const { name, value } = e.target;
     setRecoveryData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // === Paso 1: Enviar código al correo ===
   const sendRecoveryCode = async (e) => {
     e.preventDefault();
     const correo = recoveryData.correo.trim();
@@ -147,7 +231,7 @@ if (
     try {
       const { data } = await api.post("/recuperar-iniciar", { correo });
       showToast(data?.mensaje || "Código enviado. Revisa tu correo.", "success");
-      setForgotStep(2); // avanzar a verificar código
+      setForgotStep(2);
     } catch (err) {
       console.error("[FRONT] Error /recuperar-iniciar:", err);
       showToast(err.response?.data?.mensaje || "No se pudo enviar el código.", "error");
@@ -156,7 +240,6 @@ if (
     }
   };
 
-  // === Paso 2: Verificar código ===
   const verifyRecoveryCode = async (e) => {
     e.preventDefault();
     const { correo, codigo } = recoveryData;
@@ -166,7 +249,7 @@ if (
     try {
       const { data } = await api.post("/recuperar-verificar", { correo, codigo });
       showToast(data?.mensaje || "Código verificado.", "success");
-      setForgotStep(3); // avanzar al paso de nueva contraseña
+      setForgotStep(3);
     } catch (err) {
       showToast(err.response?.data?.mensaje || "Código incorrecto.", "error");
     } finally {
@@ -174,7 +257,6 @@ if (
     }
   };
 
-  // === Paso 3: Restablecer contraseña ===
   const resetPassword = async (e) => {
     e.preventDefault();
     const { correo, nueva1, nueva2 } = recoveryData;
@@ -202,66 +284,66 @@ if (
   };
 
   const verifyLoginCode = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (!login2FA.codigo || login2FA.codigo.length !== 6) {
-    return showToast("Código inválido.", "error");
-  }
-
-  setLoading(true);
-
-  try {
-    const { data } = await api.post("/verificar-codigo-login", {
-      id_usuario: login2FA.id_usuario,
-      codigo: login2FA.codigo
-    });
-
-    // Guardar token
-    if (data?.token) {
-      localStorage.setItem("token", data.token);
+    if (!login2FA.codigo || login2FA.codigo.length !== 6) {
+      return showToast("Código inválido.", "error");
     }
 
-    if (data?.usuario) {
-      localStorage.setItem("mm_user", JSON.stringify(data.usuario));
-      localStorage.setItem("usuarioData", JSON.stringify(data.usuario));
+    setLoading(true);
+
+    try {
+      const { data } = await api.post("/verificar-codigo-login", {
+        id_usuario: login2FA.id_usuario,
+        codigo: login2FA.codigo
+      });
+
+      if (data?.token) {
+        localStorage.setItem("token", data.token);
+      }
+
+      if (data?.usuario) {
+        localStorage.setItem("mm_user", JSON.stringify(data.usuario));
+        localStorage.setItem("usuarioData", JSON.stringify(data.usuario));
+      }
+
+      // RESETEAR INTENTOS FALLIDOS AL INICIAR SESIÓN EXITOSAMENTE
+      setFailedAttempts(0);
+      localStorage.removeItem('failedAttempts');
+      localStorage.removeItem('lockEndTime');
+
+      showToast("¡Inicio de sesión exitoso!", "success");
+      setLogin2FA({ step: 0, id_usuario: null, codigo: "" });
+
+      const rol = data?.usuario?.rol_nombre || "";
+      const rolNorm = rol.toLowerCase();
+
+      if (
+        (rolNorm.includes("guarda") && rolNorm.includes("almacen")) ||
+        (rolNorm.includes("auxiliar") && rolNorm.includes("almacen"))
+      ) {
+        navigate("/guarda/dashboard", { replace: true });
+      } else if (rolNorm.includes("tickets")) {
+        navigate("/tickets/dashboard", { replace: true });
+      } else if (rolNorm.includes("admin")) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        navigate(from === "/login" ? "/" : from, { replace: true });
+      }
+
+    } catch (err) {
+      showToast(err.response?.data?.mensaje || "Código incorrecto.", "error");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    showToast("¡Inicio de sesión exitoso!", "success");
-
-    setLogin2FA({ step: 0, id_usuario: null, codigo: "" });
-
-    const rol = data?.usuario?.rol_nombre || "";
-    const rolNorm = rol.toLowerCase();
-
-    if (
-      (rolNorm.includes("guarda") && rolNorm.includes("almacen")) ||
-      (rolNorm.includes("auxiliar") && rolNorm.includes("almacen"))
-    ) {
-      navigate("/guarda/dashboard", { replace: true });
-
-    } else if (rolNorm.includes("tickets")) {
-      navigate("/tickets/dashboard", { replace: true });
-
-    } else if (rolNorm.includes("admin")) {
-      navigate("/dashboard", { replace: true });
-
-    } else {
-      navigate(from === "/login" ? "/" : from, { replace: true });
+  const handle2FAChange = (e) => {
+    const { value } = e.target;
+    if (/^\d*$/.test(value)) {
+      setLogin2FA((prev) => ({ ...prev, codigo: value }));
     }
-
-  } catch (err) {
-    showToast(err.response?.data?.mensaje || "Código incorrecto.", "error");
-  } finally {
-    setLoading(false);
-  }
-};
-
-const handle2FAChange = (e) => {
-  const { value } = e.target;
-  if (/^\d*$/.test(value)) { // solo números
-    setLogin2FA((prev) => ({ ...prev, codigo: value }));
-  }
-};
+  };
 
   return (
     <div
@@ -303,6 +385,7 @@ const handle2FAChange = (e) => {
                   onChange={handleChange}
                   required
                   maxLength={20}
+                  disabled={isLocked} // DESHABILITAR SI ESTÁ BLOQUEADO
                 />
               </div>
 
@@ -317,24 +400,40 @@ const handle2FAChange = (e) => {
                   required
                   maxLength={20}
                   autoComplete="current-password"
+                  disabled={isLocked} // DESHABILITAR SI ESTÁ BLOQUEADO
                 />
                 <button
                   type="button"
                   className="toggle-pass"
                   onClick={() => setShowPass((s) => !s)}
+                  disabled={isLocked} // DESHABILITAR SI ESTÁ BLOQUEADO
                 >
                   {showPass ? <FaEyeSlash /> : <FaEye />}
                 </button>
               </div>
 
-              <button type="submit" disabled={loading}>
-                {loading ? "Ingresando..." : "Ingresa"}
+              <button type="submit" disabled={loading || isLocked}>
+                {loading ? "Ingresando..." : isLocked ? "Cuenta Bloqueada" : "Ingresa"}
               </button>
+
+              {/* MOSTRAR INTENTOS RESTANTES SI NO ESTÁ BLOQUEADO */}
+              {!isLocked && failedAttempts > 0 && (
+                <p className="attempts-warning">
+                  Intentos restantes: {MAX_ATTEMPTS - failedAttempts} de {MAX_ATTEMPTS}
+                </p>
+              )}
+
+              {/* MOSTRAR TIEMPO DE BLOQUEO SI ESTÁ BLOQUEADO */}
+              {isLocked && (
+                <p className="locked-warning">
+                  Cuenta bloqueada. Espera {Math.ceil(lockoutTime / 60000)} minuto(s).
+                </p>
+              )}
 
               <p
                 className="forgot-link"
-                onClick={() => setForgotStep(1)}
-                style={{ cursor: "pointer", textDecoration: "underline" }}
+                onClick={() => !isLocked && setForgotStep(1)}
+                style={{ cursor: isLocked ? "not-allowed" : "pointer", textDecoration: "underline", opacity: isLocked ? 0.5 : 1 }}
               >
                 ¿Olvidaste tu usuario y/o contraseña?
               </p>
@@ -356,45 +455,45 @@ const handle2FAChange = (e) => {
       )}
 
       {/* 🔐 MODAL 2FA LOGIN */}
-{login2FA.step === 1 && (
-  <div className="modal-overlay">
-    <div className="modal-box">
-      <h3>Verificación de seguridad</h3>
-      <p>Ingresa el código que enviamos a tu correo</p>
+      {login2FA.step === 1 && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <h3>Verificación de seguridad</h3>
+            <p>Ingresa el código que enviamos a tu correo</p>
 
-      <form onSubmit={verifyLoginCode}>
-        <input
-          type="text"
-          placeholder="Código de 6 dígitos"
-          value={login2FA.codigo}
-          onChange={handle2FAChange}
-          maxLength={6}
-          required
-          className="input-field"
-        />
+            <form onSubmit={verifyLoginCode}>
+              <input
+                type="text"
+                placeholder="Código de 6 dígitos"
+                value={login2FA.codigo}
+                onChange={handle2FAChange}
+                maxLength={6}
+                required
+                className="input-field"
+              />
 
-        <div className="actions">
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => setLogin2FA({ step: 0, id_usuario: null, codigo: "" })}
-            disabled={loading}
-          >
-            Cancelar
-          </button>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setLogin2FA({ step: 0, id_usuario: null, codigo: "" })}
+                  disabled={loading}
+                >
+                  Cancelar
+                </button>
 
-          <button
-            type="submit"
-            className="primary"
-            disabled={loading}
-          >
-            {loading ? "Verificando..." : "Verificar código"}
-          </button>
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={loading}
+                >
+                  {loading ? "Verificando..." : "Verificar código"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </form>
-    </div>
-  </div>
-)}
+      )}
 
       {/* Modal de acceso denegado */}
       {modal.show && (

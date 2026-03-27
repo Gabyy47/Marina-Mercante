@@ -220,9 +220,38 @@
   font-weight: 700;
   transition: background .25s, transform .15s;
 }
-.login-form button[type="submit"]:hover {
+.login-form button[type="submit"]:hover:not(:disabled) {
   background-color: #00A5CB;
   transform: translateY(-1px);
+}
+.login-form button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ===== Mensajes de advertencia (intentos fallidos y bloqueo) ===== */
+.attempts-warning {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #e67e22;
+  margin: -8px 0 0 0;
+  padding: 4px;
+  background-color: #fff3e0;
+  border-radius: 6px;
+  animation: pulse 1s infinite;
+}
+
+.locked-warning {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #dc2626;
+  margin: -8px 0 0 0;
+  padding: 8px;
+  background-color: #fee2e2;
+  border-radius: 6px;
+  font-weight: 600;
+  animation: shake 0.5s;
 }
 
 /* ===== Enlace: ¿Olvidaste tu usuario/contraseña? ===== */
@@ -345,6 +374,27 @@
   }
 }
 
+/* ===== Animaciones adicionales ===== */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
 
 /* ==== Modal centrado ==== */
 .modal-overlay {

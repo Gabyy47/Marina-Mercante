@@ -100,7 +100,7 @@ export default function Proveedores() {
     } else if (rol.includes("admin")) {
       navigate("/dashboard");
     } else {
-      navigate("/"); // por si acaso
+      navigate("/");
     }
   };  
 
@@ -112,7 +112,7 @@ export default function Proveedores() {
     setError(null);
 
     try {
-      const res = await api.get("/proveedor"); // usa token → registra bitácora
+      const res = await api.get("/proveedor");
       setProveedores(res.data || []);
     } catch (e) {
       setError(e.message || "Error");
@@ -155,8 +155,8 @@ export default function Proveedores() {
   const handleTelefonoChange = (e) => {
     const value = e.target.value;
 
-    if (!/^\d*$/.test(value)) return; // no letras
-    if (value.length > 8) return; // máximo 8 dígitos
+    if (!/^\d*$/.test(value)) return;
+    if (value.length > 8) return;
 
     setForm({ ...form, telefono: value });
   };
@@ -165,6 +165,10 @@ export default function Proveedores() {
   const validarTexto = (texto) => /^[A-Za-z0-9áéíóúÁÉÍÓÚñÑ.,\-\s#()/:°]*$/.test(texto);
 
   const handleChangeText = (field, value) => {
+    // Limitar longitud máxima
+    if (field === "nombre" && value.length > 50) return;
+    if (field === "direccion" && value.length > 100) return;
+    
     if (!validarTexto(value)) return;
     setForm({ ...form, [field]: value });
   };
@@ -173,7 +177,12 @@ export default function Proveedores() {
   //  GUARDAR
   // =======================
   const save = async () => {
+    // Validaciones del nombre
     if (!form.nombre.trim()) return alert("El nombre es obligatorio");
+    if (form.nombre.length < 10) return alert("El nombre debe tener al menos 10 caracteres");
+    if (form.nombre.length > 50) return alert("El nombre no puede exceder los 50 caracteres");
+    
+    // Validación del teléfono
     if (form.telefono.length !== 8) return alert("El teléfono debe tener 8 dígitos");
 
     try {
@@ -211,7 +220,12 @@ export default function Proveedores() {
   };
 
   const agregarProveedorALista = () => {
+    // Validaciones del nombre
     if (!form.nombre.trim()) return alert("El nombre es obligatorio");
+    if (form.nombre.length < 10) return alert("El nombre debe tener al menos 10 caracteres");
+    if (form.nombre.length > 50) return alert("El nombre no puede exceder los 50 caracteres");
+    
+    // Validación del teléfono
     if (form.telefono.length !== 8) return alert("El teléfono debe tener 8 dígitos");
 
     const nuevoProveedor = {
@@ -288,6 +302,14 @@ export default function Proveedores() {
     setForm({ nombre: "", telefono: "", direccion: "" });
   };
 
+  // Función para determinar el color del contador
+  const getContadorColor = (longitud, min = 10, max = 50) => {
+    if (longitud === 0) return "#6b7280";
+    if (longitud < min) return "#dc2626"; // rojo - no cumple mínimo
+    if (longitud > max - 5) return "#e67e22"; // naranja - cerca del límite
+    return "#10b981"; // verde - válido
+  };
+
   return (
     <div className="inventario-page">
 
@@ -341,23 +363,26 @@ export default function Proveedores() {
 
         <table className="inventario-table">
           <thead>
-            <tr>
+              <tr>
               <th>#</th>
               <th>Nombre</th>
               <th>Teléfono</th>
               <th>Dirección</th>
               <th>Acciones</th>
-            </tr>
+              </tr>
           </thead>
 
           <tbody>
             {proveedoresFiltrados.map((p) => (
               <tr key={p.id_proveedor}>
                 <td>{p.id_proveedor}</td>
-                <td>{p.nombre}</td>
+                <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.nombre}>
+                  {p.nombre.length > 40 ? p.nombre.substring(0, 40) + "..." : p.nombre}
+                </td>
                 <td>{p.telefono}</td>
-                <td>{p.direccion}</td>
-
+                <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.direccion}>
+                  {p.direccion && p.direccion.length > 40 ? p.direccion.substring(0, 40) + "..." : p.direccion}
+                </td>
                 <td>
                   <button className="btn btn-sm btn-outline-primary me-2" onClick={() => startEdit(p)}>
                     Editar
@@ -400,14 +425,33 @@ export default function Proveedores() {
             <div className="inv-modal-body">
               <div style={{ display: "grid", gap: "12px" }}>
                 <div>
-                  <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>Nombre</label>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem", fontWeight: 600 }}>
+                    Nombre <span style={{ fontSize: "11px", fontWeight: "normal", color: "#6b7280" }}>(mín. 10, máx. 50 caracteres)</span>
+                  </label>
                   <input
                     className="form-control"
-                    placeholder="Nombre del proveedor"
+                    placeholder="Nombre del proveedor (mínimo 10 caracteres)"
                     value={form.nombre}
                     onChange={(e) => handleChangeText("nombre", e.target.value)}
-                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d7dee3" }}
+                    maxLength={50}
+                    style={{ 
+                      width: "100%", 
+                      padding: "10px", 
+                      borderRadius: "6px", 
+                      border: form.nombre.length > 0 && form.nombre.length < 10 ? "2px solid #dc2626" : "1px solid #d7dee3"
+                    }}
                   />
+                  <small style={{ 
+                    display: "block",
+                    marginTop: "4px",
+                    color: getContadorColor(form.nombre.length, 10, 50), 
+                    fontSize: "11px",
+                    fontWeight: form.nombre.length > 0 && form.nombre.length < 10 ? "bold" : "normal"
+                  }}>
+                    {form.nombre.length}/50 caracteres
+                    {form.nombre.length > 0 && form.nombre.length < 10 && " ❌ (mínimo 10 requerido)"}
+                    {form.nombre.length >= 10 && form.nombre.length <= 50 && " ✅"}
+                  </small>
                 </div>
 
                 <div>
@@ -417,8 +461,12 @@ export default function Proveedores() {
                     placeholder="8 dígitos"
                     value={form.telefono}
                     onChange={handleTelefonoChange}
+                    maxLength={8}
                     style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d7dee3" }}
                   />
+                  <small style={{ color: form.telefono.length === 8 ? "#10b981" : form.telefono.length > 0 ? "#dc2626" : "#6b7280", fontSize: "11px" }}>
+                    {form.telefono.length}/8 dígitos {form.telefono.length === 8 ? "✅" : form.telefono.length > 0 ? "❌" : ""}
+                  </small>
                 </div>
 
                 <div>
@@ -428,8 +476,12 @@ export default function Proveedores() {
                     placeholder="Dirección"
                     value={form.direccion}
                     onChange={(e) => handleChangeText("direccion", e.target.value)}
+                    maxLength={100}
                     style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #d7dee3" }}
                   />
+                  <small style={{ color: form.direccion.length > 95 ? "#e67e22" : "#6b7280", fontSize: "11px" }}>
+                    {form.direccion.length}/100 caracteres
+                  </small>
                 </div>
               </div>
             </div>
@@ -441,7 +493,7 @@ export default function Proveedores() {
               <button
                 className="btn btn-success"
                 onClick={save}
-                disabled={loading}
+                disabled={loading || (form.nombre.length > 0 && form.nombre.length < 10)}
               >
                 {loading ? "Guardando..." : "Guardar Cambios"}
               </button>
@@ -471,25 +523,47 @@ export default function Proveedores() {
                 <h4 style={{ marginBottom: 12 }}>Agregar Proveedor</h4>
                 <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 2fr auto", gap: 10, alignItems: "end" }}>
                   <div>
-                    <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem" }}>Nombre</label>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem" }}>
+                      Nombre <span style={{ fontSize: "10px", color: "#666" }}>(mín. 10, máx. 50)</span>
+                    </label>
                     <input
                       className="form-control"
                       placeholder="Nombre del proveedor"
                       value={form.nombre}
                       onChange={(e) => handleChangeText("nombre", e.target.value)}
-                      style={{ width: "100%", padding: "8px", borderRadius: "6px" }}
+                      maxLength={50}
+                      style={{ 
+                        width: "100%", 
+                        padding: "8px", 
+                        borderRadius: "6px",
+                        border: form.nombre.length > 0 && form.nombre.length < 10 ? "2px solid #dc2626" : "1px solid #d9d9d9"
+                      }}
                     />
+                    <small style={{ 
+                      display: "block",
+                      marginTop: "2px",
+                      color: getContadorColor(form.nombre.length, 10, 50), 
+                      fontSize: "10px"
+                    }}>
+                      {form.nombre.length}/50
+                      {form.nombre.length > 0 && form.nombre.length < 10 && " ❌ mínimo 10"}
+                      {form.nombre.length >= 10 && " ✅"}
+                    </small>
                   </div>
 
                   <div>
-                    <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem" }}>Teléfono</label>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: "0.9rem" }}>Teléfono (8 dígitos)</label>
                     <input
                       className="form-control"
                       placeholder="8 dígitos"
                       value={form.telefono}
                       onChange={handleTelefonoChange}
+                      maxLength={8}
                       style={{ width: "100%", padding: "8px", borderRadius: "6px" }}
                     />
+                    <small style={{ color: form.telefono.length === 8 ? "#10b981" : "#6b7280", fontSize: "10px" }}>
+                      {form.telefono.length}/8
+                    </small>
                   </div>
 
                   <div>
@@ -499,6 +573,7 @@ export default function Proveedores() {
                       placeholder="Dirección"
                       value={form.direccion}
                       onChange={(e) => handleChangeText("direccion", e.target.value)}
+                      maxLength={100}
                       style={{ width: "100%", padding: "8px", borderRadius: "6px" }}
                     />
                   </div>
@@ -506,7 +581,13 @@ export default function Proveedores() {
                   <button
                     className="btn btn-success"
                     onClick={agregarProveedorALista}
-                    style={{ padding: "8px 16px", height: "38px" }}
+                    disabled={form.nombre.length > 0 && form.nombre.length < 10}
+                    style={{ 
+                      padding: "8px 16px", 
+                      height: "38px",
+                      opacity: form.nombre.length > 0 && form.nombre.length < 10 ? 0.5 : 1,
+                      cursor: form.nombre.length > 0 && form.nombre.length < 10 ? "not-allowed" : "pointer"
+                    }}
                   >
                     ＋ Agregar
                   </button>
@@ -529,9 +610,13 @@ export default function Proveedores() {
                     <tbody>
                       {proveedoresNuevos.map((prov, idx) => (
                         <tr key={idx}>
-                          <td>{prov.nombre}</td>
+                          <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={prov.nombre}>
+                            {prov.nombre.length > 40 ? prov.nombre.substring(0, 40) + "..." : prov.nombre}
+                          </td>
                           <td>{prov.telefono}</td>
-                          <td>{prov.direccion}</td>
+                          <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={prov.direccion}>
+                            {prov.direccion && prov.direccion.length > 40 ? prov.direccion.substring(0, 40) + "..." : prov.direccion}
+                          </td>
                           <td>
                             <button
                               className="btn btn-sm btn-outline-danger"
@@ -556,7 +641,7 @@ export default function Proveedores() {
               <button
                 className="btn btn-success"
                 onClick={guardarTodosLosProveedores}
-                disabled={loading}
+                disabled={loading || proveedoresNuevos.length === 0}
               >
                 {loading ? "Guardando..." : "Guardar Proveedores"}
               </button>
