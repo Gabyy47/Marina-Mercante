@@ -1259,56 +1259,69 @@ function hashCode(code) {
   return crypto.createHash('sha256').update(String(code)).digest('hex');
 }
 
+const bcrypt = require('bcrypt');
+
 // === REGISTRO con envío de CÓDIGO ===
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { nombre, apellido, correo, nombre_usuario, contraseña } = req.body;
 
   if (!nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
     return res.status(400).json({ mensaje: 'Rellena todos los campos.' });
   }
 
-  const qUser = `
-    INSERT INTO tbl_usuario (nombre, apellido, correo, nombre_usuario, contraseña, is_verified, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 0, NOW(), NOW())
-  `;
+  try {
+    // 🔐 Encriptar contraseña
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(contraseña, saltRounds);
 
-  conexion.query(qUser, [nombre, apellido, correo, nombre_usuario, contraseña], (err, result) => {
-    if (err) {
-      if (err.code === 'ER_DUP_ENTRY') {
-        return res.status(409).json({ mensaje: 'Correo o nombre de usuario ya existe.' });
+    const qUser = `
+      INSERT INTO tbl_usuario (nombre, apellido, correo, nombre_usuario, contraseña, is_verified, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 0, NOW(), NOW())
+    `;
+
+    conexion.query(qUser, [nombre, apellido, correo, nombre_usuario, hashedPassword], (err, result) => {
+      if (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+          return res.status(409).json({ mensaje: 'Correo o nombre de usuario ya existe.' });
+        }
+        return handleDatabaseError(err, res, 'Error al registrar usuario:');
       }
-      return handleDatabaseError(err, res, 'Error al registrar usuario:');
-    }
 
-    const id_usuario = result.insertId;
+      const id_usuario = result.insertId;
 
-    // 1) Generar y hashear código
-    const code = gen6Code();
-    const code_hash = hashCode(code);
-    const expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+      // === Generar y hashear código ===
+      const code = gen6Code();
+      const code_hash = hashCode(code);
+      const expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
 
-    // 2) Guardar token
-   const qTok = `
-  INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, used, created_at)
-  VALUES (?, ?, ?, 0, NOW())
-`;
-    conexion.query(qTok, [id_usuario, code_hash, expires_at], async (err2) => {
-      if (err2) return handleDatabaseError(err2, res, 'Error al crear token:');
+      // Guardar token
+      const qTok = `
+        INSERT INTO verificar_email_tokens (id_usuario, token_hash, expires_at, used, created_at)
+        VALUES (?, ?, ?, 0, NOW())
+      `;
 
-      // 3) Enviar correo
-      try {
-        await SendVerifyMail({ to: correo, name: nombre, code });
-        return res.status(201).json({
-          mensaje: 'Usuario creado. Revisa tu correo para verificar la cuenta con el código enviado.'
-        });
-      } catch (e) {
-        console.error('Email error:', e);
-        return res.status(500).json({
-          mensaje: 'Usuario creado, pero falló el envío del correo. Intenta “reenviar código”.'
-        });
-      }
+      conexion.query(qTok, [id_usuario, code_hash, expires_at], async (err2) => {
+        if (err2) return handleDatabaseError(err2, res, 'Error al crear token:');
+
+        // Enviar correo
+        try {
+          await SendVerifyMail({ to: correo, name: nombre, code });
+          return res.status(201).json({
+            mensaje: 'Usuario creado. Revisa tu correo para verificar la cuenta con el código enviado.'
+          });
+        } catch (e) {
+          console.error('Email error:', e);
+          return res.status(500).json({
+            mensaje: 'Usuario creado, pero falló el envío del correo. Intenta “reenviar código”.'
+          });
+        }
+      });
     });
-  });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ mensaje: 'Error al registrar usuario.' });
+  }
 });
 
 //Verificar el código recibido por el usuario
@@ -4841,7 +4854,7 @@ app.get('/api/sp-productos', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPerm
       id_objeto: ID_OBJETO_PRODUCTOS,
       id_usuario: user.id_usuario,
       accion: "GET",
-      descripcion: "SP_MostrarProductos: Consulta de productos",
+      descripcion: "Consulta de productos",
       usuario: user.nombre_usuario
     });
 
@@ -5073,7 +5086,7 @@ app.post('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermi
         id_objeto: ID_OBJETO_DETALLE_COMPRA,
         id_usuario: user.id_usuario,
         accion: "GET",
-        descripcion: "SP_MostrarDetalleCompra: Consulta de detalle de compras",
+        descripcion: "Consulta de detalle de compras",
         usuario: user.nombre_usuario
       });
 
@@ -5101,7 +5114,7 @@ app.post('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermi
         id_objeto: ID_OBJETO_DETALLE_COMPRA,
         id_usuario: user.id_usuario,
         accion: "POST",
-        descripcion: `SP_InsertarDetalleCompra: Detalle agregado a compra #${id_compra}`,
+        descripcion: `Detalle agregado a compra #${id_compra}`,
         usuario: user.nombre_usuario
       });
 
@@ -5130,7 +5143,7 @@ app.post('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermi
         id_objeto: ID_OBJETO_COMPRAS_SP,
         id_usuario: user.id_usuario,
         accion: "POST",
-        descripcion: `SP_RegistrarEntradaCompra: Entrada registrada para compra #${id_compra}`,
+        descripcion: `Entrada registrada para compra #${id_compra}`,
         usuario: user.nombre_usuario
       });
 
@@ -5334,7 +5347,7 @@ app.post("/api/kardex/entrada", verificarToken, (req, res) => {
       id_objeto: ID_OBJETO_KARDEX,
       id_usuario: user.id_usuario,
       accion: "INSERT",
-      descripcion: `Registró entrada por compra ID=${id_compra}`
+      descripcion: `Se registró entrada por compra ID=${id_compra}`
     });
 
     res.json({ mensaje: "Entrada registrada y inventario actualizado" });

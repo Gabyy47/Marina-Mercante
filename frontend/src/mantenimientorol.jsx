@@ -29,86 +29,85 @@ export default function MantenimientoRol() {
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
 
+  // --- FUNCIONES DE APOYO ---
+  
+  const registrarBitacora = async ({ accion, descripcion, id_objeto = null }) => {
+    const usuarioLS = JSON.parse(localStorage.getItem("usuarioData"));
+    try {
+      await api.post("/bitacora", {
+        id_objeto,
+        id_usuario: usuarioLS?.id,
+        usuario: usuarioLS?.username,
+        accion,
+        descripcion,
+      });
+    } catch (error) {
+      console.error("Error registrando bitácora:", error);
+    }
+  };
 
   const generarPDF = async () => {
-  const usuarioLS = JSON.parse(localStorage.getItem("usuarioData"));
+    try {
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "pt",
+        format: "A4",
+      });
 
-  const registrarBitacora = async ({ accion, descripcion, id_objeto = null }) => {
-  try {
-    await api.post("/bitacora", {
-      id_objeto,
-      id_usuario: usuarioLS?.id,
-      usuario: usuarioLS?.username,
-      accion,
-      descripcion,
-    });
-  } catch (error) {
-    console.error("Error registrando bitácora:", error);
-  }
-};
+      // --- ENCABEZADO DGMM ---
+      doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(14, 42, 59);
+      doc.text("Dirección General de la Marina Mercante", 170, 50);
 
-   const generarPDF = () => {
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "pt",
-    format: "A4",
-  });
+      doc.setFontSize(14);
+      doc.text("Reporte de Roles", 170, 72);
 
-  // --- ENCABEZADO DGMM ---
-  doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.setTextColor(14, 42, 59);
-  doc.text("Dirección General de la Marina Mercante", 170, 50);
+      doc.setFontSize(10);
+      doc.setTextColor(80);
+      const serverNow = await getServerNow();
+      doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
-  doc.setFontSize(14);
-  doc.text("Reporte de Roles", 170, 72);
+      // --- CONFIGURACIÓN DE TABLA ---
+      const columnas = ["ID Rol", "Nombre", "Descripción"];
+      const filas = items.map((rol) => [
+        rol.id_rol,
+        rol.nombre,
+        rol.descripcion || "",
+      ]);
 
-  doc.setFontSize(10);
-  doc.setTextColor(80);
-  const serverNow = await getServerNow();
-  doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
+      autoTable(doc, {
+        startY: 125,
+        head: [columnas],
+        body: filas,
+        styles: { fontSize: 10, cellPadding: 5 },
+        headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [242, 245, 247] },
+      });
 
-  // --- CONFIGURACIÓN DE TABLA ---
-  const columnas = ["ID Rol", "Nombre", "Descripción"];
+      const h = doc.internal.pageSize.height;
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      doc.text(
+        "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2026",
+        doc.internal.pageSize.width / 2,
+        h - 30,
+        { align: "center" }
+      );
 
-  // AQUÍ USAMOS ITEMS (LOS ROLES)
-  const filas = items.map((rol) => [
-    rol.id_rol,
-    rol.nombre,
-    rol.descripcion || "",
-  ]);
+      doc.save("Roles_DGMM.pdf");
+      
+      await registrarBitacora({
+        accion: "REPORTE",
+        descripcion: "Se generó reporte PDF de roles"
+      });
+    } catch (error) {
+      console.error("Error al generar PDF:", error);
+      toast.error("Error al generar el reporte");
+    }
+  };
 
-  // --- TABLA ---
-  autoTable(doc, {
-    startY: 125,
-    head: [columnas],
-    body: filas,
-    styles: { fontSize: 10, cellPadding: 5 },
-    headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
-    alternateRowStyles: { fillColor: [242, 245, 247] },
-  });
-
-  // --- PIE DE PÁGINA ---
-  const h = doc.internal.pageSize.height;
-  doc.setFontSize(9);
-  doc.setTextColor(100);
-  doc.text(
-    "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2026",
-    doc.internal.pageSize.width / 2,
-    h - 30,
-    { align: "center" }
-  );
-
-  // --- GUARDAR PDF ---
-  doc.save("Roles_DGMM.pdf");
-  registrarBitacora({
-  accion: "REPORTE",
-  descripcion: "Se generó reporte PDF de roles"
-});
-};
-
-  
   const limpiarCampos = () => {
     setNewNombre("");
     setNewDescripcion("");
@@ -119,6 +118,7 @@ export default function MantenimientoRol() {
     limpiarCampos();
     setIsModalOpen(true);
   };
+
   const closeModal = () => {
     setIsModalOpen(false);
     limpiarCampos();
@@ -129,8 +129,9 @@ export default function MantenimientoRol() {
     setNewNombre(item.nombre ?? "");
     setNewDescripcion(item.descripcion ?? "");
     setErrorNombre("");
-    setIsEditModalOpen(true); // <-- FALTABA
+    setIsEditModalOpen(true);
   };
+
   const closeEditModal = () => setIsEditModalOpen(false);
 
   const camposCompletos = useMemo(() => {
@@ -157,9 +158,7 @@ export default function MantenimientoRol() {
   };
 
   const mostrarAlertaNombre = () => {
-    const mensaje =
-      errorNombre ||
-      "El nombre del rol solo puede contener letras y espacios y no debe incluir caracteres especiales.";
+    const mensaje = errorNombre || "El nombre del rol solo puede contener letras y espacios.";
     setAlertMessage(mensaje);
     setIsAlertModalOpen(true);
   };
@@ -172,7 +171,7 @@ export default function MantenimientoRol() {
   const fetchItems = async () => {
     try {
       setLoading(true);
-      const { data } = await api.get("/roles"); // <-- /roles (no /rol)
+      const { data } = await api.get("/roles");
       setItems(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("GET /roles error:", error.response?.data || error);
@@ -185,31 +184,37 @@ export default function MantenimientoRol() {
   useEffect(() => {
     fetchItems();
     registrarBitacora({
-    accion: "GET",
-    descripcion: "Se consultó la lista de roles"
-  });
+      accion: "GET",
+      descripcion: "Se consultó la lista de roles"
+    });
   }, []);
 
+  // --- MANEJADORES DE EVENTOS ---
+
   const handleCreate = async () => {
-
     const nombreValido = validarNombreLocal(newNombre);
-    if (!camposCompletos || !nombreValido) {
-      mostrarAlertaNombre();
-    await api.post("/roles", payload);
-
-await registrarBitacora({
-  accion: "CREAR",
-  descripcion: `Se creó un rol: ${payload.nombre}`
-});
+    
     if (!camposCompletos) {
       toast.error("Por favor completa todos los campos");
       return;
     }
+    
+    if (!nombreValido) {
+      mostrarAlertaNombre();
+      return;
+    }
+
     const payload = toPayload();
 
     try {
-      await api.post("/roles", payload); // <-- /roles
+      await api.post("/roles", payload);
       toast.success("¡Rol creado con éxito!");
+      
+      await registrarBitacora({
+        accion: "CREAR",
+        descripcion: `Se creó un rol: ${payload.nombre}`
+      });
+      
       await fetchItems();
       closeModal();
     } catch (error) {
@@ -219,24 +224,26 @@ await registrarBitacora({
   };
 
   const handleUpdate = async () => {
-    await api.put(`/roles/${editItemId}`, payload);
-
-await registrarBitacora({
-  accion: "EDITAR",
-  descripcion: `Se editó el rol ID: ${editItemId}`,
-  id_objeto: editItemId
-});
     if (!editItemId) return;
+
     const nombreValido = validarNombreLocal(newNombre);
     if (!camposCompletos || !nombreValido) {
       mostrarAlertaNombre();
       return;
     }
+
     const payload = toPayload();
 
     try {
-      await api.put(`/roles/${editItemId}`, payload); // <-- /roles/:id
+      await api.put(`/roles/${editItemId}`, payload);
       toast.success("¡Rol actualizado con éxito!");
+      
+      await registrarBitacora({
+        accion: "EDITAR",
+        descripcion: `Se editó el rol ID: ${editItemId}`,
+        id_objeto: editItemId
+      });
+      
       await fetchItems();
       closeEditModal();
     } catch (error) {
@@ -246,17 +253,18 @@ await registrarBitacora({
   };
 
   const handleDelete = async (id) => {
-    await api.delete(`/roles/${id}`);
-
-await registrarBitacora({
-  accion: "DELETE",
-  descripcion: `Se eliminó el rol ID: ${id}`,
-  id_objeto: id
-});
     if (!window.confirm("¿Estás seguro de eliminar este rol?")) return;
+    
     try {
-      await api.delete(`/roles/${id}`); // <-- /roles/:id
+      await api.delete(`/roles/${id}`);
       toast.success("Registro eliminado con éxito");
+      
+      await registrarBitacora({
+        accion: "DELETE",
+        descripcion: `Se eliminó el rol ID: ${id}`,
+        id_objeto: id
+      });
+      
       setItems((prev) => prev.filter((i) => i.id_rol !== id));
     } catch (error) {
       console.error("DELETE /roles error:", error.response?.data || error);
@@ -266,6 +274,7 @@ await registrarBitacora({
 
   return (
     <div className="mm-page">
+      {/* ... todo tu código de retorno/JSX está bien, solo asegúrate de cerrar la llave final del componente */}
       <header className="mm-header">
         <img src={logo} alt="DGMM" className="mm-logo" />
       </header>
@@ -277,8 +286,8 @@ await registrarBitacora({
             <Link to="/" className="mm-link">← Volver al Menú Principal</Link>
             <button className="btn btn-primary" onClick={openModal}>+ Nuevo rol</button>
             <button className="btn btn-topbar-primary" onClick={generarPDF}>
-                        <FaFilePdf size={16} /> Generar Reporte
-                      </button>
+              <FaFilePdf size={16} /> Generar Reporte
+            </button>
           </div>
         </div>
 
@@ -294,9 +303,9 @@ await registrarBitacora({
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="text-center">Cargando…</td></tr>
+                <tr><td colSpan={4} className="text-center">Cargando…</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={7} className="text-center">Sin registros</td></tr>
+                <tr><td colSpan={4} className="text-center">Sin registros</td></tr>
               ) : (
                 items.map((it) => (
                   <tr key={it.id_rol}>
@@ -315,7 +324,7 @@ await registrarBitacora({
         </div>
       </section>
 
-      {/* Modal Crear */}
+      {/* Modales (Crear, Editar, Alerta) y ToastContainer van aquí... */}
       <Modal isOpen={isModalOpen} onRequestClose={closeModal} className="mm-modal" overlayClassName="mm-overlay">
         <h3>Crear Rol</h3>
         <div className="mm-form">
@@ -337,7 +346,6 @@ await registrarBitacora({
         </div>
       </Modal>
 
-      {/* Modal Editar */}
       <Modal isOpen={isEditModalOpen} onRequestClose={closeEditModal} className="mm-modal" overlayClassName="mm-overlay">
         <h3>Editar Rol</h3>
         <div className="mm-form">
@@ -359,22 +367,11 @@ await registrarBitacora({
         </div>
       </Modal>
 
-      {/* Modal de alerta para validación de nombre */}
-      <Modal
-        isOpen={isAlertModalOpen}
-        onRequestClose={() => setIsAlertModalOpen(false)}
-        className="mm-modal"
-        overlayClassName="mm-overlay"
-      >
+      <Modal isOpen={isAlertModalOpen} onRequestClose={() => setIsAlertModalOpen(false)} className="mm-modal" overlayClassName="mm-overlay">
         <h3>Advertencia</h3>
         <p>{alertMessage}</p>
         <div className="mm-modal__actions">
-          <button
-            className="btn btn-primary"
-            onClick={() => setIsAlertModalOpen(false)}
-          >
-            Aceptar
-          </button>
+          <button className="btn btn-primary" onClick={() => setIsAlertModalOpen(false)}>Aceptar</button>
         </div>
       </Modal>
 
