@@ -28,6 +28,7 @@ export default function MantenimientoRol() {
   const [editItemId, setEditItemId] = useState(null);
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
+<<<<<<< HEAD
 
   // --- FUNCIONES DE APOYO ---
   
@@ -185,6 +186,7 @@ export default function MantenimientoRol() {
     fetchItems();
     registrarBitacora({
       accion: "GET",
+
       descripcion: "Se consultó la lista de roles"
     });
   }, []);
@@ -193,6 +195,7 @@ export default function MantenimientoRol() {
 
   const handleCreate = async () => {
     const nombreValido = validarNombreLocal(newNombre);
+
     
     if (!camposCompletos) {
       toast.error("Por favor completa todos los campos");
@@ -203,11 +206,15 @@ export default function MantenimientoRol() {
       mostrarAlertaNombre();
       return;
     }
-
     const payload = toPayload();
 
     try {
+
       await api.post("/roles", payload);
+      await registrarBitacora({
+        accion: "CREAR",
+        descripcion: `Se creó un rol: ${payload.nombre}`,
+      });
       toast.success("¡Rol creado con éxito!");
       
       await registrarBitacora({
@@ -236,6 +243,12 @@ export default function MantenimientoRol() {
 
     try {
       await api.put(`/roles/${editItemId}`, payload);
+
+      await registrarBitacora({
+        accion: "EDITAR",
+        descripcion: `Se editó el rol ID: ${editItemId}`,
+        id_objeto: editItemId,
+      });
       toast.success("¡Rol actualizado con éxito!");
       
       await registrarBitacora({
@@ -254,9 +267,14 @@ export default function MantenimientoRol() {
 
   const handleDelete = async (id) => {
     if (!window.confirm("¿Estás seguro de eliminar este rol?")) return;
-    
+
     try {
-      await api.delete(`/roles/${id}`);
+      await api.delete(`/roles/${id}`); // <-- /roles/:id
+      await registrarBitacora({
+        accion: "DELETE",
+        descripcion: `Se eliminó el rol ID: ${id}`,
+        id_objeto: id,
+      });
       toast.success("Registro eliminado con éxito");
       
       await registrarBitacora({
