@@ -276,7 +276,7 @@ const Register = ({ onShowLogin }) => {
             required
             autoComplete="new-password"
             minLength={8}
-            maxLength={20}
+            maxLength={50}
             aria-invalid={!passwordStrong}
           />
           <button
@@ -307,7 +307,7 @@ const Register = ({ onShowLogin }) => {
             required
             autoComplete="new-password"
             minLength={8}
-            maxLength={20}
+            maxLength={50}
             aria-invalid={formData.confirmar_contraseña ? !(formData.contraseña === formData.confirmar_contraseña) : false}
           />
           <button

@@ -398,7 +398,7 @@ const Login = () => {
                   value={formData.contraseña}
                   onChange={handleChange}
                   required
-                  maxLength={20}
+                  maxLength={50}
                   autoComplete="current-password"
                   disabled={isLocked} // DESHABILITAR SI ESTÁ BLOQUEADO
                 />
