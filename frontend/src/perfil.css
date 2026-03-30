@@ -105,6 +105,22 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* Icono ojo en campos de contraseña (sin fondo de botón) */
+.mm-input-wrap .mm-pen {
+  background: none;
+  border: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8ee7f7;
+  cursor: pointer;
+}
+
+.mm-input-wrap .mm-pen svg {
+  pointer-events: none;
+}
 .grid--stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0,1fr));

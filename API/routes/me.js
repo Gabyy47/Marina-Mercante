@@ -70,5 +70,52 @@ params.push(req.user.id_usuario);
     });
   });
 
+  // POST /api/me/password -> cambiar contraseña del usuario autenticado
+  // Implementado vía SP_CambiarContrasena en MySQL
+  router.post("/me/password", verificarToken, (req, res) => {
+    const { actual, nueva1, nueva2 } = req.body || {};
+
+    if (!actual || !nueva1 || !nueva2) {
+      return res
+        .status(400)
+        .json({ mensaje: "Todos los campos son obligatorios." });
+    }
+
+    if (String(nueva1) !== String(nueva2)) {
+      return res
+        .status(400)
+        .json({ mensaje: "La nueva contraseña y su confirmación no coinciden." });
+    }
+
+    if (String(nueva1).length < 6) {
+      return res
+        .status(400)
+        .json({ mensaje: "La nueva contraseña debe tener al menos 6 caracteres." });
+    }
+
+    const sql = "CALL SP_CambiarContrasena(?, ?, ?)";
+    const params = [
+      req.user.id_usuario,
+      String(actual),
+      String(nueva1),
+    ];
+
+    conexion.query(sql, params, (err) => {
+      if (err) {
+        // Si el SP lanza SIGNAL 45000 devolvemos el mensaje al cliente
+        if (err.sqlState === "45000") {
+          return res.status(400).json({ mensaje: err.sqlMessage || "Error al cambiar la contraseña." });
+        }
+
+        console.error("Error en SP_CambiarContrasena:", err);
+        return res
+          .status(500)
+          .json({ mensaje: "Error al cambiar la contraseña." });
+      }
+
+      return res.json({ mensaje: "Contraseña actualizada correctamente." });
+    });
+  });
+
   return router;
 };

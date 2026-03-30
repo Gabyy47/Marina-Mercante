@@ -240,6 +240,12 @@ app.use(
   })
 );
 
+// Log simple de todas las peticiones (para depurar rutas 404)
+app.use((req, _res, next) => {
+  console.log("REQ:", req.method, req.originalUrl);
+  next();
+});
+
 // ===== Middlewares =====
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -247,6 +253,27 @@ app.use(cookieParser());
 
 // ===== Verificar conexión a la BD y levantar servidor =====
 app.use("/api", meRoutes(conexion, { verificarToken, bloquearCambioRolSiNoAdmin }));
+
+// Depuración: listar rutas /api registradas al iniciar
+function printApiRoutes() {
+  if (!app._router || !app._router.stack) return;
+  console.log("=== RUTAS /api REGISTRADAS ===");
+  app._router.stack.forEach((mw) => {
+    if (mw.route && mw.route.path && mw.route.path.startsWith("/api")) {
+      const methods = Object.keys(mw.route.methods).join(",");
+      console.log(methods, mw.route.path);
+    } else if (mw.name === "router" && mw.regexp && String(mw.regexp).includes("^\\/api\\/?")) {
+      mw.handle.stack.forEach((r) => {
+        if (r.route && r.route.path) {
+          const methods = Object.keys(r.route.methods).join(",");
+          console.log(methods, "/api" + r.route.path);
+        }
+      });
+    }
+  });
+}
+
+printApiRoutes();
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
@@ -5214,7 +5241,10 @@ app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("K
 
 
 // ===== 404 =====
-app.use((req, res) => res.status(404).json({ mensaje: "Ruta no encontrada" }));
+app.use((req, res) => {
+  console.log("404:", req.method, req.originalUrl);
+  return res.status(404).json({ mensaje: "Ruta no encontrada" });
+});
 // Servir frontend
 app.use(Express.static(path.join(__dirname, "../frontend/dist")));
 
