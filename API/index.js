@@ -251,7 +251,22 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// =============================
+//  HORA DEL SERVIDOR (API)
+//  y ENDPOINTS PÚBLICOS /api QUE NO PASAN POR meRoutes
+// =============================
+app.get("/api/server-time", (req, res) => {
+  const now = new Date();
+  res.json({
+    iso: now.toISOString(),
+    timestamp: now.getTime(),
+  });
+});
+
 // ===== Verificar conexión a la BD y levantar servidor =====
+// Importante: a partir de aquí, todo lo que inicie con /api
+// pasa primero por meRoutes. Para rutas que deben estar
+// fuera de ese router (como /api/server-time), definirlas arriba.
 app.use("/api", meRoutes(conexion, { verificarToken, bloquearCambioRolSiNoAdmin }));
 
 // Depuración: listar rutas /api registradas al iniciar
@@ -559,7 +574,19 @@ app.post("/api/roles", verificarToken, autorizarRoles("Administrador"), async (r
     return res.status(400).json({ mensaje: "El nombre del rol es requerido" });
   }
 
-  nombre = nombre.trim().toUpperCase();
+  // Validaciones de negocio para nombre de rol
+  const rawNombre = nombre.trim();
+  if (rawNombre.length > 50) {
+    return res.status(400).json({ mensaje: "El nombre del rol no puede exceder 50 caracteres" });
+  }
+
+  // Solo letras, espacios y acentos básicos. Bloquea dígitos y caracteres especiales.
+  const nombreRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñ ]+$/;
+  if (!nombreRegex.test(rawNombre)) {
+    return res.status(400).json({ mensaje: "El nombre del rol solo puede contener letras y espacios" });
+  }
+
+  nombre = rawNombre.toUpperCase();
   descripcion = (descripcion ?? "").toString().trim();
 
   try {
@@ -599,8 +626,17 @@ app.put("/api/roles/:id", verificarToken, autorizarRoles("Administrador"),async 
   if (!nombre || typeof nombre !== "string" || !nombre.trim()) {
     return res.status(400).json({ mensaje: "El nombre del rol es requerido" });
   }
+  const rawNombre = nombre.trim();
+  if (rawNombre.length > 50) {
+    return res.status(400).json({ mensaje: "El nombre del rol no puede exceder 50 caracteres" });
+  }
 
-  nombre = nombre.trim().toUpperCase();
+  const nombreRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñ ]+$/;
+  if (!nombreRegex.test(rawNombre)) {
+    return res.status(400).json({ mensaje: "El nombre del rol solo puede contener letras y espacios" });
+  }
+
+  nombre = rawNombre.toUpperCase();
   descripcion = (descripcion ?? "").toString().trim();
 
   try {
@@ -2375,6 +2411,32 @@ app.get('/api/proveedor', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso
 const ID_OBJETO_INVENTARIO = 5;
 
 // ==========================
+//  OBTENER INVENTARIO (SP)
+//  Alias: mantiene la ruta /api/inventario usada por el frontend
+// ==========================
+app.get('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
+  const user = req.user;
+  const query = "CALL SP_MostrarInventario()";
+
+  conexion.query(query, (err, results) => {
+    if (err) {
+      console.error("Error en SP_MostrarInventario:", err);
+      return res.status(500).json({ error: "Error al listar inventario" });
+    }
+
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_INVENTARIO,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "Se consultó la lista de inventario",
+      usuario: user.nombre_usuario,
+    });
+
+    res.json(results[0]);
+  });
+});
+
+// ==========================
 //  INSERTAR INVENTARIO (SP)
 // ==========================
 app.post('/api/inventario', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "insertar"), (req, res) => {
@@ -2464,33 +2526,9 @@ app.delete('/api/inventario/:id', verificarToken, SOLO_ALMACEN_O_ADMIN, autoriza
   });
 });
 
-// =======================
-//   MOSTRAR INVENTARIO
-// =======================
-app.get("/api/inventario", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("Inventario", "consultar"), (req, res) => {
-  const sql = "CALL SP_MostrarInventario()";
-
-  conexion.query(sql, (err, result) => {
-    if (err) {
-      console.error("Error al mostrar inventario:", err);
-      return res.status(500).json({ error: err.message });
-    }
-
-    const inventario = result[0]; // El SP regresa un arreglo
-
-    // Bitácora
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_INVENTARIO,
-      id_usuario: req.user.id_usuario,
-      accion: "GET",
-      descripcion: "Consultó el inventario"
-    });
-
-    res.json(inventario);
-  });
-});
-
-
+// ============================================================================================= 
+// ================================ FIN ENDPOINTS CON SP ======================================= 
+// ============================================================================================= 
 
 // =============================
 //  BITÁCORA - CONFIG
@@ -5048,13 +5086,17 @@ app.get("/api/salida", verificarToken,  SOLO_ALMACEN_O_ADMIN, autorizarPermiso("
       console.error("Error listando salidas:", err);
       return res.status(500).json({ error: err.message });
     }
-// Bitácora
-    logBitacora(conexion, {
-      id_objeto: ID_OBJETO_SALIDAS_SP,
-      id_usuario,
-      accion: "GET",
-      descripcion: `Creó consultó la lista de salidas de productos`
-    });
+    // Bitácora
+    const user = req.user;
+    if (user && user.id_usuario) {
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_SALIDAS_SP,
+        id_usuario: user.id_usuario,
+        accion: "GET",
+        descripcion: "Consultó la lista de salidas de productos",
+        usuario: user.nombre_usuario,
+      });
+    }
     res.json(rows);
   });
 });
@@ -5228,6 +5270,19 @@ app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("K
       return res.status(500).json({ mensaje:"Error al obtener kardex" });
     }
     res.json(results[0]);
+  });
+});
+
+
+// =============================
+//  HORA DEL SERVIDOR (API)
+// =============================
+app.get("/api/server-time", (req, res) => {
+  const now = new Date();
+  // Se envía en ISO y también formateado para conveniencia
+  res.json({
+    iso: now.toISOString(),
+    timestamp: now.getTime(),
   });
 });
 

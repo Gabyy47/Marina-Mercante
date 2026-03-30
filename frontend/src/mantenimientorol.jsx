@@ -4,7 +4,7 @@ import Modal from "react-modal";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-import api from "./api";   // baseURL: http://localhost:49146/api
+import api, { getServerNow } from "./api";   // baseURL: http://localhost:49146/api
 import logo from "./imagenes/DGMM-Gobierno.png";
 import "./mantenimiento.css";
 import jsPDF from "jspdf";
@@ -21,12 +21,15 @@ export default function MantenimientoRol() {
 
   const [newNombre, setNewNombre] = useState("");
   const [newDescripcion, setNewDescripcion] = useState("");
+  const [errorNombre, setErrorNombre] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editItemId, setEditItemId] = useState(null);
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
+  const [alertMessage, setAlertMessage] = useState("");
 
-   const generarPDF = () => {
+  const generarPDF = async () => {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "pt",
@@ -45,7 +48,8 @@ export default function MantenimientoRol() {
 
   doc.setFontSize(10);
   doc.setTextColor(80);
-  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+  const serverNow = await getServerNow();
+  doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
   // --- CONFIGURACIÓN DE TABLA ---
   const columnas = ["ID Rol", "Nombre", "Descripción"];
@@ -86,6 +90,7 @@ export default function MantenimientoRol() {
   const limpiarCampos = () => {
     setNewNombre("");
     setNewDescripcion("");
+    setErrorNombre("");
   };
 
   const openModal = () => {
@@ -101,6 +106,7 @@ export default function MantenimientoRol() {
     setEditItemId(item.id_rol);
     setNewNombre(item.nombre ?? "");
     setNewDescripcion(item.descripcion ?? "");
+    setErrorNombre("");
     setIsEditModalOpen(true); // <-- FALTABA
   };
   const closeEditModal = () => setIsEditModalOpen(false);
@@ -108,6 +114,33 @@ export default function MantenimientoRol() {
   const camposCompletos = useMemo(() => {
     return Boolean(newNombre.trim() && newDescripcion.trim());
   }, [newNombre, newDescripcion]);
+
+  const validarNombreLocal = (valor) => {
+    const v = valor.trim();
+    if (!v) {
+      setErrorNombre("El nombre del rol es requerido");
+      return false;
+    }
+    if (v.length > 50) {
+      setErrorNombre("Máximo 50 caracteres para el nombre del rol");
+      return false;
+    }
+    const regex = /^[A-Za-zÁÉÍÓÚáéíóúÑñ ]+$/;
+    if (!regex.test(v)) {
+      setErrorNombre("Solo se permiten letras y espacios");
+      return false;
+    }
+    setErrorNombre("");
+    return true;
+  };
+
+  const mostrarAlertaNombre = () => {
+    const mensaje =
+      errorNombre ||
+      "El nombre del rol solo puede contener letras y espacios y no debe incluir caracteres especiales.";
+    setAlertMessage(mensaje);
+    setIsAlertModalOpen(true);
+  };
 
   const toPayload = () => ({
     nombre: newNombre.trim(),
@@ -132,8 +165,9 @@ export default function MantenimientoRol() {
   }, []);
 
   const handleCreate = async () => {
-    if (!camposCompletos) {
-      toast.error("Por favor completa todos los campos");
+    const nombreValido = validarNombreLocal(newNombre);
+    if (!camposCompletos || !nombreValido) {
+      mostrarAlertaNombre();
       return;
     }
     const payload = toPayload();
@@ -151,8 +185,9 @@ export default function MantenimientoRol() {
 
   const handleUpdate = async () => {
     if (!editItemId) return;
-    if (!camposCompletos) {
-      toast.error("Por favor completa todos los campos");
+    const nombreValido = validarNombreLocal(newNombre);
+    if (!camposCompletos || !nombreValido) {
+      mostrarAlertaNombre();
       return;
     }
     const payload = toPayload();
@@ -235,7 +270,16 @@ export default function MantenimientoRol() {
       <Modal isOpen={isModalOpen} onRequestClose={closeModal} className="mm-modal" overlayClassName="mm-overlay">
         <h3>Crear Rol</h3>
         <div className="mm-form">
-          <input value={newNombre} onChange={(e) => setNewNombre(e.target.value)} placeholder="Nombre" />
+          <input
+            value={newNombre}
+            onChange={(e) => {
+              setNewNombre(e.target.value);
+              validarNombreLocal(e.target.value);
+            }}
+            placeholder="Nombre"
+            maxLength={50}
+          />
+          {errorNombre && <small className="mm-error-text">{errorNombre}</small>}
           <input value={newDescripcion} onChange={(e) => setNewDescripcion(e.target.value)} placeholder="Descripción" />
         </div>
         <div className="mm-modal__actions">
@@ -248,12 +292,40 @@ export default function MantenimientoRol() {
       <Modal isOpen={isEditModalOpen} onRequestClose={closeEditModal} className="mm-modal" overlayClassName="mm-overlay">
         <h3>Editar Rol</h3>
         <div className="mm-form">
-          <input value={newNombre} onChange={(e) => setNewNombre(e.target.value)} placeholder="Nombre" />
+          <input
+            value={newNombre}
+            onChange={(e) => {
+              setNewNombre(e.target.value);
+              validarNombreLocal(e.target.value);
+            }}
+            placeholder="Nombre"
+            maxLength={50}
+          />
+          {errorNombre && <small className="mm-error-text">{errorNombre}</small>}
           <input value={newDescripcion} onChange={(e) => setNewDescripcion(e.target.value)} placeholder="Descripción" />
         </div>
         <div className="mm-modal__actions">
           <button className="btn btn-primary" onClick={handleUpdate}>Guardar</button>
           <button className="btn btn-outline" onClick={closeEditModal}>Cerrar</button>
+        </div>
+      </Modal>
+
+      {/* Modal de alerta para validación de nombre */}
+      <Modal
+        isOpen={isAlertModalOpen}
+        onRequestClose={() => setIsAlertModalOpen(false)}
+        className="mm-modal"
+        overlayClassName="mm-overlay"
+      >
+        <h3>Advertencia</h3>
+        <p>{alertMessage}</p>
+        <div className="mm-modal__actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => setIsAlertModalOpen(false)}
+          >
+            Aceptar
+          </button>
         </div>
       </Modal>
 

@@ -5,6 +5,7 @@ import Modal from "react-modal";
 import { ToastContainer, toast } from "react-toastify";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getServerNow } from "./api";
 import "react-toastify/dist/ReactToastify.css";
 import "./mantenimientoTickets.css";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
@@ -578,8 +579,9 @@ const MantenimientoTickets = () => {
 
       doc.setFontSize(10);
       doc.setTextColor(80);
+      const serverNow = await getServerNow();
       doc.text(
-        `Generado el: ${new Date().toLocaleString("es-HN")}`,
+        `Generado el: ${serverNow.toLocaleString("es-HN")}`,
         40,
         105
       );

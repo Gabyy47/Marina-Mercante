@@ -1,7 +1,7 @@
 // src/Inventario.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "./api";
+import api, { getServerNow } from "./api";
 import "./inventario.css";
 import { FaSyncAlt } from "react-icons/fa";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
@@ -32,7 +32,6 @@ export default function Inventario() {
   // Modal Movimientos (Kardex completo)
   const [showModalMovimientos, setShowModalMovimientos] = useState(false);
   const [kardexCompleto, setKardexCompleto] = useState([]);
-  const [loadingKardex, setLoadingKardex] = useState(false);
   const [filtrosKardex, setFiltrosKardex] = useState({
     producto: "",
     tipo: "",
@@ -42,24 +41,22 @@ export default function Inventario() {
 
   const usuarioData = JSON.parse(localStorage.getItem("usuarioData") || "{}");
 
-  const rol = (usuarioData.rol_nombre || "").toLowerCase();
-
-const handleVolver = () => {
+  const handleVolver = () => {
     const rawUser = localStorage.getItem("mm_user");
     const user = rawUser ? JSON.parse(rawUser) : null;
-    const rol = (user?.rol_nombre || "").toLowerCase();
+    const rolNombre = (user?.rol_nombre || "").toLowerCase();
 
     if (
-      (rol.includes("guarda") && rol.includes("almacen")) ||
-      (rol.includes("auxiliar") &&
-        rol.includes("de") &&
-        rol.includes("almacen"))
+      (rolNombre.includes("guarda") && rolNombre.includes("almacen")) ||
+      (rolNombre.includes("auxiliar") &&
+        rolNombre.includes("de") &&
+        rolNombre.includes("almacen"))
     ) {
       navigate("/guarda/dashboard");
-    } else if (rol.includes("admin")) {
+    } else if (rolNombre.includes("admin")) {
       navigate("/dashboard");
     } else {
-      navigate("/"); // por si acaso
+      navigate("/");
     }
   };
 
@@ -106,7 +103,6 @@ const handleVolver = () => {
   //   VER MÁS (KÁRDEX)
   // ==========================
   const abrirKardex = async (row) => {
-    setProductoSel(row);
     setShowModal(true);
     setLoadingMovs(true);
     setMovimientos([]);
@@ -173,7 +169,7 @@ const handleVolver = () => {
 
   const kardexFiltrado = kardexCompleto.filter(aplicarFiltroKardex);
 
-  const generarPDFMovimientos = () => {
+  const generarPDFMovimientos = async () => {
     const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
 
     doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
@@ -187,7 +183,8 @@ const handleVolver = () => {
 
     doc.setFontSize(10);
     doc.setTextColor(80);
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+    const serverNow = await getServerNow();
+    doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
     const columnas = ["Fecha", "Producto", "Tipo", "Cantidad", "Usuario", "Motivo"];
 
@@ -289,7 +286,7 @@ const handleVolver = () => {
   // ==========================
   //   PDF INVENTARIO
   // ==========================
-  const generatePDF = () => {
+  const generatePDF = async () => {
     try {
       const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "A4" });
 
@@ -305,7 +302,8 @@ const handleVolver = () => {
 
       doc.setFontSize(10);
       doc.setTextColor(80);
-      doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+      const serverNow = await getServerNow();
+      doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
       const columnas = ["Producto", "Cantidad", "Mínimo", "Máximo", "Estado", "Mensaje"];
 

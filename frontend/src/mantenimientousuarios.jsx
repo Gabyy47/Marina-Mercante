@@ -4,7 +4,7 @@ import Modal from "react-modal";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-import api from "./api";
+import api, { getServerNow } from "./api";
 import logo from "./imagenes/DGMM-Gobierno.png";
 import "./mantenimiento.css";
 import jsPDF from "jspdf";
@@ -51,7 +51,7 @@ export default function MantenimientoUsuarios() {
     return map;
   }, [roles]);
 
-  const generarPDFUsuarios = () => {
+  const generarPDFUsuarios = async () => {
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "pt",
@@ -69,7 +69,8 @@ export default function MantenimientoUsuarios() {
 
     doc.setFontSize(10);
     doc.setTextColor(80);
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+    const serverNow = await getServerNow();
+    doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
     const columnas = ["ID", "Nombre", "Usuario", "Correo", "Rol", "Estado"];
 

@@ -38,4 +38,10 @@ api.interceptors.response.use(
   }
 );
 
+// Helper para obtener la hora del servidor
+export async function getServerNow() {
+  const { data } = await api.get("/server-time");
+  return new Date(data?.iso || Date.now());
+}
+
 export default api;

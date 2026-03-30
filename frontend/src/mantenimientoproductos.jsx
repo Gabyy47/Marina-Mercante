@@ -8,6 +8,7 @@ import api from "./api";   // instancia Axios con baseURL http://localhost:49146
 import logo from "./imagenes/DGMM-Gobierno.png";
 import "./mantenimientoproductos.css";
 import "./Dashboardguarda";
+import { getServerNow } from "./api";   // Import getServerNow
 import "./bitacora.jsx";
 
 import jsPDF from "jspdf";
@@ -251,7 +252,7 @@ export default function MantenimientoProducto() {
       rol.includes("almacen"));
 
   // ====== REPORTE PDF (estilo institucional) ======
-  const generarPDFProductos = () => {
+  const generarPDFProductos = async () => {
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "pt",
@@ -270,7 +271,8 @@ export default function MantenimientoProducto() {
 
     doc.setFontSize(10);
     doc.setTextColor(80);
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+    const serverNow = await getServerNow();
+    doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
     // --- Tabla ---
     const columnas = [

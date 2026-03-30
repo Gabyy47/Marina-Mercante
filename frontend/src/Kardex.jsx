@@ -11,6 +11,7 @@ import logoDGMM from "./imagenes/DGMM-Gobierno.png";
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getServerNow } from "./api";
 
 export default function Kardex() {
   const navigate = useNavigate();
@@ -85,7 +86,7 @@ export default function Kardex() {
   // =======================
   //   Generar PDF
   // =======================
-  const generarPDF = () => {
+  const generarPDF = async () => {
     const doc = new jsPDF();
 
     // Encabezado DGMM
@@ -98,7 +99,8 @@ export default function Kardex() {
     doc.text("Reporte de Kardex", 150, 65);
 
     doc.setFontSize(10);
-    doc.text(`Generado: ${new Date().toLocaleString()}`, 20, 85);
+    const serverNow = await getServerNow();
+    doc.text(`Generado: ${serverNow.toLocaleString("es-HN")}`, 20, 85);
 
     // Datos tabla
     const columnas = ["Fecha", "Producto", "Tipo", "Cantidad", "Usuario", "Motivo"];

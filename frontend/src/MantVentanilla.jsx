@@ -4,6 +4,7 @@ import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getServerNow } from "./api";
 import "react-toastify/dist/ReactToastify.css";
 import "./mantenimientoTickets.css";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
@@ -213,7 +214,7 @@ export default function MantVentanilla() {
   };
 
   /* PDF (igual al estilo de tickets) */
-  const generarReporte = () => {
+  const generarReporte = async () => {
     if (!ventanillasFiltradas.length) {
       toast.info("No hay datos para el reporte");
       return;
@@ -234,7 +235,8 @@ export default function MantVentanilla() {
     doc.text("Reporte de Ventanillas", 170, 72);
 
     doc.setFontSize(10);
-    doc.text(`Generado el: ${new Date().toLocaleString("es-HN")}`, 40, 105);
+    const serverNow = await getServerNow();
+    doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
     const columnas = ["Nombre", "Código", "Ubicación", "Usuario", "Estado"];
 

@@ -1,6 +1,6 @@
 // src/MantenimientoTipoTicket.jsx
 import { useEffect, useMemo, useState } from "react";
-import api from "./api";
+import api, { getServerNow } from "./api";
 import "./tramites.css"; // mismo diseño tk- que trámites/tickets
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -239,7 +239,7 @@ export default function MantenimientoTipoTicket() {
   };
 
   /* =============== REPORTE PDF =============== */
-  const generarReporte = () => {
+  const generarReporte = async () => {
     if (!tiposFiltrados.length) {
       alert("No hay datos para generar el reporte");
       return;
@@ -270,8 +270,9 @@ export default function MantenimientoTipoTicket() {
 
       doc.setFontSize(10);
       doc.setTextColor(80);
+      const serverNow = await getServerNow();
       doc.text(
-        `Generado el: ${new Date().toLocaleString("es-HN")}`,
+        `Generado el: ${serverNow.toLocaleString("es-HN")}`,
         40,
         105
       );

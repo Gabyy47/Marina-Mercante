@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "./api";
+import api, { getServerNow } from "./api";
 import "./Compra.css";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
 import jsPDF from "jspdf";
@@ -233,7 +233,7 @@ export default function Compra() {
   // ============================
   // GENERAR PDF DE COMPRAS
   // ============================
-  const generarPDFCompras = () => {
+  const generarPDFCompras = async () => {
     try {
       const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
 
@@ -249,7 +249,8 @@ export default function Compra() {
 
       doc.setFontSize(10);
       doc.setTextColor(80);
-      doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+      const serverNow = await getServerNow();
+      doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
     // Tabla de compras
     const comprasFiltradas = compras.filter(aplicarFiltro);
@@ -293,7 +294,7 @@ export default function Compra() {
   // ============================
   // GENERAR PDF DE DETALLE DE COMPRA
   // ============================
-  const generarPDFDetalleCompra = () => {
+  const generarPDFDetalleCompra = async () => {
     if (!detalleCompra || detalleCompra.length === 0) {
       alert("No hay detalle para exportar");
       return;
@@ -314,7 +315,8 @@ export default function Compra() {
 
       doc.setFontSize(10);
       doc.setTextColor(80);
-      doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+      const serverNow = await getServerNow();
+      doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
     // Usar compraSeleccionada que ya está en el estado
     const compra = compraSeleccionada;

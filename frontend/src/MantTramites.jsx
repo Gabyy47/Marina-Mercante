@@ -1,7 +1,7 @@
 // MantTramites.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "./api";
+import api, { getServerNow } from "./api";
 import "./mantenimientoTickets.css"; // mismo CSS de tickets
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -274,8 +274,9 @@ export default function MantTramites() {
 
       doc.setFontSize(10);
       doc.setTextColor(80);
+      const serverNow = await getServerNow();
       doc.text(
-        `Generado el: ${new Date().toLocaleString("es-HN")}`,
+        `Generado el: ${serverNow.toLocaleString("es-HN")}`,
         40,
         105
       );

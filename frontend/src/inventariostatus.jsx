@@ -4,6 +4,7 @@ import "react-toastify/dist/ReactToastify.css";
 import api from "./api"; 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getServerNow } from "./api";
 
 export default function InventarioStatus() {
   const [items, setItems] = useState([]);
@@ -80,7 +81,7 @@ export default function InventarioStatus() {
   }
 
   // ==== FUNCIÓN PARA GENERAR PDF ====
-  const generarPDF = () => {
+  const generarPDF = async () => {
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "pt",
@@ -93,7 +94,8 @@ export default function InventarioStatus() {
     doc.text("Reporte de Estado de Inventario", 40, 40);
 
     doc.setFontSize(10);
-    doc.text(`Generado: ${new Date().toLocaleString()}`, 40, 60);
+    const serverNow = await getServerNow();
+    doc.text(`Generado: ${serverNow.toLocaleString("es-HN")}`, 40, 60);
 
     // -------- COLUMNAS --------
     const columnas = [

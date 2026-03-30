@@ -1,7 +1,7 @@
 // src/bitacora.jsx
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import api from "./api";
+import api, { getServerNow } from "./api";
 import "./bitacora.css";
 import { FaFilePdf } from "react-icons/fa";
 import jsPDF from "jspdf";
@@ -19,7 +19,7 @@ export default function Bitacora() {
   const [loading, setLoading] = useState(false);
 
   // GENERAR REPORTE EN PDF
-  const generarPDF = () => {
+  const generarPDF = async () => {
     const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
 
     // === ENCABEZADO ===
@@ -34,7 +34,8 @@ export default function Bitacora() {
 
     doc.setFontSize(10);
     doc.setTextColor(80);
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+    const serverNow = await getServerNow();
+    doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
     // === TABLA ===
     const columnas = ["Fecha", "Usuario", "Objeto", "Acción", "Descripción"];

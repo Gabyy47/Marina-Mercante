@@ -5,6 +5,7 @@ import './inventario.css';
 import logoDGMM from './imagenes/DGMM-Gobierno.png';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getServerNow } from "./api";
 import { FaFilePdf } from "react-icons/fa";
 
 export default function DetalleCompra() {
@@ -27,7 +28,7 @@ export default function DetalleCompra() {
   // =======================
   //   GENERAR PDF
   // =======================
-  const generarPDF = () => {
+  const generarPDF = async () => {
     const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
 
     doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
@@ -41,7 +42,8 @@ export default function DetalleCompra() {
 
     doc.setFontSize(10);
     doc.setTextColor(80);
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+    const serverNow = await getServerNow();
+    doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
     const columnas = [
       "ID Detalle",

@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "./api";
+import api, { getServerNow } from "./api";
 import "./inventario.css";
 import logoDGMM from "./imagenes/DGMM-Gobierno.png";
 import jsPDF from "jspdf";
@@ -228,7 +228,7 @@ export default function Salidas() {
   // ============================
   // GENERAR PDF SALIDAS
   // ============================
-  const generarPDFSalidas = () => {
+  const generarPDFSalidas = async () => {
     const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
 
     doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
@@ -242,7 +242,8 @@ export default function Salidas() {
 
     doc.setFontSize(10);
     doc.setTextColor(80);
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+    const serverNow = await getServerNow();
+    doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
     const columnas = ["ID", "Usuario", "Fecha", "Motivo"];
 
@@ -278,7 +279,7 @@ export default function Salidas() {
   // ============================
   // GENERAR PDF DETALLE SALIDA
   // ============================
-  const generarPDFDetalleSalida = () => {
+  const generarPDFDetalleSalida = async () => {
     if (!salidaSeleccionada) return;
 
     const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
@@ -294,7 +295,8 @@ export default function Salidas() {
 
     doc.setFontSize(10);
     doc.setTextColor(80);
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
+    const serverNow = await getServerNow();
+    doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
     // Información de la salida
     doc.setFontSize(11);
