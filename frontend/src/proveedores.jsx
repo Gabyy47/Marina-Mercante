@@ -38,53 +38,78 @@ export default function Proveedores() {
   // =======================
   //   GENERAR PDF
   // =======================
+
   const generarPDF = async () => {
     const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
 
-    doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(14, 42, 59);
-    doc.text("Dirección General de la Marina Mercante", 170, 50);
+  doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(14, 42, 59);
+  doc.text("Dirección General de la Marina Mercante", 170, 50);
 
-    doc.setFontSize(14);
-    doc.text("Reporte de Proveedores", 170, 72); 
 
     doc.setFontSize(10);
     doc.setTextColor(80);
     const serverNow = await getServerNow();
     doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
-    const columnas = ["ID", "Nombre", "Teléfono", "Dirección"];
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
 
-    const filas = proveedores.map((p) => [
-      p.id_proveedor,
-      p.nombre,
-      p.telefono,
-      p.direccion
-    ]);
+  const columnas = ["ID", "Nombre", "Teléfono", "Dirección"];
+  const filas = proveedores.map((p) => [
+    p.id_proveedor,
+    p.nombre,
+    p.telefono,
+    p.direccion
+  ]);
 
-    autoTable(doc, {
-      startY: 125,
-      head: [columnas],
-      body: filas,
-      styles: { fontSize: 9, cellPadding: 5 },
-      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
-      alternateRowStyles: { fillColor: [242, 245, 247] }
-    });
+  autoTable(doc, {
+    startY: 125,
+    head: [columnas],
+    body: filas,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [242, 245, 247] }
+  });
 
-    const h = doc.internal.pageSize.height;
-    doc.setFontSize(9);
-    doc.setTextColor(100);
-    doc.text(
-      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
-      doc.internal.pageSize.width / 2,
-      h - 30,
-      { align: "center" }
-    );
+  const h = doc.internal.pageSize.height;
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(
+    "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2026",
+    doc.internal.pageSize.width / 2,
+    h - 30,
+    { align: "center" }
+  );
 
-    doc.save("Proveedores_DGMM.pdf");
-  };
+  // 1. Guardar el PDF
+  doc.save("Proveedores_DGMM.pdf");
+
+  // --- REGISTRO EN BITÁCORA ---
+    try {
+        const rawUser = localStorage.getItem("mm_user");
+        const user = rawUser ? JSON.parse(rawUser) : null;
+
+        if (user && user.id_usuario) {
+            await fetch("http://localhost:49146/api/bitacora", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id_usuario: user.id_usuario,
+                    id_objeto: 2,
+                    accion: "DESCARGA",
+                    descripcion: `PDF de Proveedores descargado por ${user.nombre_usuario}`,
+                    usuario: user.nombre_usuario // Este es el 5to parámetro que pide tu función
+                }),
+            });
+        }
+    } catch (error) {
+        console.error("Error al registrar bitácora desde el frontend:", error);
+    }
+};
 
   const handleVolver = () => {
     const rawUser = localStorage.getItem("mm_user");
@@ -180,8 +205,13 @@ export default function Proveedores() {
   const save = async () => {
     // Validaciones del nombre
     if (!form.nombre.trim()) return alert("El nombre es obligatorio");
-    if (form.nombre.length < 10) return alert("El nombre debe tener al menos 10 caracteres");
+    if (form.nombre.length < 3) return alert("El nombre debe tener al menos 3 caracteres");
     if (form.nombre.length > 50) return alert("El nombre no puede exceder los 50 caracteres");
+    const tieneLetra = /[A-Za-zÁÉÍÓÚáéíóúñÑ]/;
+
+if (!tieneLetra.test(form.nombre)) {
+  return alert("El nombre debe contener al menos una letra");
+}
     
     // Validación del teléfono
     if (form.telefono.length !== 8) return alert("El teléfono debe tener 8 dígitos");
@@ -223,8 +253,14 @@ export default function Proveedores() {
   const agregarProveedorALista = () => {
     // Validaciones del nombre
     if (!form.nombre.trim()) return alert("El nombre es obligatorio");
-    if (form.nombre.length < 10) return alert("El nombre debe tener al menos 10 caracteres");
+    if (form.nombre.length < 3) return alert("El nombre debe tener al menos 3 caracteres");
     if (form.nombre.length > 50) return alert("El nombre no puede exceder los 50 caracteres");
+
+    const tieneLetra = /[A-Za-zÁÉÍÓÚáéíóúñÑ]/;
+
+if (!tieneLetra.test(form.nombre)) {
+  return alert("El nombre debe contener al menos una letra");
+}
     
     // Validación del teléfono
     if (form.telefono.length !== 8) return alert("El teléfono debe tener 8 dígitos");

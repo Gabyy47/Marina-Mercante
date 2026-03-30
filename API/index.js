@@ -557,7 +557,7 @@ app.get("/api/roles/:id", async (req, res) => {
     if (id_usuario) {
       await conexion.promise().query(
         "CALL event_bitacora(?, ?, ?, ?)",
-        [id_usuario, 4, "GET", `Se consultó el rol con ID ${id}`]
+        [id_usuario, 4, "GET", `Se consultó el rol con ID: ${id}`]
       );
     }
 
@@ -599,7 +599,7 @@ app.post("/api/roles", verificarToken, autorizarRoles("Administrador"), async (r
     if (id_usuario) {
       await conexion.promise().query(
         "CALL event_bitacora(?, ?, ?, ?)",
-        [id_usuario, 4, "INSERT", `Se creó el rol ${nombre}`]
+        [id_usuario, 4, "INSERT", `Se creó el rol: ${nombre}`]
       );
     }
 
@@ -687,7 +687,7 @@ app.delete("/api/roles/:id", verificarToken, autorizarRoles("Administrador"), as
     if (id_usuario) {
       await conexion.promise().query(
         "CALL event_bitacora(?, ?, ?, ?)",
-        [id_usuario, 4, "DELETE", `Se eliminó el rol con ID ${id}`]
+        [id_usuario, 4, "DELETE", `Se eliminó el rol con ID: ${id}`]
       );
     }
 
@@ -1759,6 +1759,9 @@ app.post('/api/auth/verify-code', (req, res) => {
 // =======================================================
 // =================== Visualización =====================
 // =======================================================
+
+const ID_OBJETO_VISUALIZACION = 13; 
+
 app.get('/api/visualizaciones', (req, res) => {
   const query = "SELECT * FROM tbl_visualizacion";
   conexion.query(query, (err, rows) => {
@@ -1766,19 +1769,37 @@ app.get('/api/visualizaciones', (req, res) => {
       console.error("Error al listar visualizaciones:", err);
       return res.status(500).json({ error: "Error al listar visualizaciones" });
     }
+    // Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_VISUALIZACION,
+        id_usuario: req.user.id_usuario,
+        accion: "GET",
+        descripcion: "Se consultó la lista de visualización",
+        usuario: req.user.nombre_usuario,
+      });
     res.json(rows);
   });
 });
 
-app.get('/api/visualizaciones/:id', (req, res) => {
-  const query = "SELECT * FROM tbl_visualizacion WHERE id_visualizacion = ?";
-  conexion.query(query, [req.params.id], (err, rows) => {
-    if (err) {
-      console.error("Error al obtener visualización:", err);
-      return res.status(500).json({ error: "Error al obtener visualización" });
-    }
-    res.json(rows[0] || null);
-  });
+app.get('/api/visualizaciones/:id', async (req, res) => {
+    const { id } = req.params;
+    const query = "SELECT * FROM tbl_visualizacion WHERE id_visualizacion = ?";
+
+    conexion.query(query, [id], async (err, rows) => { // 2. También 'async' aquí
+        if (err) {
+            console.error("Error al obtener visualización:", err);
+            return res.status(500).json({ error: "Error al obtener visualización" });
+        }
+// Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_VISUALIZACION,
+        id_usuario: req.user.id_usuario,
+        accion: "GET",
+        descripcion: "Se consultó la visualizacion: #${id_visualizacion}",
+        usuario: req.user.nombre_usuario,
+      });
+        res.json(rows[0] || null);
+    });
 });
 
 app.post('/api/visualizaciones', (req, res) => {
@@ -1792,6 +1813,14 @@ app.post('/api/visualizaciones', (req, res) => {
       console.error("Error al insertar visualización:", err);
       return res.status(500).json({ error: "Error al insertar visualización" });
     }
+    // Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_VISUALIZACION,
+        id_usuario: req.user.id_usuario,
+        accion: "POST",
+        descripcion: "Se creó la visualización: #${id_visualizacion}",
+        usuario: req.user.nombre_usuario,
+      });
     res.json({ message: "Visualización insertada correctamente", id: result.insertId });
   });
 });
@@ -1808,6 +1837,14 @@ app.put('/api/visualizaciones/:id', (req, res) => {
       console.error("Error al actualizar visualización:", err);
       return res.status(500).json({ error: "Error al actualizar visualización" });
     }
+    // Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_VISUALIZACION,
+        id_usuario: req.user.id_usuario,
+        accion: "PUT",
+        descripcion: "Se actualizó la visualización: #${id_visualizacion}",
+        usuario: req.user.nombre_usuario,
+      });
     res.json({ message: "Visualización actualizada correctamente" });
   });
 });
@@ -1819,6 +1856,14 @@ app.delete('/api/visualizaciones/:id', (req, res) => {
       console.error("Error al eliminar visualización:", err);
       return res.status(500).json({ error: "Error al eliminar visualización" });
     }
+    // Bitácora
+      logBitacora(conexion, {
+        id_objeto: ID_OBJETO_VISUALIZACION,
+        id_usuario: req.user.id_usuario,
+        accion: "DELETE",
+        descripcion: "Se eliminó la visualización: #${id_visualizacion}",
+        usuario: req.user.nombre_usuario,
+      });
     res.json({ message: "Visualización eliminada correctamente" });
   });
 });
@@ -1890,6 +1935,9 @@ const SOLO_ALMACEN_O_ADMIN = autorizarRoles(
 // ============================
 //  GET /api/productos
 // ============================
+
+const ID_OBJETO_PRODUCTO = 6;
+
 app.get('/api/productos', verificarToken, SOLO_ALMACEN_O_ADMIN, (req, res) => {
   const user = req.user; 
 
@@ -4610,9 +4658,10 @@ app.get("/api/historial_kardex", (req, res) => {
 
 // ===== CRUD PARA tbl_tipo_ticket =====
 
-// Listar todos los tipos de ticket
-// LISTAR TODOS LOS TIPOS DE TICKET
 // LISTAR TODOS LOS TIPOS DE TICKET (ACTIVOS E INACTIVOS)
+
+const ID_OBJETO_TIP_TICKET = 11; 
+
 app.get("/api/tipo_ticket", async (req, res) => {
   try {
     const [rows] = await conexion.promise().query(`
@@ -4624,13 +4673,18 @@ app.get("/api/tipo_ticket", async (req, res) => {
       FROM tbl_tipo_ticket
       ORDER BY id_tipo_ticket DESC
     `);
-
+logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIP_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "Se consultaron los tipos de tickets",
+      usuario: user.nombre_usuario
+    });
     res.json(rows);          
   } catch (err) {
     handleDatabaseError(err, res, "Error en listado de tipo_ticket:");
   }
 });
-
 
 
 // Obtener un tipo_ticket por ID
@@ -4640,6 +4694,13 @@ app.get("/api/tipo_ticket", async (req, res) => {
     const [rows] = await conexion.promise().query(
       "SELECT * FROM tbl_tipo_ticket ORDER BY id_tipo_ticket DESC"
     );
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIP_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: "Se consultaron los tipos de tickets",
+      usuario: user.nombre_usuario
+    });
     res.json(rows);
   } catch (err) {
     handleDatabaseError(err, res, "Error en listado de tipo_ticket:");
@@ -4664,6 +4725,13 @@ app.post("/api/tipo_ticket", async (req, res) => {
 
   try {
     const [result] = await conexion.promise().query(query, values);
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIP_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "INSERT",
+      descripcion: "Se insertó un nuevo tipo de tickets: #{id_tipo_ticket}",
+      usuario: user.nombre_usuario
+    });
     res.json({
       mensaje: "Tipo de ticket agregado correctamente",
       id: result.insertId,
@@ -4699,7 +4767,13 @@ app.put("/api/tipo_ticket/:id", async (req, res) => {
         .status(404)
         .json({ mensaje: "Tipo de ticket no encontrado" });
     }
-
+logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIP_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "PUT",
+      descripcion: "Se actualizó el tipo de ticket: #{id_tipo_ticket}",
+      usuario: user.nombre_usuario
+    });
     res.json({ mensaje: "Tipo de ticket actualizado correctamente" });
   } catch (err) {
     handleDatabaseError(err, res, "Error al actualizar tipo_ticket:");
@@ -4731,7 +4805,13 @@ app.delete("/api/tipo_ticket/:id", async (req, res) => {
         `Se eliminó el tipo_ticket con ID ${id}`,
       ]);
     }
-
+logBitacora(conexion, {
+      id_objeto: ID_OBJETO_TIP_TICKET,
+      id_usuario: user.id_usuario,
+      accion: "DELETE",
+      descripcion: "Se eliminó el tipo de ticket: #{id_tipo_ticket}",
+      usuario: user.nombre_usuario
+    });
     res.json({ mensaje: "Tipo de ticket eliminado correctamente" });
   } catch (err) {
     handleDatabaseError(err, res, "Error al eliminar tipo_ticket:");
@@ -4963,7 +5043,7 @@ app.post('/api/sp-compras', verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermi
       id_objeto: ID_OBJETO_COMPRAS_SP,
       id_usuario: user.id_usuario,
       accion: "POST",
-      descripcion: `SP_InsertarCompra: Compra #${id_compra} creada`,
+      descripcion: `Compra #${id_compra} creada`,
       usuario: user.nombre_usuario
     });
 
@@ -5269,6 +5349,13 @@ app.get("/api/kardex", verificarToken, SOLO_ALMACEN_O_ADMIN, autorizarPermiso("K
       console.error("Error al mostrar kardex:", err);
       return res.status(500).json({ mensaje:"Error al obtener kardex" });
     }
+    // Bitácora de ENTRADA
+    logBitacora(conexion, {
+      id_objeto: ID_OBJETO_KARDEX,
+      id_usuario: user.id_usuario,
+      accion: "GET",
+      descripcion: `Se consultó el kardex`
+    });
     res.json(results[0]);
   });
 });

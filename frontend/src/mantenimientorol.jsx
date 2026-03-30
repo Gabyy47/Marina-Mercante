@@ -29,7 +29,25 @@ export default function MantenimientoRol() {
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
 
+
   const generarPDF = async () => {
+  const usuarioLS = JSON.parse(localStorage.getItem("usuarioData"));
+
+  const registrarBitacora = async ({ accion, descripcion, id_objeto = null }) => {
+  try {
+    await api.post("/bitacora", {
+      id_objeto,
+      id_usuario: usuarioLS?.id,
+      usuario: usuarioLS?.username,
+      accion,
+      descripcion,
+    });
+  } catch (error) {
+    console.error("Error registrando bitácora:", error);
+  }
+};
+
+   const generarPDF = () => {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "pt",
@@ -76,7 +94,7 @@ export default function MantenimientoRol() {
   doc.setFontSize(9);
   doc.setTextColor(100);
   doc.text(
-    "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
+    "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2026",
     doc.internal.pageSize.width / 2,
     h - 30,
     { align: "center" }
@@ -84,6 +102,10 @@ export default function MantenimientoRol() {
 
   // --- GUARDAR PDF ---
   doc.save("Roles_DGMM.pdf");
+  registrarBitacora({
+  accion: "REPORTE",
+  descripcion: "Se generó reporte PDF de roles"
+});
 };
 
   
@@ -162,12 +184,25 @@ export default function MantenimientoRol() {
 
   useEffect(() => {
     fetchItems();
+    registrarBitacora({
+    accion: "GET",
+    descripcion: "Se consultó la lista de roles"
+  });
   }, []);
 
   const handleCreate = async () => {
+
     const nombreValido = validarNombreLocal(newNombre);
     if (!camposCompletos || !nombreValido) {
       mostrarAlertaNombre();
+    await api.post("/roles", payload);
+
+await registrarBitacora({
+  accion: "CREAR",
+  descripcion: `Se creó un rol: ${payload.nombre}`
+});
+    if (!camposCompletos) {
+      toast.error("Por favor completa todos los campos");
       return;
     }
     const payload = toPayload();
@@ -184,6 +219,13 @@ export default function MantenimientoRol() {
   };
 
   const handleUpdate = async () => {
+    await api.put(`/roles/${editItemId}`, payload);
+
+await registrarBitacora({
+  accion: "EDITAR",
+  descripcion: `Se editó el rol ID: ${editItemId}`,
+  id_objeto: editItemId
+});
     if (!editItemId) return;
     const nombreValido = validarNombreLocal(newNombre);
     if (!camposCompletos || !nombreValido) {
@@ -204,6 +246,13 @@ export default function MantenimientoRol() {
   };
 
   const handleDelete = async (id) => {
+    await api.delete(`/roles/${id}`);
+
+await registrarBitacora({
+  accion: "DELETE",
+  descripcion: `Se eliminó el rol ID: ${id}`,
+  id_objeto: id
+});
     if (!window.confirm("¿Estás seguro de eliminar este rol?")) return;
     try {
       await api.delete(`/roles/${id}`); // <-- /roles/:id

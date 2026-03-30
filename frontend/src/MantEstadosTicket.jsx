@@ -89,7 +89,12 @@ export default function MantEstadosTicket() {
 
     try {
       setLoading(true);
+const regex = /^[A-Za-zÁÉÍÓÚáéíóúñÑ\s]+$/;
 
+if (!regex.test(nombre)) {
+  alert("El estado solo puede contener letras y espacios");
+  return;
+}
       if (editing) {
         await api.put(`/estado_ticket/${editing.id_estado_ticket}`, {
           estado: nombre,
