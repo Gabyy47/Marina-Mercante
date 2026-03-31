@@ -22,6 +22,7 @@ export default function MantenimientoProducto() {
   // ====== estado tabla ======
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [blockedDeleteIds, setBlockedDeleteIds] = useState([]);
   const navigate = useNavigate();
 
   // ====== filtros de búsqueda ======
@@ -131,6 +132,20 @@ export default function MantenimientoProducto() {
     return { min, max };
   };
 
+  const esErrorIntegridadReferencial = (error) => {
+    const payload = error?.response?.data || {};
+    const texto = `${payload?.error || ""} ${payload?.mensaje || ""} ${error?.message || ""}`.toUpperCase();
+
+    return (
+      texto.includes("ER_ROW_IS_REFERENCED") ||
+      texto.includes("ER_ROW_IS_REFERENCED_2") ||
+      texto.includes("FOREIGN KEY") ||
+      texto.includes("CONSTRAINT") ||
+      texto.includes("INTEGRITY") ||
+      texto.includes("23000")
+    );
+  };
+
   const handleVolver = () => {
     const rawUser = localStorage.getItem("mm_user");
     const user = rawUser ? JSON.parse(rawUser) : null;
@@ -155,7 +170,9 @@ export default function MantenimientoProducto() {
     try {
       setLoading(true);
       const { data } = await api.get("/productos");
-      setItems(Array.isArray(data) ? data : []);
+      const lista = Array.isArray(data) ? data : [];
+      setItems(lista);
+      setBlockedDeleteIds((prev) => prev.filter((id) => lista.some((p) => p.id_producto === id)));
     } catch (error) {
       console.error("GET /productos error:", error.response?.data || error);
       toast.error(error.response?.data?.mensaje || "Error al cargar datos");
@@ -226,6 +243,11 @@ export default function MantenimientoProducto() {
   };
 
   const handleDelete = async (id) => {
+    if (blockedDeleteIds.includes(id)) {
+      toast.error("No se puede eliminar el producto porque posee historial de movimientos");
+      return;
+    }
+
     if (!window.confirm("¿Estás seguro de eliminar este producto?")) return;
     try {
       await api.delete(`/productos/${id}`);
@@ -233,9 +255,8 @@ export default function MantenimientoProducto() {
       setItems((prev) => prev.filter((i) => i.id_producto !== id));
     } catch (error) {
       console.error("DELETE /productos error:", error.response?.data || error);
-      toast.error(
-        error.response?.data?.mensaje || "Error al eliminar el registro"
-      );
+      setBlockedDeleteIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+      toast.error("No se puede eliminar el producto porque posee historial de movimientos");
     }
   };
 
@@ -440,8 +461,14 @@ export default function MantenimientoProducto() {
                           <button
                             className="mant-prod-btn mant-prod-btn-sm mant-prod-btn-outline-danger"
                             onClick={() => handleDelete(it.id_producto)}
+                            disabled={blockedDeleteIds.includes(it.id_producto)}
+                            title={
+                              blockedDeleteIds.includes(it.id_producto)
+                                ? "Bloqueado por historial de movimientos"
+                                : "Eliminar producto"
+                            }
                           >
-                            Eliminar
+                            {blockedDeleteIds.includes(it.id_producto) ? "Bloqueado" : "Eliminar"}
                           </button>
                         </>
                       )}

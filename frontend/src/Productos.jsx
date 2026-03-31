@@ -12,6 +12,7 @@ export default function Productos() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [idsBloqueadosEliminar, setIdsBloqueadosEliminar] = useState([]);
 
   const [form, setForm] = useState({
     nombre_producto: '',
@@ -24,6 +25,19 @@ export default function Productos() {
 
   // Modal de edición
   const [showModalEditar, setShowModalEditar] = useState(false);
+
+  const esErrorIntegridadReferencial = (error) => {
+    const payload = error?.response?.data || {};
+    const texto = `${payload?.error || ""} ${payload?.mensaje || ""} ${error?.message || ""}`.toUpperCase();
+
+    return (
+      texto.includes("ER_ROW_IS_REFERENCED") ||
+      texto.includes("FOREIGN KEY") ||
+      texto.includes("CONSTRAINT") ||
+      texto.includes("INTEGRITY") ||
+      texto.includes("23000")
+    );
+  };
 
 
   
@@ -82,7 +96,15 @@ export default function Productos() {
       window.dispatchEvent(new Event('dataChanged'));
       fetchAll();
     } catch (e) {
-      alert("Error eliminando producto");
+      if (esErrorIntegridadReferencial(e)) {
+        alert("No se puede eliminar el producto porque posee historial de movimientos");
+        setIdsBloqueadosEliminar((prev) =>
+          prev.includes(id) ? prev : [...prev, id]
+        );
+        return;
+      }
+
+      alert("No se pudo eliminar el producto. Intente nuevamente.");
       console.error(e);
     }
   };
@@ -235,8 +257,16 @@ const generarPDF = async () => {
                       Editar
                     </button>
 
-                    <button className="prod-btn prod-btn-sm prod-btn-outline-danger" onClick={() => remove(it.id_producto)}>
-                      Eliminar
+                    <button
+                      className="prod-btn prod-btn-sm prod-btn-outline-danger"
+                      onClick={() => remove(it.id_producto)}
+                      disabled={idsBloqueadosEliminar.includes(it.id_producto)}
+                      title={idsBloqueadosEliminar.includes(it.id_producto)
+                        ? "Bloqueado por historial de movimientos"
+                        : "Eliminar producto"
+                      }
+                    >
+                      {idsBloqueadosEliminar.includes(it.id_producto) ? "Bloqueado" : "Eliminar"}
                     </button>
                   </td>
                 </tr>
