@@ -728,6 +728,7 @@ app.post("/api/login", (req, res) => {
       return res.status(403).json({ mensaje: "Debes verificar tu correo primero." });
     }
 
+
     // Generar código 2FA
     const loginCode = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60000);
