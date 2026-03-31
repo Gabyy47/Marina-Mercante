@@ -40,6 +40,7 @@ export default function Proveedores() {
   // =======================
 
   const generarPDF = async () => {
+    const proveedoresVisibles = [...proveedoresFiltrados];
     const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "A4" });
 
   doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
@@ -54,12 +55,8 @@ export default function Proveedores() {
     const serverNow = await getServerNow();
     doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
 
-  doc.setFontSize(10);
-  doc.setTextColor(80);
-  doc.text(`Generado el: ${new Date().toLocaleString()}`, 40, 105);
-
   const columnas = ["ID", "Nombre", "Teléfono", "Dirección"];
-  const filas = proveedores.map((p) => [
+  const filas = proveedoresVisibles.map((p) => [
     p.id_proveedor,
     p.nombre,
     p.telefono,
