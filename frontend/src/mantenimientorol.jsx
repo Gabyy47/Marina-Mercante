@@ -28,7 +28,6 @@ export default function MantenimientoRol() {
   const [editItemId, setEditItemId] = useState(null);
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
-<<<<<<< HEAD
 
   // --- FUNCIONES DE APOYO ---
   
