@@ -597,3 +597,50 @@ td.acciones .tk-btn:last-child{ margin-right: 0; }
 .tk-actions-item.danger:hover {
   background: #fee2e2;
 }
+
+/* ===== FIX TABLA USUARIOS ===== */
+
+.tk-table {
+  table-layout: auto !important;
+}
+
+.tk-table td,
+.tk-table th {
+  padding: 14px 16px !important;
+}
+
+/* Anchos correctos */
+.tk-table th:nth-child(1) { width: 180px; }
+.tk-table th:nth-child(2) { width: 150px; }
+.tk-table th:nth-child(3) { width: 150px; }
+.tk-table th:nth-child(4) { width: 120px; }
+.tk-table th:nth-child(5) { width: 220px; }
+
+/* Evita texto pegado */
+.tk-table td {
+  white-space: nowrap;
+}
+
+/* Solo el rol puede partirse */
+.tk-table td:first-child {
+  white-space: normal;
+  line-height: 1.3;
+}
+
+/* Acciones alineadas */
+td.acciones {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Botones compactos */
+.tk-btn--sm {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+/* Hover */
+.tk-table tbody tr:hover {
+  background: #f1f5f9;
+}

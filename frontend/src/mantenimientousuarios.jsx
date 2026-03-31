@@ -1,182 +1,38 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import Modal from "react-modal";
 import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-
-import api, { getServerNow } from "./api";
-import logo from "./imagenes/DGMM-Gobierno.png";
-import "./mantenimiento.css";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import logoDGMM from "./imagenes/DGMM-Gobierno.png";
-import { FaFilePdf } from "react-icons/fa";
+import api from "./api";
+import "./mantenimientoTickets.css";
 
 Modal.setAppElement("#root");
 
 export default function MantenimientoUsuarios() {
   const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  // 🔹 Lista de roles (para el select)
   const [roles, setRoles] = useState([]);
+  const [busqueda, setBusqueda] = useState("");
 
-  const [newId_rol, setNewId_rol] = useState("");
-  const [newNombre, setNewNombre] = useState("");
-  const [newApellido, setNewApellido] = useState("");
-  const [newCorreo, setNewCorreo] = useState("");
-  const [newNombre_usuario, setNewNombre_usuario] = useState("");
-  const [newContraseña, setNewContraseña] = useState("");
+  const [id_rol, setId_rol] = useState("");
+  const [nombre, setNombre] = useState("");
+  const [apellido, setApellido] = useState("");
+  const [correo, setCorreo] = useState("");
+  const [nombre_usuario, setNombre_usuario] = useState("");
+  const [contraseña, setContraseña] = useState("");
+  const [estado, setEstado] = useState("activo");
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editItemId, setEditItemId] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Mapa id_rol -> texto del rol (por si lo necesitas en otros lados)
-  const rolesMap = useMemo(() => {
-    const map = {};
-    roles.forEach((r) => {
-      const id = r.id_rol;
-      const nombre =
-        r.rol_nombre ||
-        r.nombre_rol ||
-        r.rol ||
-        r.descripcion ||
-        r.nombre ||
-        "";
-      if (id != null && nombre) {
-        map[id] = nombre;
-      }
-    });
-    return map;
-  }, [roles]);
-
-  const generarPDFUsuarios = async () => {
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "pt",
-      format: "A4",
-    });
-
-    doc.addImage(logoDGMM, "PNG", 40, 25, 120, 60);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(14, 42, 59);
-    doc.text("Dirección General de la Marina Mercante", 170, 50);
-
-    doc.setFontSize(14);
-    doc.text("Reporte de Usuarios", 170, 72);
-
-    doc.setFontSize(10);
-    doc.setTextColor(80);
-    const serverNow = await getServerNow();
-    doc.text(`Generado el: ${serverNow.toLocaleString("es-HN")}`, 40, 105);
-
-    const columnas = ["ID", "Nombre", "Usuario", "Correo", "Rol", "Estado"];
-
-    const filas = items.map((u) => [
-      u.id_usuario,
-      u.nombre,
-      u.nombre_usuario,
-      u.correo,
-      rolesMap[u.id_rol] || u.rol_nombre || u.nombreRol || "",
-      u.estado || "",
-    ]);
-
-    autoTable(doc, {
-      startY: 125,
-      head: [columnas],
-      body: filas,
-      styles: { fontSize: 10, cellPadding: 5 },
-      headStyles: { fillColor: [14, 42, 59], textColor: [255, 255, 255] },
-      alternateRowStyles: { fillColor: [242, 245, 247] },
-    });
-
-    const h = doc.internal.pageSize.height;
-    doc.setFontSize(9);
-    doc.setTextColor(100);
-    doc.text(
-      "Dirección General de la Marina Mercante – Sistema Interno DGMM © 2025",
-      doc.internal.pageSize.width / 2,
-      h - 30,
-      { align: "center" }
-    );
-
-    doc.save("Usuarios_DGMM.pdf");
-  };
-
-  const limpiarCampos = () => {
-    setNewId_rol("");
-    setNewNombre("");
-    setNewApellido("");
-    setNewCorreo("");
-    setNewNombre_usuario("");
-    setNewContraseña("");
-  };
-
-  const openModal = () => {
-    limpiarCampos();
-    setIsModalOpen(true);
-  };
-  const closeModal = () => {
-    setIsModalOpen(false);
-    limpiarCampos();
-  };
-
-  const openEditModal = (item) => {
-    setEditItemId(item.id_usuario);
-    const rol = item.id_rol ?? "";
-    setNewId_rol(String(rol));
-    setNewNombre(item.nombre ?? "");
-    setNewApellido(item.apellido ?? "");
-    setNewCorreo(item.correo ?? "");
-    setNewNombre_usuario(item.nombre_usuario ?? "");
-    setIsEditModalOpen(true);
-  };
-  const closeEditModal = () => {
-    setIsEditModalOpen(false);
-  };
-
-  const camposCompletos = useMemo(
-    () =>
-      newId_rol.trim() &&
-      newNombre.trim() &&
-      newApellido.trim() &&
-      newCorreo.trim() &&
-      newNombre_usuario.trim() &&
-      newContraseña.trim(),
-    [
-      newId_rol,
-      newNombre,
-      newApellido,
-      newCorreo,
-      newNombre_usuario,
-      newContraseña,
-    ]
-  );
-
-  const toPayload = () => {
-    const idrolNum = Number(newId_rol);
-    return {
-      id_rol: idrolNum,
-      nombre: newNombre.trim(),
-      apellido: newApellido.trim(),
-      correo: newCorreo.trim(),
-      nombre_usuario: newNombre_usuario.trim(),
-      contraseña: newContraseña,
-    };
-  };
+  useEffect(() => {
+    fetchItems();
+    fetchRoles();
+  }, []);
 
   const fetchItems = async () => {
     try {
-      setLoading(true);
       const { data } = await api.get("/usuario");
       setItems(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("GET /usuario error:", error.response?.data || error);
-      toast.error(error.response?.data?.mensaje || "Error al cargar datos");
-    } finally {
-      setLoading(false);
+    } catch {
+      toast.error("Error al cargar usuarios");
     }
   };
 
@@ -184,308 +40,239 @@ export default function MantenimientoUsuarios() {
     try {
       const { data } = await api.get("/roles");
       setRoles(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("GET /rol error:", error.response?.data || error);
+    } catch {
+      toast.error("Error al cargar roles");
     }
   };
 
-  useEffect(() => {
-    fetchItems();
-    fetchRoles();
-  }, []);
+  const usuariosFiltrados = items.filter(u =>
+    u.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+    u.nombre_usuario.toLowerCase().includes(busqueda.toLowerCase())
+  );
 
-  const handleCreate = async () => {
-    if (!camposCompletos) {
-      toast.error("Por favor completa todos los campos");
-      return;
+  /* ===== MODAL ===== */
+  const abrirModal = (item = null) => {
+    if (item) {
+      setEditItemId(item.id_usuario);
+      setId_rol(item.id_rol);
+      setNombre(item.nombre);
+      setApellido(item.apellido);
+      setCorreo(item.correo);
+      setNombre_usuario(item.nombre_usuario);
+      setEstado(item.estado);
+      setContraseña("");
+    } else {
+      setEditItemId(null);
+      setId_rol("");
+      setNombre("");
+      setApellido("");
+      setCorreo("");
+      setNombre_usuario("");
+      setContraseña("");
+      setEstado("activo");
     }
-
-    const payload = toPayload();
-    if (!Number.isFinite(payload.id_rol)) {
-      toast.error("El campo 'Rol' (id_rol) debe ser numérico");
-      return;
-    }
-
-    try {
-      await api.post("/usuario", payload);
-      toast.success("¡Usuario creado con éxito!");
-      await fetchItems();
-      closeModal();
-    } catch (error) {
-      console.error("POST /usuario error:", error.response?.data || error);
-      toast.error(error.response?.data?.mensaje || "Error al guardar datos");
-    }
+    setIsModalOpen(true);
   };
 
-  const handleUpdate = async () => {
-    if (!editItemId) return;
-    if (!camposCompletos) {
-      toast.error("Por favor completa todos los campos");
-      return;
-    }
-    const payload = toPayload();
-    if (!Number.isFinite(payload.id_rol)) {
-      toast.error("El campo 'Rol' (id_rol) debe ser numérico");
-      return;
-    }
+  const cerrarModal = () => setIsModalOpen(false);
 
+  /* ===== GUARDAR ===== */
+  const guardar = async () => {
     try {
-      await api.put(`/usuario/${editItemId}`, payload);
-      toast.success("¡Usuario actualizado con éxito!");
-    } catch (err1) {
-      if (err1?.response?.status === 404) {
-        try {
-          await api.put("/usuario", { id_usuario: editItemId, ...payload });
-          toast.success("¡Usuario actualizado con éxito!");
-        } catch (err2) {
-          console.error("PUT /usuario error:", err2.response?.data || err2);
-          toast.error(
-            err2.response?.data?.mensaje || "Error al actualizar el usuario"
-          );
-          return;
-        }
-      } else {
-        console.error(
-          `PUT /usuario/${editItemId} error:`,
-          err1.response?.data || err1
-        );
-        toast.error(
-          err1.response?.data?.mensaje || "Error al actualizar el usuario"
-        );
+      if (!nombre || !nombre_usuario) {
+        toast.error("Completa los campos");
         return;
       }
-    }
 
-    await fetchItems();
-    closeEditModal();
+      if (editItemId) {
+        const data = {
+          id_usuario: editItemId,
+          id_rol,
+          nombre,
+          apellido,
+          correo,
+          nombre_usuario,
+          estado
+        };
+
+        if (contraseña) data.contraseña = contraseña;
+
+        await api.put("/usuario", data);
+      } else {
+        await api.post("/usuario", {
+          id_rol,
+          nombre,
+          apellido,
+          correo,
+          nombre_usuario,
+          contraseña,
+          estado
+        });
+      }
+
+      toast.success("Guardado correctamente");
+      cerrarModal();
+      fetchItems();
+    } catch {
+      toast.error("Error al guardar");
+    }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("¿Estás seguro de eliminar este usuario?")) return;
-    try {
-      await api.delete(`/usuario/${id}`);
-      toast.success("Registro eliminado con éxito");
-      setItems((prev) => prev.filter((i) => i.id_usuario !== id));
-    } catch (error) {
-      console.error("DELETE /usuario error:", error.response?.data || error);
-      toast.error(
-        error.response?.data?.mensaje || "Error al eliminar el registro"
-      );
-    }
+  const eliminar = async (id) => {
+    if (!window.confirm("¿Eliminar usuario?")) return;
+    await api.delete(`/usuario/${id}`);
+    fetchItems();
+  };
+
+  const cambiarEstado = async (id, estadoActual) => {
+    const nuevo = estadoActual === "activo" ? "inactivo" : "activo";
+    await api.put(`/usuario/${id}/estado`, { estado: nuevo });
+    fetchItems();
   };
 
   return (
-    <div className="mm-page">
-      <header className="mm-header">
-        <img src={logo} alt="DGMM" className="mm-logo" />
-      </header>
+    <div className="tk-root">
 
-      <section className="mm-card">
-        <div className="mm-card__head">
-          <h2>Mantenimiento de Usuarios</h2>
-          <div className="mm-actions">
-            <Link to="/" className="mm-link">
-              ← Volver al Menú Principal
-            </Link>
-            <button className="btn btn-primary" onClick={openModal}>
-              + Nuevo usuario
-            </button>
-            <button
-              className="btn btn-topbar-primary"
-              onClick={generarPDFUsuarios}
-            >
-              <FaFilePdf size={16} /> Generar Reporte
-            </button>
+      {/* HEADER */}
+      <div className="tk-card-header">
+        <div className="tk-card-header__title">
+          Mantenimiento de Usuarios
+        </div>
+
+        <div className="tk-card-header__actions">
+          <button className="tk-btn tk-btn--primary" onClick={() => abrirModal()}>
+            + Nuevo Usuario
+          </button>
+        </div>
+      </div>
+
+      {/* BUSCADOR */}
+      <div className="tk-card">
+        <input
+          className="tk-field input"
+          placeholder="Buscar usuario..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
+      </div>
+
+      {/* TABLA */}
+      <div className="tk-tablewrap">
+        <table className="tk-table">
+          <thead>
+            <tr>
+              <th>Rol</th>
+              <th>Nombre</th>
+              <th>Usuario</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {usuariosFiltrados.map(u => (
+              <tr key={u.id_usuario}>
+                <td>{u.rol_nombre}</td>
+                <td>{u.nombre}</td>
+                <td>{u.nombre_usuario}</td>
+
+                <td>
+                  <span className={
+                    u.estado === "activo"
+                      ? "chip chip--finalizado"
+                      : "chip chip--cancelado"
+                  }>
+                    {u.estado}
+                  </span>
+                </td>
+
+                <td className="acciones">
+                  <button className="tk-btn tk-btn--sm" onClick={() => abrirModal(u)}>
+                    Editar
+                  </button>
+
+                  <button className="tk-btn tk-btn--danger tk-btn--sm" onClick={() => eliminar(u.id_usuario)}>
+                    Eliminar
+                  </button>
+
+                  <button className="tk-btn tk-btn--sm" onClick={() => cambiarEstado(u.id_usuario, u.estado)}>
+                    Estado
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* MODAL */}
+      <Modal isOpen={isModalOpen} className="tk-modal" overlayClassName="tk-overlay">
+        <h3>{editItemId ? "Editar Usuario" : "Nuevo Usuario"}</h3>
+
+        <div className="tk-grid">
+          <div className="tk-field">
+            <label>Rol</label>
+            <select value={id_rol} onChange={e => setId_rol(e.target.value)}>
+              <option value="">Seleccione</option>
+              {roles.map(r => (
+                <option key={r.id_rol} value={r.id_rol}>
+                  {r.rol_nombre || r.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="tk-field">
+            <label>Nombre</label>
+            <input value={nombre} onChange={e => setNombre(e.target.value)} />
+          </div>
+
+          <div className="tk-field">
+            <label>Apellido</label>
+            <input value={apellido} onChange={e => setApellido(e.target.value)} />
+          </div>
+
+          <div className="tk-field">
+            <label>Correo</label>
+            <input value={correo} onChange={e => setCorreo(e.target.value)} />
+          </div>
+
+          <div className="tk-field">
+            <label>Usuario</label>
+            <input value={nombre_usuario} onChange={e => setNombre_usuario(e.target.value)} />
+          </div>
+
+          <div className="tk-field">
+            <label>Nueva Contraseña</label>
+            <input
+              type="password"
+              placeholder="Dejar vacío si no desea cambiarla"
+              value={contraseña}
+              onChange={e => setContraseña(e.target.value)}
+            />
+          </div>
+
+          <div className="tk-field">
+            <label>Estado</label>
+            <select value={estado} onChange={e => setEstado(e.target.value)}>
+              <option value="activo">Activo</option>
+              <option value="inactivo">Inactivo</option>
+            </select>
           </div>
         </div>
 
-        <div className="mm-table__wrap">
-          <table className="mm-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Rol</th>
-                <th>Nombre</th>
-                <th>Apellido</th>
-                <th>Correo</th>
-                <th>Usuario</th>
-                <th style={{ width: 160 }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="text-center">
-                    Cargando…
-                  </td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center">
-                    Sin registros
-                  </td>
-                </tr>
-              ) : (
-                items.map((it) => (
-                  <tr key={it.id_usuario}>
-                    <td>{it.id_usuario}</td>
-                    <td>
-                      {rolesMap[it.id_rol] ||
-                        it.rol_nombre ||
-                        it.nombreRol ||
-                        it.rol ||
-                        it.nombre_rol ||
-                        it.id_rol}
-                    </td>
-                    <td>{it.nombre}</td>
-                    <td>{it.apellido}</td>
-                    <td>{it.correo}</td>
-                    <td>{it.nombre_usuario}</td>
-                    <td className="mm-actions--row">
-                      <button
-                        className="btn btn-outline"
-                        onClick={() => openEditModal(it)}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => handleDelete(it.id_usuario)}
-                      >
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Modal Crear */}
-      <Modal
-        isOpen={isModalOpen}
-        onRequestClose={closeModal}
-        className="mm-modal"
-        overlayClassName="mm-overlay"
-      >
-        <h3>Crear Usuario</h3>
-        <div className="mm-form">
-          {/* ⬇️ SELECT DE ROLES */}
-          <select
-            value={newId_rol}
-            onChange={(e) => setNewId_rol(e.target.value)}
-          >
-            <option value="">Seleccione un rol</option>
-            {roles.map((r) => (
-              <option key={r.id_rol} value={r.id_rol}>
-                {r.rol_nombre ||
-                  r.nombre_rol ||
-                  r.rol ||
-                  r.descripcion ||
-                  r.nombre ||
-                  `Rol ${r.id_rol}`}
-              </option>
-            ))}
-          </select>
-
-          <input
-            value={newNombre}
-            onChange={(e) => setNewNombre(e.target.value)}
-            placeholder="Nombre"
-          />
-          <input
-            value={newApellido}
-            onChange={(e) => setNewApellido(e.target.value)}
-            placeholder="Apellido"
-          />
-          <input
-            value={newCorreo}
-            onChange={(e) => setNewCorreo(e.target.value)}
-            placeholder="Correo"
-          />
-          <input
-            value={newNombre_usuario}
-            onChange={(e) => setNewNombre_usuario(e.target.value)}
-            placeholder="Usuario"
-          />
-          <input
-            type="password"
-            value={newContraseña}
-            onChange={(e) => setNewContraseña(e.target.value)}
-            placeholder="Contraseña"
-          />
-        </div>
-        <div className="mm-modal__actions">
-          <button className="btn btn-primary" onClick={handleCreate}>
+        <div className="tk-modal-actions">
+          <button className="tk-btn tk-btn--primary" onClick={guardar}>
             Guardar
           </button>
-          <button className="btn btn-outline" onClick={closeModal}>
-            Cerrar
+
+          <button className="tk-btn" onClick={cerrarModal}>
+            Cancelar
           </button>
         </div>
       </Modal>
 
-      {/* Modal Editar */}
-      <Modal
-        isOpen={isEditModalOpen}
-        onRequestClose={closeEditModal}
-        className="mm-modal"
-        overlayClassName="mm-overlay"
-      >
-        <h3>Editar Usuario</h3>
-        <div className="mm-form">
-          {/* ⬇️ SELECT DE ROLES TAMBIÉN EN EDITAR */}
-          <select
-            value={newId_rol}
-            onChange={(e) => setNewId_rol(e.target.value)}
-          >
-            <option value="">Seleccione un rol</option>
-            {roles.map((r) => (
-              <option key={r.id_rol} value={r.id_rol}>
-                {r.rol_nombre ||
-                  r.nombre_rol ||
-                  r.rol ||
-                  r.descripcion ||
-                  r.nombre ||
-                  `Rol ${r.id_rol}`}
-              </option>
-            ))}
-          </select>
-
-          <input
-            value={newNombre}
-            onChange={(e) => setNewNombre(e.target.value)}
-            placeholder="Nombre"
-          />
-          <input
-            value={newApellido}
-            onChange={(e) => setNewApellido(e.target.value)}
-            placeholder="Apellido"
-          />
-          <input
-            value={newCorreo}
-            onChange={(e) => setNewCorreo(e.target.value)}
-            placeholder="Correo"
-          />
-          <input
-            value={newNombre_usuario}
-            onChange={(e) => setNewNombre_usuario(e.target.value)}
-            placeholder="Usuario"
-          />
-        </div>
-        <div className="mm-modal__actions">
-          <button className="btn btn-primary" onClick={handleUpdate}>
-            Guardar
-          </button>
-          <button className="btn btn-outline" onClick={closeEditModal}>
-            Cerrar
-          </button>
-        </div>
-      </Modal>
-
-      <ToastContainer autoClose={3000} hideProgressBar={false} />
+      <ToastContainer />
     </div>
   );
 }

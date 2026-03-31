@@ -1059,9 +1059,9 @@ function gen6Code() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-// ===== CRUD PARA tbl_usuario =====
-// Listar todos los usuarios
-// Listar todos los usuarios con nombre del rol
+// =============================
+// OBTENER TODOS LOS USUARIOS
+// =============================
 app.get("/api/usuario", async (req, res) => {
   const { id_usuario } = req.query;
 
@@ -1089,7 +1089,9 @@ app.get("/api/usuario", async (req, res) => {
 });
 
 
-// Obtener usuario por ID
+// =============================
+// OBTENER USUARIO POR ID
+// =============================
 app.get("/api/usuario/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const { id_usuario } = req.query;
@@ -1103,7 +1105,6 @@ app.get("/api/usuario/:id", async (req, res) => {
     if (rows.length === 0)
       return res.status(404).json({ mensaje: "Usuario no encontrado" });
 
-    // Registrar en bitácora
     if (id_usuario) {
       await conexion.promise().query(
         "CALL event_bitacora(?, ?, ?, ?)",
@@ -1117,7 +1118,10 @@ app.get("/api/usuario/:id", async (req, res) => {
   }
 });
 
-// Insertar nuevo usuario
+
+// =============================
+// INSERTAR USUARIO
+// =============================
 app.post("/api/usuario", async (req, res) => {
   const {
     id_rol,
@@ -1126,7 +1130,8 @@ app.post("/api/usuario", async (req, res) => {
     correo,
     nombre_usuario,
     contraseña,
-    id_usuario: id_admin // usuario que realiza la acción (admin)
+    estado, // 👈 agregado
+    id_usuario: id_admin
   } = req.body;
 
   if (!nombre || !apellido || !correo || !nombre_usuario || !contraseña) {
@@ -1134,15 +1139,24 @@ app.post("/api/usuario", async (req, res) => {
   }
 
   const query = `
-    INSERT INTO tbl_usuario (id_rol, nombre, apellido, correo, nombre_usuario, contraseña)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO tbl_usuario 
+    (id_rol, nombre, apellido, correo, nombre_usuario, contraseña, estado)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
-  const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, contraseña];
+
+  const values = [
+    id_rol ?? null,
+    nombre,
+    apellido,
+    correo,
+    nombre_usuario,
+    contraseña,
+    estado || 'activo' // 👈 default
+  ];
 
   try {
     const [result] = await conexion.promise().query(query, values);
 
-    // Registrar en bitácora
     if (id_admin) {
       await conexion.promise().query(
         "CALL event_bitacora(?, ?, ?, ?)",
@@ -1161,28 +1175,52 @@ app.post("/api/usuario", async (req, res) => {
   }
 });
 
-// Actualizar usuario
+
+// =============================
+// ACTUALIZAR USUARIO
+// =============================
 app.put("/api/usuario", async (req, res) => {
-  const { id_usuario, id_rol, nombre, apellido, correo, nombre_usuario, id_admin } = req.body;
+  const { 
+    id_usuario, 
+    id_rol, 
+    nombre, 
+    apellido, 
+    correo, 
+    nombre_usuario, 
+    estado, // 👈 agregado
+    id_admin 
+  } = req.body;
 
   if (!id_usuario)
     return res.status(400).json({ error: "id_usuario es requerido" });
 
   const query = `
     UPDATE tbl_usuario 
-    SET id_rol = ?, nombre = ?, apellido = ?, correo = ?, nombre_usuario = ?) 
+    SET id_rol = ?, 
+        nombre = ?, 
+        apellido = ?, 
+        correo = ?, 
+        nombre_usuario = ?, 
+        estado = ?
     WHERE id_usuario = ?
-`;
+  `;
 
-const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, id_usuario]; 
+  const values = [
+    id_rol ?? null,
+    nombre,
+    apellido,
+    correo,
+    nombre_usuario,
+    estado,
+    id_usuario
+  ];
 
-  try { 
-    const [result] = await conexion.promise().query(query, values); 
+  try {
+    const [result] = await conexion.promise().query(query, values);
 
     if (result.affectedRows === 0)
       return res.status(404).json({ mensaje: "Usuario no encontrado" });
 
-    // Registrar en bitácora
     if (id_admin) {
       await conexion.promise().query(
         "CALL event_bitacora(?, ?, ?, ?)",
@@ -1201,10 +1239,48 @@ const values = [id_rol ?? null, nombre, apellido, correo, nombre_usuario, id_usu
   }
 });
 
-// Eliminar usuario
+
+// =============================
+// CAMBIAR SOLO ESTADO 🔥 (PRO)
+// =============================
+app.put("/api/usuario/:id/estado", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { estado, id_admin } = req.body;
+
+  try {
+    const [result] = await conexion.promise().query(
+      "UPDATE tbl_usuario SET estado = ? WHERE id_usuario = ?",
+      [estado, id]
+    );
+
+    if (result.affectedRows === 0)
+      return res.status(404).json({ mensaje: "Usuario no encontrado" });
+
+    if (id_admin) {
+      await conexion.promise().query(
+        "CALL event_bitacora(?, ?, ?, ?)",
+        [
+          id_admin,
+          3,
+          "UPDATE",
+          `Se cambió el estado del usuario ID ${id} a ${estado}`
+        ]
+      );
+    }
+
+    res.json({ mensaje: "Estado actualizado correctamente" });
+  } catch (err) {
+    handleDatabaseError(err, res, "Error al cambiar estado:");
+  }
+});
+
+
+// =============================
+// ELIMINAR USUARIO (NO RECOMENDADO)
+// =============================
 app.delete("/api/usuario/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { id_admin } = req.query; // el usuario que ejecuta el borrado
+  const { id_admin } = req.query;
 
   try {
     const [result] = await conexion.promise().query(
@@ -1215,7 +1291,6 @@ app.delete("/api/usuario/:id", async (req, res) => {
     if (result.affectedRows === 0)
       return res.status(404).json({ mensaje: "Usuario no encontrado" });
 
-    // Registrar en bitácora
     if (id_admin) {
       await conexion.promise().query(
         "CALL event_bitacora(?, ?, ?, ?)",

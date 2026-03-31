@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
 import "./Register.css";
-import api from "./api"; // instancia con baseURL y credenciales
+import api from "./api";
 
 const Register = ({ onShowLogin }) => {
   const [formData, setFormData] = useState({
@@ -18,14 +18,12 @@ const Register = ({ onShowLogin }) => {
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
 
-  // Toast simple
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const showToast = (message, type = "success", duration = 3000) => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
   };
 
-  // Modal verificación
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [code, setCode] = useState("");
   const [verifyLoading, setVerifyLoading] = useState(false);
@@ -33,33 +31,58 @@ const Register = ({ onShowLogin }) => {
   const [sendLoading, setSendLoading] = useState(false);
   const [lastEmail, setLastEmail] = useState("");
 
+  /* 🔥 VALIDACIONES EN TIEMPO REAL */
   const handleChange = (e) => {
     let { name, value } = e.target;
 
-    // Usuario: MAYÚSCULAS y sin espacios
-    if (name === "nombre_usuario") {
-      value = value.toUpperCase();
-      if (/\s/.test(value)) return;
+    // ✅ Nombre y apellido: solo letras
+    if (name === "nombre" || name === "apellido") {
+      if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]*$/.test(value)) {
+        showToast("Solo se permiten letras en este campo", "error");
+        return;
+      }
     }
 
-    // Contraseñas: sin espacios
+    // ✅ Usuario: mayúsculas, sin espacios ni símbolos
+    if (name === "nombre_usuario") {
+      value = value.toUpperCase();
+
+      if (/\s/.test(value)) return;
+
+      if (!/^[A-Z0-9]*$/.test(value)) {
+        showToast("El usuario solo puede contener letras y números", "error");
+        return;
+      }
+    }
+
+    // ✅ Contraseña sin espacios
     if ((name === "contraseña" || name === "confirmar_contraseña") && /\s/.test(value)) {
+      showToast("La contraseña no puede contener espacios", "error");
       return;
     }
 
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Regla de contraseña robusta
   const strongPassword =
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#._-])[A-Za-z\d@$!%*?&#._-]{8,}$/;
 
   const passwordStrong = strongPassword.test(formData.contraseña);
   const passwordsMatch = formData.contraseña === formData.confirmar_contraseña;
 
-  // === REGISTRO ===
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    /* 🔥 VALIDACIONES OBLIGATORIAS */
+    if (!formData.nombre || !formData.apellido || !formData.nombre_usuario || !formData.correo) {
+      showToast("Debe completar todos los campos obligatorios", "error");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.correo)) {
+      showToast("Ingrese un correo válido (ejemplo@correo.com)", "error");
+      return;
+    }
 
     if (!passwordStrong) {
       showToast(
@@ -84,19 +107,11 @@ const Register = ({ onShowLogin }) => {
         contraseña: formData.contraseña,
       });
 
-      const msgBackend =
-        data?.mensaje ||
-        data?.message ||
-        "¡Cuenta creada! Te enviamos un código. Revisa tu correo.";
-
-      // Guarda el correo para usarlo en verificar / reenviar
       setLastEmail(formData.correo.trim());
-
-      // Abre el modal para ingresar el código
       setVerifyOpen(true);
+
       showToast("✅ Código enviado, revisa tu correo.", "success", 5000);
 
-      // Limpia los campos visibles (opcional)
       setFormData({
         nombre: "",
         apellido: "",
@@ -105,8 +120,8 @@ const Register = ({ onShowLogin }) => {
         contraseña: "",
         confirmar_contraseña: "",
       });
+
     } catch (error) {
-      console.error("Error en registro:", error);
       const raw = error.response?.data?.error || error.response?.data?.mensaje || error.message;
 
       let msg = raw;
@@ -122,15 +137,14 @@ const Register = ({ onShowLogin }) => {
     }
   };
 
-  // === VERIFICAR CÓDIGO ===
+  /* 🔥 VALIDACIÓN DE CÓDIGO */
   const handleVerify = async (e) => {
     e.preventDefault();
 
     const correo = lastEmail || formData.correo.trim();
-    if (!correo) return showToast("Falta el correo para verificar.", "error");
 
     if (!/^\d{6}$/.test(code)) {
-      showToast("El código debe tener 6 dígitos.", "error");
+      showToast("El código debe tener 6 dígitos", "error");
       return;
     }
 
@@ -139,7 +153,6 @@ const Register = ({ onShowLogin }) => {
       await api.post("/auth/verify-code", { correo, code });
       showToast("✅ Cuenta verificada.", "success");
       setVerifyOpen(false);
-      setCode("");
       onShowLogin?.();
     } catch (error) {
       const msg = error.response?.data?.mensaje || error.response?.data?.error || error.message;
@@ -148,6 +161,8 @@ const Register = ({ onShowLogin }) => {
       setVerifyLoading(false);
     }
   };
+
+  
 
   // === REENVIAR CÓDIGO ===
   const handleResend = async () => {
