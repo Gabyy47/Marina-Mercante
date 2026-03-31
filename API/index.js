@@ -723,11 +723,16 @@ app.post("/api/login", (req, res) => {
     if (!rows || rows.length === 0) return res.status(401).json({ mensaje: "Credenciales inválidas." });
 
     const usuario = rows[0];
-
+//Verificar correo
     if (Number(usuario.is_verified) !== 1) {
       return res.status(403).json({ mensaje: "Debes verificar tu correo primero." });
     }
-
+//Verificar rol
+if (!usuario.id_rol || !usuario.rol_nombre || rolNombre === "SIN ROL") {
+      return res.status(403).json({
+        mensaje: "No tiene un rol asignado. Comuníquese con el Administrador para que le asigne un rol.",
+      });
+    }
 
     // Generar código 2FA
     const loginCode = Math.floor(100000 + Math.random() * 900000).toString();
